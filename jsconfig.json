@@ -1,0 +1,19 @@
+/*
+ * @Author: ml
+ * @Date: 2026-01-20 10:56:03
+ * @LastEditTime: 2026-01-20 10:59:28
+ * @FilePath: /accompanying-fly-project/jsconfig.json
+ * @Description: jsconfig for vue3
+ */
+{
+  "compilerOptions": {
+    "checkJs": false,
+    "module": "esnext",
+    "target": "esnext",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src/**/*", "src/auto-imports.d.js"],
+  "exclude": ["node_modules", "dist"]
+}
