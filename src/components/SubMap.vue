@@ -213,11 +213,7 @@ const syncSubViewer = (subViewer, droneState) => {
 };
 
 onMounted(() => {
-  if (typeof window.T !== "undefined") {
-    initSubViewer();
-  } else {
-    console.error("地图尚未加载完成");
-  }
+  initSubViewer();
 });
 
 onUnmounted(() => {

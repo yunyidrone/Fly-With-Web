@@ -9,6 +9,11 @@
   <div class="map-container">
     <!-- cesium container -->
     <div id="cesiumContainer"></div>
+    <!-- 加载遮罩 -->
+    <div v-if="isLoading" class="map-loading-overlay">
+      <div class="map-loading-spinner"></div>
+      <span class="map-loading-text">地图加载中...</span>
+    </div>
     <!-- map controls -->
     <div class="custom-controls">
       <el-tooltip effect="dark" content="一键清除" placement="left">
@@ -16,29 +21,61 @@
           <RiEraserLine size="18px" color="#4d4d4d" />
         </button>
       </el-tooltip>
+      <el-tooltip effect="dark" content="设置测试数据" placement="left">
+        <button @click="setupTestData" class="test-data-btn">测试</button>
+      </el-tooltip>
+      <el-tooltip effect="dark" content="模拟车辆告警伴飞请求" placement="left">
+        <button @click="simulateVehicleAlarmMessage" class="test-alarm-btn">
+          告警
+        </button>
+      </el-tooltip>
       <el-tooltip effect="dark" content="发送消息" placement="left">
         <button @click="startPublishMessage">
           <RiSendPlaneFill size="18px" color="#4d4d4d" />
         </button>
       </el-tooltip>
-      <el-tooltip effect="dark" :content="isPitch2D ? '切换为3D地图' : '切换为2D地图'" placement="left">
+      <el-tooltip
+        effect="dark"
+        :content="isPitch2D ? '切换为3D地图' : '切换为2D地图'"
+        placement="left"
+      >
         <button @click="toggleSceneMode">
           {{ isPitch2D ? "3D" : "2D" }}
         </button>
       </el-tooltip>
-      <el-tooltip effect="dark" :content="isAllowAddLocation ? '关闭地图选点' : '允许地图选点'" placement="left">
+      <el-tooltip
+        effect="dark"
+        :content="isAllowAddLocation ? '关闭地图选点' : '允许地图选点'"
+        placement="left"
+      >
         <button @click="toggleAddLocation">
-          <LocationAdd24Filled size="18px" color="#4d4d4d" v-if="isAllowAddLocation" />
+          <LocationAdd24Filled
+            size="18px"
+            color="#4d4d4d"
+            v-if="isAllowAddLocation"
+          />
           <LocationOff48Filled size="18px" color="#4d4d4d" v-else />
         </button>
       </el-tooltip>
-      <el-tooltip effect="dark" :content="vehicleDisplayMode === 'model' ? '切换为点' : '切换为车'" placement="left">
+      <el-tooltip
+        effect="dark"
+        :content="vehicleDisplayMode === 'model' ? '切换为点' : '切换为车'"
+        placement="left"
+      >
         <button @click="toggleDisplayMode">
-          <RiBubbleChartFill size="18px" color="#4d4d4d" v-if="vehicleDisplayMode === 'model'" />
+          <RiBubbleChartFill
+            size="18px"
+            color="#4d4d4d"
+            v-if="vehicleDisplayMode === 'model'"
+          />
           <RiCarFill size="18px" color="#4d4d4d" v-else />
         </button>
       </el-tooltip>
-      <el-tooltip effect="dark" :content="isLockMode ? '取消锁定模式' : '切换为锁定模式'" placement="left">
+      <el-tooltip
+        effect="dark"
+        :content="isLockMode ? '取消锁定模式' : '切换为锁定模式'"
+        placement="left"
+      >
         <button @click="toggleLockMode">
           <ScanObject20Filled size="18px" color="#4d4d4d" v-if="!isLockMode" />
           <ScanDisabled size="18px" color="#4d4d4d" v-else />
@@ -62,11 +99,19 @@
         </template>
         <el-form :model="mapConfigForm">
           <el-form-item label="路网和标注">
-            <el-switch v-model="mapConfigForm.showMapRoadNet" @change="handleMapRoadNetVisible" />
+            <el-switch
+              v-model="mapConfigForm.showMapRoadNet"
+              @change="handleMapRoadNetVisible"
+            />
           </el-form-item>
         </el-form>
         <div class="mode-list">
-          <div class="mode-list_img" v-for="item in MAP_MODE_LIST" :key="item.value" @click="switchMapMode(item.value)">
+          <div
+            class="mode-list_img"
+            v-for="item in MAP_MODE_LIST"
+            :key="item.value"
+            @click="switchMapMode(item.value)"
+          >
             <el-image :src="item.src"></el-image>
             <div class="description">{{ item.label }}</div>
             <div class="check-button" v-if="item.value === currentMode">
@@ -77,9 +122,23 @@
       </el-popover>
     </div>
     <div class="bottom-controls">
-      <el-popover popper-class="mouse-operation-popover" placement="top" effect="dark" :width="300" trigger="click" title="鼠标操作" :auto-close="5000" :show-arrow="false">
+      <el-popover
+        popper-class="mouse-operation-popover"
+        placement="top"
+        effect="dark"
+        :width="300"
+        trigger="click"
+        title="鼠标操作"
+        :auto-close="5000"
+        :show-arrow="false"
+      >
         <template #reference>
-          <el-button class="icon-button" :icon="KeyboardRegular" type="primary" link></el-button>
+          <el-button
+            class="icon-button"
+            :icon="KeyboardRegular"
+            type="primary"
+            link
+          ></el-button>
         </template>
         <div class="mouse-operation">
           <div class="mouse-operation-list">
@@ -98,19 +157,88 @@
           </div>
         </div>
       </el-popover>
-      <div class="location-text" v-if="coords.lng && coords.lat">{{ "经度:" + coords.lng }}，{{ "纬度:" + coords.lat }}</div>
+      <div class="location-text" v-if="coords.lng && coords.lat">
+        {{ "经度:" + coords.lng }}，{{ "纬度:" + coords.lat }}
+      </div>
     </div>
     <!-- 右下角小窗 -->
     <div class="sub-view-window" style="opacity: 0; display: none">
       <div id="subViewerContainer"></div>
     </div>
+
+    <!-- 警车详情：锚定在车辆旁 -->
+    <div
+      v-if="policeVehiclePopup.visible"
+      class="police-vehicle-popup"
+      :style="policeVehiclePopupStyle"
+      @click.stop
+    >
+      <div class="police-vehicle-popup__header">
+        <i class="ri-police-car-line police-vehicle-popup__icon" />
+        <span class="police-vehicle-popup__title">{{ policeVehiclePopup.vehicleName }}</span>
+      </div>
+      <div class="police-vehicle-popup__row">
+        <span class="police-vehicle-popup__label">坐标信息：</span>
+        <span class="police-vehicle-popup__value">{{ policeVehiclePopup.coordText }}</span>
+      </div>
+      <div class="police-vehicle-popup__row police-vehicle-popup__row--alert">
+        <span class="police-vehicle-popup__label">简要警情：</span>
+        <span class="police-vehicle-popup__value">{{ policeVehiclePopup.alertInfo }}</span>
+      </div>
+      <div
+        v-if="policeVehiclePopup.drones.length"
+        class="police-vehicle-popup__field"
+      >
+        <span class="police-vehicle-popup__label">临近无人机：</span>
+        <select
+          v-model="policeVehiclePopup.selectedDroneId"
+          class="police-vehicle-popup__select"
+        >
+          <option
+            v-for="d in policeVehiclePopup.drones"
+            :key="d.id"
+            :value="d.id"
+          >
+            {{ d.label }}
+          </option>
+        </select>
+      </div>
+      <p v-else class="police-vehicle-popup__empty">暂无可用无人机</p>
+      <button
+        type="button"
+        class="police-vehicle-popup__escort"
+        :disabled="!policeVehiclePopup.drones.length"
+        @click="handlePolicePopupEscort"
+      >
+        一键伴飞
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, shallowRef, ref, computed, watch, reactive } from "vue";
+import {
+  onMounted,
+  onUnmounted,
+  shallowRef,
+  ref,
+  computed,
+  watch,
+  reactive,
+} from "vue";
 import * as Cesium from "cesium";
-import { RiAddLine, RiSubtractLine, RiCheckLine, RiCarFill, RiEraserLine, RiMapPin5Line, RiFocus3Line, RiRouteFill, RiSendPlaneFill, RiBubbleChartFill } from "@remixicon/vue";
+import {
+  RiAddLine,
+  RiSubtractLine,
+  RiCheckLine,
+  RiCarFill,
+  RiEraserLine,
+  RiMapPin5Line,
+  RiFocus3Line,
+  RiRouteFill,
+  RiSendPlaneFill,
+  RiBubbleChartFill,
+} from "@remixicon/vue";
 import { KeyboardRegular } from "@vicons/fa";
 import DefaultMapImg from "@/assets/images/img-map-default.png";
 import DefaultMapImg2 from "@/assets/images/img-map-default2.png";
@@ -120,50 +248,210 @@ import { cloneDeep, isEmpty } from "lodash-es";
 import { CameraFrustum } from "@/utils/cameraFrustum";
 import { CompanionFrustum } from "@/utils/companionFrustum";
 import { useSystemStore } from "@/stores/index";
-import { ScanObject20Filled, LocationOff48Filled, LocationAdd24Filled } from "@vicons/fluent";
+import {
+  ScanObject20Filled,
+  LocationOff48Filled,
+  LocationAdd24Filled,
+} from "@vicons/fluent";
 import { ScanDisabled } from "@vicons/carbon";
 import { ZoomFrustumManager } from "@/utils/zoomFrustumManager";
 import * as testJson from "@/assets/test.json";
-import { TIANDITU_CONFIG, DEVICE_CONFIG, MAP_CONFIG } from "@/config/app-config.js";
+import {
+  TIANDITU_CONFIG,
+  DEVICE_CONFIG,
+  MAP_CONFIG,
+} from "@/config/app-config.js";
+import { TEST_POLICE_VEHICLES, TEST_DRONES } from "@/config/test-devices.js";
+import { useDeviceStore } from "@/stores/device.js";
+import { useFlightPlanStore } from "@/stores/flightPlan.js";
+import { useLockdown } from "@/composables/useLockdown.js";
 import { ElMessageBox, ElMessage } from "element-plus";
 import { AccompanyingFlyService } from "@/api";
 
 // 加载状态
-const isLoading = ref(false);
+const isLoading = ref(true);
 
 // 车辆弹窗状态
 const vehicleDialog = reactive({
   visible: false,
-  deviceId: '',
+  deviceId: "",
   position: null,
   lastMessage: null,
   vehicleData: {},
 });
 
+const POLICE_POPUP_WIDTH = 280;
+const POLICE_POPUP_OFFSET = 16;
+
+const policeVehiclePopup = reactive({
+  visible: false,
+  deviceId: "",
+  vehicleName: "",
+  alertInfo: "",
+  coordText: "",
+  drones: [],
+  selectedDroneId: "",
+  left: 0,
+  top: 0,
+});
+
+const policeVehiclePopupStyle = computed(() => ({
+  left: `${policeVehiclePopup.left}px`,
+  top: `${policeVehiclePopup.top}px`,
+  transform: "translateY(-50%)",
+}));
+
+let policePopupPostRenderRemove = null;
+
+const updatePolicePopupScreenPosition = () => {
+  if (!policeVehiclePopup.visible || !mainViewer || mainViewer.isDestroyed?.()) {
+    return;
+  }
+  const vehicle = vehicleManager.vehicles.get(policeVehiclePopup.deviceId);
+  if (!vehicle) return;
+
+  const pos = vehicle.positionProp.getValue(mainViewer.clock.currentTime);
+  if (!Cesium.defined(pos)) return;
+
+  const canvasPos = Cesium.SceneTransforms.worldToWindowCoordinates(
+    mainViewer.scene,
+    pos,
+  );
+  if (!Cesium.defined(canvasPos)) {
+    policeVehiclePopup.visible = false;
+    return;
+  }
+
+  const w = mainViewer.canvas.clientWidth;
+  const h = mainViewer.canvas.clientHeight;
+  let left = canvasPos.x + POLICE_POPUP_OFFSET;
+  let top = canvasPos.y;
+
+  if (left + POLICE_POPUP_WIDTH > w - 8) {
+    left = canvasPos.x - POLICE_POPUP_WIDTH - POLICE_POPUP_OFFSET;
+  }
+  left = Math.max(8, Math.min(left, w - POLICE_POPUP_WIDTH - 8));
+  top = Math.max(80, Math.min(top, h - 100));
+
+  policeVehiclePopup.left = left;
+  policeVehiclePopup.top = top;
+};
+
+const attachPolicePopupTracker = () => {
+  if (policePopupPostRenderRemove || !mainViewer) return;
+  policePopupPostRenderRemove = mainViewer.scene.postRender.addEventListener(
+    updatePolicePopupScreenPosition,
+  );
+};
+
+const detachPolicePopupTracker = () => {
+  if (typeof policePopupPostRenderRemove === "function") {
+    policePopupPostRenderRemove();
+  }
+  policePopupPostRenderRemove = null;
+};
+
+const closePoliceVehiclePopup = () => {
+  policeVehiclePopup.visible = false;
+  detachPolicePopupTracker();
+};
+
+const handlePolicePopupEscort = () => {
+  const droneId = policeVehiclePopup.selectedDroneId;
+  if (!droneId) {
+    ElMessage.warning("没有可用的无人机");
+    return;
+  }
+  startEscortSimulation(policeVehiclePopup.deviceId, droneId);
+};
+
 // 车辆点击事件处理器
 let vehicleClickHandler = null;
 
 const systemStore = useSystemStore();
-// Tianditu Key list
-// const TK_LIST = ["0763eaa86759114ff0e2d1d6ab7e9133", "36fbe37df07fa1f312213ad200ce4ab5", "9a0c746ba59b94c67b6456d41d0ab628", "b68a919080486b3db031c72e4301d3be", "d909deff2d436e13679e3166e93078cc"];
-const TK_LIST = ["97f84a3949b68123fc89e54758d5cd08"];
-// default map location
-const DEFAULT_CENTER = { lng: 121.427, lat: 28.6528 }; //{ lng: 121.427, lat: 28.6528 }
+const deviceStore = useDeviceStore();
+const flightPlanStore = useFlightPlanStore();
+
+/** @type {import('cesium').Entity[]} */
+let flightPlanPolygonEntities = [];
+
+const syncFlightPlanPolygon = () => {
+  if (!mainViewer || mainViewer.isDestroyed?.()) return;
+  if (flightPlanPolygonEntities.length) {
+    flightPlanPolygonEntities.forEach((e) => mainViewer.entities.remove(e));
+    flightPlanPolygonEntities = [];
+  }
+  // 临时需求：点击飞行计划条目时，不再根据经纬度在地图上绘制/定位圈选区域。
+  // 保留下面原逻辑（历史版本）以便后续恢复：
+  // const planId = flightPlanStore.selectedPlanId;
+  // if (!planId) return;
+  // const plan = flightPlanStore.getPlanById(planId);
+  // const rings =
+  //   plan?.polygonLngLatList?.filter((r) => r?.length >= 6) ||
+  //   (plan?.polygonLngLat?.length >= 6 ? [plan.polygonLngLat] : []);
+  // if (!rings.length) return;
+  //
+  // const allPositions = [];
+  // rings.forEach((ring, index) => {
+  //   const positions = Cesium.Cartesian3.fromDegreesArray(ring);
+  //   allPositions.push(...positions);
+  //   const entity = mainViewer.entities.add({
+  //     polygon: {
+  //       hierarchy: new Cesium.PolygonHierarchy(positions),
+  //       material: Cesium.Color.fromCssColorString("#409eff").withAlpha(0.28 + index * 0.04),
+  //       outline: true,
+  //       outlineColor: Cesium.Color.fromCssColorString("#67c23a"),
+  //       outlineWidth: 2,
+  //       perPositionHeight: false,
+  //       heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+  //     },
+  //   });
+  //   flightPlanPolygonEntities.push(entity);
+  // });
+  //
+  // mainViewer.scene.requestRender?.();
+  // try {
+  //   if (flightPlanPolygonEntities.length === 1) {
+  //     mainViewer.flyTo(flightPlanPolygonEntities[0], { duration: 1.0 });
+  //   } else {
+  //     const bs = Cesium.BoundingSphere.fromPoints(allPositions);
+  //     if (bs && bs.radius > 0) {
+  //       mainViewer.camera.flyToBoundingSphere(bs, { duration: 1.0 });
+  //     }
+  //   }
+  // } catch (_) {
+  //   const bs = Cesium.BoundingSphere.fromPoints(allPositions);
+  //   if (bs && bs.radius > 0) {
+  //     mainViewer.camera.flyToBoundingSphere(bs, { duration: 1.0 });
+  //   }
+  // }
+};
+
+watch(
+  () => flightPlanStore.selectedPlanId,
+  () => {
+    syncFlightPlanPolygon();
+  },
+);
+const TK_LIST = TIANDITU_CONFIG.keyList;
+const DEFAULT_CENTER = MAP_CONFIG.defaultCenter;
 // map mode type list
 const MAP_MODE_LIST = [
   { src: DefaultMapImg2, label: "标准地图", value: "normal" },
   { src: DefaultMapImg, label: "卫星地图", value: "satellite" },
 ];
-// map max level
-const MAX_LEVEL = 18;
-// The flight altitude of the UAV relative to the ground（meters）
-const DRONE_HEIGHT = 150;
-// The car drive speed
-const CAR_SPEED = 30;
-// 监控范围比例
-const SCOPE_RATIO = 0.5; // 0.5 表示取景框占据画面中间的 50% 区域。数值越小，框越靠中心
+const MAX_LEVEL = MAP_CONFIG.maxLevel;
+const DRONE_HEIGHT = MAP_CONFIG.droneHeight;
+const CAR_SPEED = MAP_CONFIG.carSpeed;
+const SCOPE_RATIO = MAP_CONFIG.scopeRatio; // 数值越小，取景框越靠中心
 // cesium viewer
-let mainViewer, carEntity, droneEntity, satelliteLayer, satelMarkLayer, vectorLayer, vectorMarkLayer;
+let mainViewer,
+  carEntity,
+  droneEntity,
+  satelliteLayer,
+  satelMarkLayer,
+  vectorLayer,
+  vectorMarkLayer;
 // car model position property
 let carPositionProp = new Cesium.SampledPositionProperty();
 // uav model position property
@@ -180,17 +468,75 @@ let dronePositionProp = new Cesium.SampledPositionProperty();
   });
 });
 
+const VEHICLE_HIGHLIGHT_COLOR = Cesium.Color.fromCssColorString("#ffcc00");
+const VEHICLE_NORMAL_PATH_COLOR =
+  Cesium.Color.fromCssColorString("#00eeee");
+
+const getVehicleDeviceIdFromEntity = (entity) => {
+  const labelText = entity?.label?.text;
+  if (typeof labelText === "string") return labelText;
+  if (labelText && typeof labelText.getValue === "function") {
+    return labelText.getValue(mainViewer?.clock?.currentTime);
+  }
+  return null;
+};
+
 // 多车辆管理系统
 const vehicleManager = {
   // 存储所有车辆实体 { deviceId: { entity, positionProp, orientationProp, lastPosition } }
   vehicles: new Map(),
-  
+  selectedDeviceId: null,
+
+  setSelected(deviceId) {
+    if (this.selectedDeviceId === deviceId) return;
+    if (this.selectedDeviceId) {
+      this._applyHighlight(this.selectedDeviceId, false);
+    }
+    this.selectedDeviceId = deviceId || null;
+    if (this.selectedDeviceId) {
+      this._applyHighlight(this.selectedDeviceId, true);
+    }
+    mainViewer?.scene?.requestRender?.();
+  },
+
+  clearSelection() {
+    this.setSelected(null);
+  },
+
+  _applyHighlight(deviceId, selected) {
+    const vehicle = this.vehicles.get(deviceId);
+    if (!vehicle?.entity) return;
+    const entity = vehicle.entity;
+
+    if (selected) {
+      entity.model.silhouetteColor = VEHICLE_HIGHLIGHT_COLOR;
+      entity.model.silhouetteSize = 2.5;
+      entity.label.fillColor = VEHICLE_HIGHLIGHT_COLOR;
+      entity.label.outlineColor = Cesium.Color.BLACK;
+      entity.label.outlineWidth = 3;
+      entity.label.font = "bold 15px Microsoft YaHei, sans-serif";
+      entity.label.pixelOffset = new Cesium.Cartesian2(0, -48);
+      entity.path.width = 7;
+      entity.path.material = vehicle.highlightPathMaterial;
+    } else {
+      entity.model.silhouetteSize = 0;
+      entity.model.silhouetteColor = undefined;
+      entity.label.fillColor = Cesium.Color.WHITE;
+      entity.label.outlineColor = Cesium.Color.BLACK;
+      entity.label.outlineWidth = 2;
+      entity.label.font = "14px sans-serif";
+      entity.label.pixelOffset = new Cesium.Cartesian2(0, -40);
+      entity.path.width = 5;
+      entity.path.material = vehicle.defaultPathMaterial;
+    }
+  },
+
   // 为指定设备创建车辆实体
   createVehicle(viewer, deviceId) {
     if (this.vehicles.has(deviceId)) {
       return this.vehicles.get(deviceId);
     }
-    
+
     const positionProp = new Cesium.SampledPositionProperty();
     positionProp.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
     positionProp.backwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
@@ -198,10 +544,23 @@ const vehicleManager = {
       interpolationDegree: 1,
       interpolationAlgorithm: Cesium.HermitePolynomialApproximation,
     });
-    
-    const velocityOrientation = new Cesium.VelocityOrientationProperty(positionProp);
+
+    const velocityOrientation = new Cesium.VelocityOrientationProperty(
+      positionProp,
+    );
     let lastValidOrientation = null;
-    
+
+    const defaultPathMaterial = new Cesium.PolylineGlowMaterialProperty({
+      glowPower: 0.2,
+      taperPower: 0.7,
+      color: VEHICLE_NORMAL_PATH_COLOR,
+    });
+    const highlightPathMaterial = new Cesium.PolylineGlowMaterialProperty({
+      glowPower: 0.35,
+      taperPower: 0.6,
+      color: Cesium.Color.fromCssColorString("#ff9900"),
+    });
+
     const entity = viewer.entities.add({
       availability: new Cesium.TimeIntervalCollection([
         new Cesium.TimeInterval({
@@ -213,7 +572,10 @@ const vehicleManager = {
       orientation: new Cesium.CallbackProperty((time, result) => {
         const currentOrientation = velocityOrientation.getValue(time);
         if (Cesium.defined(currentOrientation)) {
-          lastValidOrientation = Cesium.Quaternion.clone(currentOrientation, lastValidOrientation);
+          lastValidOrientation = Cesium.Quaternion.clone(
+            currentOrientation,
+            lastValidOrientation,
+          );
           return currentOrientation;
         } else {
           return lastValidOrientation;
@@ -223,62 +585,56 @@ const vehicleManager = {
         uri: "/models/car.glb",
         minimumPixelSize: 32,
         maximumScale: 200,
-        show: new Cesium.CallbackProperty(() => vehicleDisplayMode.value === "model", false),
         heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
         nodeTransformations: {
           root: new Cesium.NodeTransformationProperty({
             rotation: new Cesium.CallbackProperty(() => {
-              const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(180), 0, 0);
+              const hpr = new Cesium.HeadingPitchRoll(
+                Cesium.Math.toRadians(180),
+                0,
+                0,
+              );
               return Cesium.Quaternion.fromHeadingPitchRoll(hpr);
             }, false),
           }),
         },
       },
-      ellipsoid: {
-        radii: new Cesium.Cartesian3(1.0, 1.0, 1.0),
-        material: Cesium.Color.BLUE,
-        outline: false,
-        outlineColor: Cesium.Color.WHITE,
-        show: new Cesium.CallbackProperty(() => vehicleDisplayMode.value === "point", false),
-        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
-      },
       path: {
         show: true,
         width: 5,
-        material: new Cesium.PolylineGlowMaterialProperty({
-          glowPower: 0.2,
-          taperPower: 0.7,
-          color: Cesium.Color.fromCssColorString("#00eeee"),
-        }),
+        material: defaultPathMaterial,
         leadTime: 0,
         trailTime: 999999,
       },
       label: {
         text: deviceId,
-        font: '14px sans-serif',
+        font: "14px sans-serif",
         fillColor: Cesium.Color.WHITE,
         outlineColor: Cesium.Color.BLACK,
         outlineWidth: 2,
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-        pixelOffset: new Cesium.Cartesian2(0, -10),
+        pixelOffset: new Cesium.Cartesian2(0, -40),
         show: true,
         heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
     });
-    
+
     this.vehicles.set(deviceId, {
       entity,
       positionProp,
       velocityOrientation,
       lastValidOrientation,
       lastPosition: null,
+      defaultPathMaterial,
+      highlightPathMaterial,
     });
-    
+
     console.log(`🚗 创建车辆实体: ${deviceId}`);
     return this.vehicles.get(deviceId);
   },
-  
+
   // 更新车辆位置
   updateVehiclePosition(deviceId, longitude, latitude, height = 0) {
     const vehicle = this.vehicles.get(deviceId);
@@ -286,26 +642,183 @@ const vehicleManager = {
       console.warn(`⚠️ 车辆 ${deviceId} 不存在，跳过更新`);
       return;
     }
-    
+
     const currentTime = mainViewer.clock.currentTime;
-    const newPosition = Cesium.Cartesian3.fromDegrees(longitude, latitude, height);
-    
+    const newPosition = Cesium.Cartesian3.fromDegrees(
+      longitude,
+      latitude,
+      height,
+    );
+
     vehicle.positionProp.addSample(currentTime, newPosition);
     vehicle.lastPosition = { longitude, latitude, height };
   },
-  
+
   // 获取所有车辆
   getAllVehicles() {
     return Array.from(this.vehicles.keys());
   },
-  
+
   // 清除所有车辆
   clearAll() {
-    this.vehicles.forEach((vehicle, deviceId) => {
+    this.selectedDeviceId = null;
+    closePoliceVehiclePopup();
+    this.vehicles.forEach((vehicle) => {
       mainViewer.entities.remove(vehicle.entity);
     });
     this.vehicles.clear();
-    console.log('🗑️ 已清除所有车辆');
+    console.log("🗑️ 已清除所有车辆");
+  },
+};
+
+// 多无人机测试管理器
+const droneTestManager = {
+  drones: new Map(),
+
+  createDrone(viewer, droneId, lng, lat, height = 80) {
+    if (this.drones.has(droneId)) return this.drones.get(droneId);
+
+    const positionProp = new Cesium.SampledPositionProperty();
+    positionProp.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+    positionProp.setInterpolationOptions({
+      interpolationDegree: 2,
+      interpolationAlgorithm: Cesium.HermitePolynomialApproximation,
+    });
+
+    const orientationProp = new Cesium.SampledProperty(Cesium.Quaternion);
+    orientationProp.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+    orientationProp.setInterpolationOptions({
+      interpolationDegree: 2,
+      interpolationAlgorithm: Cesium.HermitePolynomialApproximation,
+    });
+
+    const entity = viewer.entities.add({
+      availability: new Cesium.TimeIntervalCollection([
+        new Cesium.TimeInterval({
+          start: Cesium.JulianDate.fromIso8601("1970-01-01T00:00:00Z"),
+          stop: Cesium.JulianDate.fromIso8601("9999-12-31T23:59:59Z"),
+        }),
+      ]),
+      position: positionProp,
+      orientation: orientationProp,
+      model: {
+        uri: "/models/uav.glb",
+        minimumPixelSize: 48,
+        runAnimations: true,
+      },
+      path: {
+        show: true,
+        width: 3,
+        material: new Cesium.PolylineGlowMaterialProperty({
+          glowPower: 0.2,
+          taperPower: 0.7,
+          color: Cesium.Color.GOLD,
+        }),
+        leadTime: 0,
+        trailTime: 999999,
+        resolution: 1,
+      },
+      label: {
+        text: droneId,
+        font: "14px sans-serif",
+        fillColor: Cesium.Color.GOLD,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new Cesium.Cartesian2(0, -40),
+        show: true,
+        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
+
+    // 设置初始位置
+    const initPos = Cesium.Cartesian3.fromDegrees(lng, lat, height);
+    const now = viewer.clock.currentTime;
+    positionProp.addSample(now, initPos);
+
+    this.drones.set(droneId, {
+      entity,
+      positionProp,
+      orientationProp,
+      lastPosition: { lng, lat, height },
+      lastScheduledTime: null,
+    });
+
+    console.log(`🛸 创建无人机实体: ${droneId}`);
+    return this.drones.get(droneId);
+  },
+
+  updateDronePosition(droneId, lng, lat, height) {
+    const drone = this.drones.get(droneId);
+    if (!drone) {
+      console.warn(`无人机 ${droneId} 不存在`);
+      return;
+    }
+
+    const now = mainViewer.clock.currentTime;
+    const position = Cesium.Cartesian3.fromDegrees(lng, lat, height);
+    drone.positionProp.addSample(now, position);
+    drone.lastPosition = { lng, lat, height };
+  },
+
+  flyToPoint(droneId, lng, lat, speed = 30, height = 80) {
+    const drone = this.drones.get(droneId);
+    if (!drone) return;
+
+    const newPosition = Cesium.Cartesian3.fromDegrees(lng, lat, 0);
+    const now = mainViewer.clock.currentTime;
+    let arrivalTime;
+
+    if (
+      !drone.lastScheduledTime ||
+      Cesium.JulianDate.compare(drone.lastScheduledTime, now) < 0
+    ) {
+      arrivalTime = Cesium.JulianDate.addSeconds(
+        now,
+        1,
+        new Cesium.JulianDate(),
+      );
+    } else {
+      const lastPos = Cesium.Cartesian3.fromDegrees(
+        drone.lastPosition.lng,
+        drone.lastPosition.lat,
+        drone.lastPosition.height,
+      );
+      const distance = Cesium.Cartesian3.distance(lastPos, newPosition);
+      const travelTime = Math.max(distance / speed, 0.1);
+      arrivalTime = Cesium.JulianDate.addSeconds(
+        drone.lastScheduledTime,
+        travelTime,
+        new Cesium.JulianDate(),
+      );
+    }
+
+    const dronePos = Cesium.Cartesian3.fromDegrees(lng, lat, height);
+    drone.positionProp.addSample(arrivalTime, dronePos);
+    drone.lastScheduledTime = arrivalTime;
+    drone.lastPosition = { lng, lat, height };
+
+    if (Cesium.JulianDate.compare(arrivalTime, mainViewer.clock.stopTime) > 0) {
+      mainViewer.clock.stopTime = Cesium.JulianDate.addSeconds(
+        arrivalTime,
+        2,
+        new Cesium.JulianDate(),
+      );
+    }
+  },
+
+  getAllDrones() {
+    return Array.from(this.drones.keys());
+  },
+
+  clearAll() {
+    this.drones.forEach((drone) => {
+      mainViewer.entities.remove(drone.entity);
+    });
+    this.drones.clear();
+    console.log("🗑️ 已清除所有测试无人机");
   },
 };
 // 定义姿态属性 (注意：这里需要指定类型为 Cesium.Quaternion)
@@ -338,10 +851,14 @@ let lastDroneScheduledTime = null;
 let lastDronePosition = null;
 // 汽车的朝向
 let lastValidOrientation = null;
-const velocityOrientation = new Cesium.VelocityOrientationProperty(carPositionProp);
+const velocityOrientation = new Cesium.VelocityOrientationProperty(
+  carPositionProp,
+);
 // 无人机的朝向
 let lastValidDroneOrientation = null;
-const droneVelocityOrientation = new Cesium.VelocityOrientationProperty(dronePositionProp);
+const droneVelocityOrientation = new Cesium.VelocityOrientationProperty(
+  dronePositionProp,
+);
 // 固定延迟 0.5 秒，用于平滑过渡
 const LEAD_TIME = 0.5;
 // 记录真实时间戳（ms）
@@ -355,7 +872,11 @@ const REALTIME_BUFFER = 0.3;
 
 // 右下角小窗
 let subViewer = null;
-const CAMERA_POS = Cesium.Cartesian3.fromDegrees(DEFAULT_CENTER.lng, DEFAULT_CENTER.lat, 1000); // 摄像头固定位置
+const CAMERA_POS = Cesium.Cartesian3.fromDegrees(
+  DEFAULT_CENTER.lng,
+  DEFAULT_CENTER.lat,
+  1000,
+); // 摄像头固定位置
 
 // 视图加载的完成度
 const viewerLoadCount = ref(0);
@@ -414,7 +935,8 @@ const getTDT_TK = () => TK_LIST[Math.floor(Math.random() * TK_LIST.length)];
 
 // 切换展示模式
 const toggleDisplayMode = () => {
-  vehicleDisplayMode.value = vehicleDisplayMode.value === "model" ? "point" : "model";
+  vehicleDisplayMode.value =
+    vehicleDisplayMode.value === "model" ? "point" : "model";
 };
 
 /**
@@ -425,17 +947,141 @@ const toggleDisplayMode = () => {
 const handleMapRoadNetVisible = (e) => {
   if (e) {
     if (currentMode.value === "satellite") {
+      ensureSatelliteMarkLayer();
       satelMarkLayer.show = true;
     } else {
+      ensureVectorMarkLayer();
       vectorMarkLayer.show = true;
     }
   } else {
     if (currentMode.value === "satellite") {
-      satelMarkLayer.show = false;
+      if (satelMarkLayer) satelMarkLayer.show = false;
     } else {
-      vectorMarkLayer.show = false;
+      if (vectorMarkLayer) vectorMarkLayer.show = false;
     }
   }
+};
+
+const applyDarkMapTone = (layer, layerCode) => {
+  if (!layer) return;
+
+  const isLabelLayer = layerCode === "cia_w" || layerCode === "cva_w";
+  if (isLabelLayer) {
+    layer.alpha = 0.65; // 整体透明度，越小越淡/暗
+    layer.saturation = 0.0;
+    layer.brightness = 0.65; // 影像亮度，小于 1 变暗
+    layer.contrast = 1.0; // 对比度
+  }
+};
+
+const createMainImageryLayer = (layerCode, options = {}, show = true) => {
+  if (!mainViewer) return null;
+
+  const layer = mainViewer.imageryLayers.addImageryProvider(
+    getTdtLayerProvider(layerCode, options),
+  );
+  layer.maximumTerrainLevel = MAX_LEVEL;
+  layer.show = show;
+  applyDarkMapTone(layer, layerCode);
+  return layer;
+};
+
+const ensureSatelliteMarkLayer = () => {
+  if (!satelMarkLayer) {
+    satelMarkLayer = createMainImageryLayer(
+      "cia_w",
+      {},
+      mapConfigForm.value.showMapRoadNet && currentMode.value === "satellite",
+    );
+  }
+  return satelMarkLayer;
+};
+
+const ensureVectorLayer = () => {
+  if (!vectorLayer) {
+    vectorLayer = createMainImageryLayer(
+      "vec_w",
+      { blueTint: false },
+      currentMode.value === "normal",
+    );
+  }
+  return vectorLayer;
+};
+
+const ensureVectorMarkLayer = () => {
+  if (!vectorMarkLayer) {
+    vectorMarkLayer = createMainImageryLayer(
+      "cva_w",
+      { blueTint: false, bright: 1.7 },
+      mapConfigForm.value.showMapRoadNet && currentMode.value === "normal",
+    );
+  }
+  return vectorMarkLayer;
+};
+
+const scheduleAfterFirstPaint = (callback) => {
+  requestAnimationFrame(() => {
+    const run = () => {
+      if (!mainViewer || mainViewer.isDestroyed?.()) return;
+      callback();
+    };
+
+    if ("requestIdleCallback" in window) {
+      window.requestIdleCallback(run, { timeout: 1500 });
+      return;
+    }
+
+    setTimeout(run, 0);
+  });
+};
+
+let modelsPreloaded = false;
+const preloadModels = () => {
+  if (modelsPreloaded) return;
+  modelsPreloaded = true;
+  ["/models/car.glb", "/models/uav.glb"].forEach((url) => {
+    fetch(url).catch(() => {});
+  });
+};
+preloadModels();
+
+const warmUpPicker = (viewer) => {
+  try {
+    viewer.scene.pick(new Cesium.Cartesian2(0, 0));
+  } catch (_) {}
+};
+
+const warmUpMessageBox = () => {
+  const el = document.createElement("div");
+  el.style.cssText =
+    "position:fixed;left:-9999px;top:-9999px;opacity:0;pointer-events:none";
+  document.body.appendChild(el);
+  ElMessageBox.alert("", "", {
+    customClass: "warmup-hidden",
+    showConfirmButton: false,
+    showCancelButton: false,
+    showClose: false,
+  }).catch(() => {});
+  setTimeout(() => {
+    ElMessageBox.close();
+    el.remove();
+  }, 50);
+};
+
+const initDeferredViewerFeatures = (viewer) => {
+  if (mapConfigForm.value.showMapRoadNet && currentMode.value === "satellite") {
+    ensureSatelliteMarkLayer();
+  }
+
+  preloadModels();
+  initScene(viewer);
+  initClickControl(viewer);
+  initManualUnlock(viewer);
+  initCoordinateTracker(viewer);
+  initVehicleClickHandler(viewer);
+
+  warmUpPicker(viewer);
+  warmUpMessageBox();
 };
 
 /**
@@ -455,6 +1101,10 @@ const initViewer = () => {
     animation: false,
     timeline: false,
     fullscreenButton: false,
+    infoBox: false,
+    selectionIndicator: false,
+    baseLayer: false,
+    creditContainer: document.createElement("div"),
     contextOptions: {
       webgl: {
         alpha: true,
@@ -474,60 +1124,27 @@ const initViewer = () => {
   viewerLoadCount.value++;
 
   // When you zoom in on the map or the tiles haven't loaded yet, change the background color.
-  mainViewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#2f3542");
+  mainViewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#2B2D39");
 
   // hide default map
   mainViewer.imageryLayers.removeAll();
 
-  // load Tianditu img_w
-  const ImgWLayer = getTdtLayerProvider("img_w");
-  satelliteLayer = mainViewer.imageryLayers.addImageryProvider(ImgWLayer);
-  satelliteLayer.maximumTerrainLevel = MAX_LEVEL;
-
-  // load Tianditu cia_w
-  const CiaWLayer = getTdtLayerProvider("cia_w");
-  satelMarkLayer = mainViewer.imageryLayers.addImageryProvider(CiaWLayer);
-  satelMarkLayer.maximumTerrainLevel = MAX_LEVEL;
-
-  // load Tianditu vec_w --- default hide
-  const VecWLayer = getTdtLayerProvider("vec_w");
-  vectorLayer = mainViewer.imageryLayers.addImageryProvider(VecWLayer);
-  vectorLayer.maximumTerrainLevel = MAX_LEVEL;
-  vectorLayer.show = false;
-
-  // load Tianditu cva_w --- default hide
-  const CvaWLayer = getTdtLayerProvider("cva_w");
-  vectorMarkLayer = mainViewer.imageryLayers.addImageryProvider(CvaWLayer);
-  vectorMarkLayer.maximumTerrainLevel = MAX_LEVEL;
-  vectorMarkLayer.show = false;
+  // 首屏只加载影像底图，标注层/矢量层延后或按需加载。
+  satelliteLayer = createMainImageryLayer("img_w", { blueTint: true });
 
   // set original degree
   mainViewer.camera.setView({
-    destination: Cesium.Cartesian3.fromDegrees(DEFAULT_CENTER.lng, DEFAULT_CENTER.lat, 1000),
+    destination: Cesium.Cartesian3.fromDegrees(
+      DEFAULT_CENTER.lng,
+      DEFAULT_CENTER.lat,
+      1000,
+    ),
     orientation: {
       heading: Cesium.Math.toRadians(0), // 正北
       pitch: Cesium.Math.toRadians(-90), // -90度垂直,因为默认是2D地图
       roll: 0,
     },
   });
-
-  // Initialize and load the model scene
-  initScene(mainViewer);
-
-  // Initialization of click control
-  initClickControl(mainViewer);
-
-  // 一旦尝试手动拖拽地图，系统就自动停止跟随汽车
-  initManualUnlock(mainViewer);
-
-  // 初始化坐标跟踪器
-  initCoordinateTracker(mainViewer);
-
-  // 绘制动态车辆点位
-  // drawDynamicCar(mainViewer);
-
-  // 初始化变焦对比视场
-  // zoomManager = new ZoomFrustumManager(mainViewer, droneEntity);
 
   // Global deceleration by half
   mainViewer.clock.multiplier = 0.5;
@@ -540,9 +1157,8 @@ const initViewer = () => {
 
   // 开启深度测试，确保模型在地形上
   mainViewer.scene.globe.depthTestAgainstTerrain = true;
-  
-  // 初始化车辆点击事件处理器
-  initVehicleClickHandler(mainViewer);
+
+  scheduleAfterFirstPaint(() => initDeferredViewerFeatures(mainViewer));
 };
 
 /**
@@ -550,7 +1166,8 @@ const initViewer = () => {
  * @return {*}
  */
 const toggleSceneMode = () => {
-  const hasCar = carEntity && carEntity.position.getValue(mainViewer.clock.currentTime);
+  const hasCar =
+    carEntity && carEntity.position.getValue(mainViewer.clock.currentTime);
   isPitch2D.value = !isPitch2D.value;
   // Switch camera pitch angle
   switchGlobalView(mainViewer, isPitch2D.value);
@@ -594,13 +1211,29 @@ const switchGlobalView = (viewer, to2D) => {
 const switchTrackedView = (viewer, carEntity, to2D) => {
   if (!viewer.trackedEntity) return;
 
-  const center = viewer.trackedEntity.position.getValue(viewer.clock.currentTime);
+  const center = viewer.trackedEntity.position.getValue(
+    viewer.clock.currentTime,
+  );
   if (!center) return;
 
   if (to2D) {
-    viewer.camera.lookAt(center, new Cesium.HeadingPitchRange(viewer.camera.heading, Cesium.Math.toRadians(-90), 800));
+    viewer.camera.lookAt(
+      center,
+      new Cesium.HeadingPitchRange(
+        viewer.camera.heading,
+        Cesium.Math.toRadians(-90),
+        800,
+      ),
+    );
   } else {
-    viewer.camera.lookAt(center, new Cesium.HeadingPitchRange(viewer.camera.heading, Cesium.Math.toRadians(-45), 200));
+    viewer.camera.lookAt(
+      center,
+      new Cesium.HeadingPitchRange(
+        viewer.camera.heading,
+        Cesium.Math.toRadians(-45),
+        200,
+      ),
+    );
   }
 };
 
@@ -618,7 +1251,9 @@ const zoomIn = () => {
  * @return {*}
  */
 const zoomOut = () => {
-  mainViewer.camera.zoomOut(mainViewer.camera.positionCartographic.height * 0.5);
+  mainViewer.camera.zoomOut(
+    mainViewer.camera.positionCartographic.height * 0.5,
+  );
   subViewer.camera.zoomOut(subViewer.camera.positionCartographic.height * 0.5);
 };
 
@@ -630,17 +1265,22 @@ const zoomOut = () => {
 const switchMapMode = (mode) => {
   if (mode === "satellite") {
     // img_w + cia_w
-    satelliteLayer.show = true;
-    satelMarkLayer.show = true;
-    vectorLayer.show = false;
-    vectorMarkLayer.show = false;
+    if (satelliteLayer) satelliteLayer.show = true;
+    if (mapConfigForm.value.showMapRoadNet) ensureSatelliteMarkLayer();
+    if (satelMarkLayer)
+      satelMarkLayer.show = mapConfigForm.value.showMapRoadNet;
+    if (vectorLayer) vectorLayer.show = false;
+    if (vectorMarkLayer) vectorMarkLayer.show = false;
     currentMode.value = "satellite";
   } else {
     // vec_w + cva_w
-    satelliteLayer.show = false;
-    satelMarkLayer.show = false;
-    vectorLayer.show = true;
-    vectorMarkLayer.show = true;
+    ensureVectorLayer();
+    if (mapConfigForm.value.showMapRoadNet) ensureVectorMarkLayer();
+    if (satelliteLayer) satelliteLayer.show = false;
+    if (satelMarkLayer) satelMarkLayer.show = false;
+    if (vectorLayer) vectorLayer.show = true;
+    if (vectorMarkLayer)
+      vectorMarkLayer.show = mapConfigForm.value.showMapRoadNet;
     currentMode.value = "normal";
   }
 };
@@ -650,7 +1290,7 @@ const switchMapMode = (mode) => {
  * @param {*} layerCode
  * @return {*}
  */
-const getTdtLayerProvider = (layerCode) => {
+const getTdtLayerProvider = (layerCode, options = {}) => {
   const provider = new Cesium.WebMapTileServiceImageryProvider({
     url: `http://t${Math.floor(Math.random() * 8)}.tianditu.gov.cn/${layerCode}/wmts?service=wmts&request=GetTile&version=1.0.0&LAYER=${
       layerCode.split("_")[0]
@@ -661,6 +1301,67 @@ const getTdtLayerProvider = (layerCode) => {
     tileMatrixSetID: "w",
     maximumLevel: MAX_LEVEL,
   });
+
+  // ===== 瓦片蓝染包装：灰度→蓝色映射，仅影响瓦片图片，不碰模型 =====
+  if (options.blueTint) {
+    const bright = options.bright ?? 1.0;
+    const bGain = 0.55 * bright;
+    const rGain = bGain * (43 / 57);
+    const gGain = bGain * (45 / 57);
+
+    const origRequestImage = provider.requestImage.bind(provider);
+    provider.requestImage = (x, y, level, request) => {
+      if (request && request.cancelled) return undefined;
+
+      const promise = origRequestImage(x, y, level, request);
+      if (!promise) return promise;
+
+      return promise
+        .then((image) => {
+          if (!image) return image;
+
+          try {
+            const w = image.width || 0;
+            const h = image.height || 0;
+            if (w === 0 || h === 0) return image;
+
+            const canvas = document.createElement("canvas");
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext("2d", { willReadFrequently: true });
+            ctx.translate(0, h);
+            ctx.scale(1, -1);
+            ctx.drawImage(image, 0, 0);
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+            const imgData = ctx.getImageData(0, 0, w, h);
+            const px = imgData.data;
+            const len = px.length;
+            for (let i = 0; i < len; i += 4) {
+              const gray =
+                px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114;
+              px[i] = gray * rGain;
+              px[i + 1] = gray * gGain;
+              px[i + 2] = gray * bGain;
+            }
+            ctx.putImageData(imgData, 0, 0);
+            return canvas;
+          } catch (e) {
+            console.warn(
+              "blueTint tile processing failed, fallback to original:",
+              e,
+            );
+            return image;
+          }
+        })
+        .catch((err) => {
+          console.warn("blueTint tile request failed:", err);
+          return undefined;
+        });
+    };
+  }
+  // ===== 瓦片蓝染包装 END =====
+
   return provider;
 };
 
@@ -809,7 +1510,10 @@ const createDynamicVehicle = (viewer) => {
 
       if (Cesium.defined(currentOrientation)) {
         // If the current direction is valid (indicating movement), then record it and return it.
-        lastValidOrientation = Cesium.Quaternion.clone(currentOrientation, lastValidOrientation);
+        lastValidOrientation = Cesium.Quaternion.clone(
+          currentOrientation,
+          lastValidOrientation,
+        );
         return currentOrientation;
       } else {
         // If the direction is invalid (the car has stopped), then return to the last valid direction.
@@ -825,12 +1529,19 @@ const createDynamicVehicle = (viewer) => {
       // 限制最大缩放比例，防止拉近时车变得巨大无比（可选）
       maximumScale: 200,
       // 动态显示逻辑
-      show: new Cesium.CallbackProperty(() => vehicleDisplayMode.value === "model", false),
+      show: new Cesium.CallbackProperty(
+        () => vehicleDisplayMode.value === "model",
+        false,
+      ),
       heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
       nodeTransformations: {
         root: new Cesium.NodeTransformationProperty({
           rotation: new Cesium.CallbackProperty(() => {
-            const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(180), 0, 0);
+            const hpr = new Cesium.HeadingPitchRoll(
+              Cesium.Math.toRadians(180),
+              0,
+              0,
+            );
             return Cesium.Quaternion.fromHeadingPitchRoll(hpr);
           }, false),
         }),
@@ -844,12 +1555,19 @@ const createDynamicVehicle = (viewer) => {
       outline: false,
       outlineColor: Cesium.Color.WHITE,
       // 动态显示逻辑
-      show: new Cesium.CallbackProperty(() => vehicleDisplayMode.value === "point", false),
+      show: new Cesium.CallbackProperty(
+        () => vehicleDisplayMode.value === "point",
+        false,
+      ),
       heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
       nodeTransformations: {
         root: new Cesium.NodeTransformationProperty({
           rotation: new Cesium.CallbackProperty(() => {
-            const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(180), 0, 0);
+            const hpr = new Cesium.HeadingPitchRoll(
+              Cesium.Math.toRadians(180),
+              0,
+              0,
+            );
             return Cesium.Quaternion.fromHeadingPitchRoll(hpr);
           }, false),
         }),
@@ -935,7 +1653,11 @@ const calcZoomFov = (baseFov, zoomFactor, w = 16, h = 9) => {
  * 将大疆姿态转换为 Cesium 四元数
  */
 const getDroneOrientation = (position, head, pitch, roll) => {
-  const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(head), Cesium.Math.toRadians(pitch), Cesium.Math.toRadians(roll));
+  const hpr = new Cesium.HeadingPitchRoll(
+    Cesium.Math.toRadians(head),
+    Cesium.Math.toRadians(pitch),
+    Cesium.Math.toRadians(roll),
+  );
   // 基于当前位置的东-北-上 (ENU) 坐标系计算四元数
   return Cesium.Transforms.headingPitchRollQuaternion(position, hpr);
 };
@@ -958,7 +1680,11 @@ const addDJIFrustum = (viewer, droneEntity, fovH = 60, fovV = 40) => {
     const bodyOrientation = droneEntity.orientation.getValue(time);
 
     // 如果位置或姿态属性本身没有数据，或者状态位为 false
-    if (!Cesium.defined(position) || !Cesium.defined(bodyOrientation) || !isAttitudeValid) {
+    if (
+      !Cesium.defined(position) ||
+      !Cesium.defined(bodyOrientation) ||
+      !isAttitudeValid
+    ) {
       return null;
     }
 
@@ -975,11 +1701,19 @@ const addDJIFrustum = (viewer, droneEntity, fovH = 60, fovV = 40) => {
     const gimbalPitchRad = Cesium.Math.toRadians(gimbalPitchValue);
 
     // 创建云台的旋转四元数 (围绕机身的本地 X 轴旋转)
-    const gimbalQuaternion = Cesium.Quaternion.fromAxisAngle(Cesium.Cartesian3.UNIT_X, gimbalPitchRad, new Cesium.Quaternion());
+    const gimbalQuaternion = Cesium.Quaternion.fromAxisAngle(
+      Cesium.Cartesian3.UNIT_X,
+      gimbalPitchRad,
+      new Cesium.Quaternion(),
+    );
 
     // 将【机身姿态】与【云台姿态】合并
     // 最终姿态 = 机身姿态 * 云台姿态
-    const finalOrientation = Cesium.Quaternion.multiply(bodyOrientation, gimbalQuaternion, new Cesium.Quaternion());
+    const finalOrientation = Cesium.Quaternion.multiply(
+      bodyOrientation,
+      gimbalQuaternion,
+      new Cesium.Quaternion(),
+    );
 
     // 使用合并后的 finalOrientation 生成旋转矩阵
     const matrix = Cesium.Matrix3.fromQuaternion(finalOrientation);
@@ -998,7 +1732,11 @@ const addDJIFrustum = (viewer, droneEntity, fovH = 60, fovV = 40) => {
     const corners = [];
     directions.forEach((dir) => {
       // 使用合并了云台旋转的矩阵进行转换
-      const worldDir = Cesium.Matrix3.multiplyByVector(matrix, dir, new Cesium.Cartesian3());
+      const worldDir = Cesium.Matrix3.multiplyByVector(
+        matrix,
+        dir,
+        new Cesium.Cartesian3(),
+      );
       Cesium.Cartesian3.normalize(worldDir, worldDir);
 
       const ray = new Cesium.Ray(position, worldDir);
@@ -1023,7 +1761,11 @@ const addDJIFrustum = (viewer, droneEntity, fovH = 60, fovV = 40) => {
             // 返回一个空的对象，而不是 null，这样实体不会消失，只是暂时不画
             return new Cesium.PolygonHierarchy([]);
           }
-          return new Cesium.PolygonHierarchy([res.apex, res.corners[i], res.corners[(i + 1) % 4]]);
+          return new Cesium.PolygonHierarchy([
+            res.apex,
+            res.corners[i],
+            res.corners[(i + 1) % 4],
+          ]);
         }, false),
         material: Cesium.Color.YELLOW.withAlpha(0.3),
         perPositionHeight: true,
@@ -1049,13 +1791,18 @@ const addDJIZoomFrustum = (viewer, droneEntity, dfov = 84) => {
   console.log("变焦后的 H/V FOV", { hfov, vfov, droneState });
 
   const getCorners = (time) => {
-    if (lastTime && Cesium.JulianDate.equals(lastTime, time)) return cachedResult;
+    if (lastTime && Cesium.JulianDate.equals(lastTime, time))
+      return cachedResult;
     // 获取机身的基础位置和姿态
     const position = droneEntity.position.getValue(time);
     const bodyOrientation = droneEntity.orientation.getValue(time);
 
     // 如果位置或姿态属性本身没有数据，或者状态位为 false
-    if (!Cesium.defined(position) || !Cesium.defined(bodyOrientation) || !isAttitudeValid) {
+    if (
+      !Cesium.defined(position) ||
+      !Cesium.defined(bodyOrientation) ||
+      !isAttitudeValid
+    ) {
       return null;
     }
 
@@ -1072,11 +1819,19 @@ const addDJIZoomFrustum = (viewer, droneEntity, dfov = 84) => {
     const gimbalPitchRad = Cesium.Math.toRadians(gimbalPitchValue);
 
     // 创建云台的旋转四元数 (围绕机身的本地 X 轴旋转)
-    const gimbalQuaternion = Cesium.Quaternion.fromAxisAngle(Cesium.Cartesian3.UNIT_X, gimbalPitchRad, new Cesium.Quaternion());
+    const gimbalQuaternion = Cesium.Quaternion.fromAxisAngle(
+      Cesium.Cartesian3.UNIT_X,
+      gimbalPitchRad,
+      new Cesium.Quaternion(),
+    );
 
     // 将【机身姿态】与【云台姿态】合并
     // 最终姿态 = 机身姿态 * 云台姿态
-    const finalOrientation = Cesium.Quaternion.multiply(bodyOrientation, gimbalQuaternion, new Cesium.Quaternion());
+    const finalOrientation = Cesium.Quaternion.multiply(
+      bodyOrientation,
+      gimbalQuaternion,
+      new Cesium.Quaternion(),
+    );
 
     // 使用合并后的 finalOrientation 生成旋转矩阵
     const matrix = Cesium.Matrix3.fromQuaternion(finalOrientation);
@@ -1084,7 +1839,11 @@ const addDJIZoomFrustum = (viewer, droneEntity, dfov = 84) => {
     // --- 计算中心交点 (光轴) ---
     // 假设相机前向是 Y 轴 (0, 1, 0)
     const centerLocalDir = new Cesium.Cartesian3(0, 1, 0);
-    const centerWorldDir = Cesium.Matrix3.multiplyByVector(matrix, centerLocalDir, new Cesium.Cartesian3());
+    const centerWorldDir = Cesium.Matrix3.multiplyByVector(
+      matrix,
+      centerLocalDir,
+      new Cesium.Cartesian3(),
+    );
     Cesium.Cartesian3.normalize(centerWorldDir, centerWorldDir);
 
     const centerRay = new Cesium.Ray(position, centerWorldDir);
@@ -1112,7 +1871,11 @@ const addDJIZoomFrustum = (viewer, droneEntity, dfov = 84) => {
     const corners = [];
     directions.forEach((dir) => {
       // 使用合并了云台旋转的矩阵进行转换
-      const worldDir = Cesium.Matrix3.multiplyByVector(matrix, dir, new Cesium.Cartesian3());
+      const worldDir = Cesium.Matrix3.multiplyByVector(
+        matrix,
+        dir,
+        new Cesium.Cartesian3(),
+      );
       Cesium.Cartesian3.normalize(worldDir, worldDir);
 
       const ray = new Cesium.Ray(position, worldDir);
@@ -1150,7 +1913,11 @@ const addDJIZoomFrustum = (viewer, droneEntity, dfov = 84) => {
             // 返回一个空的对象，而不是 null，这样实体不会消失，只是暂时不画
             return new Cesium.PolygonHierarchy([]);
           }
-          return new Cesium.PolygonHierarchy([res.apex, res.corners[i], res.corners[(i + 1) % 4]]);
+          return new Cesium.PolygonHierarchy([
+            res.apex,
+            res.corners[i],
+            res.corners[(i + 1) % 4],
+          ]);
         }, false),
         material: Cesium.Color.CYAN.withAlpha(0.3),
         perPositionHeight: true,
@@ -1325,10 +2092,18 @@ const addFrustumLayer = (viewer, droneEntity, zoomSource, color, name) => {
     const gPitch = Cesium.Math.toRadians(droneState.gimbal_pitch || -90);
 
     // 创建云台旋转：绕机身的本地 X 轴旋转（即俯仰）
-    const gimbalQuaternion = Cesium.Quaternion.fromAxisAngle(Cesium.Cartesian3.UNIT_X, gPitch, new Cesium.Quaternion());
+    const gimbalQuaternion = Cesium.Quaternion.fromAxisAngle(
+      Cesium.Cartesian3.UNIT_X,
+      gPitch,
+      new Cesium.Quaternion(),
+    );
 
     // 合成最终姿态：机身姿态 * 云台姿态
-    const finalOrientation = Cesium.Quaternion.multiply(bodyOrientation, gimbalQuaternion, new Cesium.Quaternion());
+    const finalOrientation = Cesium.Quaternion.multiply(
+      bodyOrientation,
+      gimbalQuaternion,
+      new Cesium.Quaternion(),
+    );
 
     // 使用合成后的 finalOrientation 生成旋转矩阵
     const matrix = Cesium.Matrix3.fromQuaternion(finalOrientation);
@@ -1348,7 +2123,11 @@ const addFrustumLayer = (viewer, droneEntity, zoomSource, color, name) => {
     ];
 
     const corners = directions.map((dir) => {
-      const worldDir = Cesium.Matrix3.multiplyByVector(matrix, dir, new Cesium.Cartesian3());
+      const worldDir = Cesium.Matrix3.multiplyByVector(
+        matrix,
+        dir,
+        new Cesium.Cartesian3(),
+      );
       Cesium.Cartesian3.normalize(worldDir, worldDir);
       const ray = new Cesium.Ray(position, worldDir);
 
@@ -1367,7 +2146,11 @@ const addFrustumLayer = (viewer, droneEntity, zoomSource, color, name) => {
         hierarchy: new Cesium.CallbackProperty((time) => {
           const res = getCorners(time);
           if (!res) return new Cesium.PolygonHierarchy([]);
-          return new Cesium.PolygonHierarchy([res.apex, res.corners[i], res.corners[(i + 1) % 4]]);
+          return new Cesium.PolygonHierarchy([
+            res.apex,
+            res.corners[i],
+            res.corners[(i + 1) % 4],
+          ]);
         }, false),
         material: color.withAlpha(0.3),
         perPositionHeight: true,
@@ -1475,15 +2258,26 @@ const runningToPointWithTimeForCar = (lng, lat, speed = 15) => {
   const newPosition = Cesium.Cartesian3.fromDegrees(lng, lat, 0);
   const now = mainViewer.clock.currentTime;
   let arrivalTime;
-  if (!lastScheduledTime || Cesium.JulianDate.compare(lastScheduledTime, now) < 0) {
+  if (
+    !lastScheduledTime ||
+    Cesium.JulianDate.compare(lastScheduledTime, now) < 0
+  ) {
     // When the car is stopped,start moving immediately
     // Start moving after 0.1 seconds to avoid time conflicts.
-    arrivalTime = Cesium.JulianDate.addSeconds(now, 1.0, new Cesium.JulianDate());
+    arrivalTime = Cesium.JulianDate.addSeconds(
+      now,
+      1.0,
+      new Cesium.JulianDate(),
+    );
   } else {
     // When the car is in motion,we need to queue up and calcalate the travel time from that point to this one.
     const distance = Cesium.Cartesian3.distance(lastPosition, newPosition);
     const travelTime = Math.max(distance / speed, 1.0); // Time = Distance / Speed
-    arrivalTime = Cesium.JulianDate.addSeconds(lastScheduledTime, travelTime, new Cesium.JulianDate());
+    arrivalTime = Cesium.JulianDate.addSeconds(
+      lastScheduledTime,
+      travelTime,
+      new Cesium.JulianDate(),
+    );
   }
   // Update the position of the car(no height)
   carPositionProp.addSample(arrivalTime, newPosition);
@@ -1506,7 +2300,11 @@ const runningToPointWithTimeForCar = (lng, lat, speed = 15) => {
 
   // Automatically extend the end time to prevent the model from disappearing
   if (Cesium.JulianDate.compare(arrivalTime, mainViewer.clock.stopTime) > 0) {
-    mainViewer.clock.stopTime = Cesium.JulianDate.addSeconds(arrivalTime, 2, new Cesium.JulianDate());
+    mainViewer.clock.stopTime = Cesium.JulianDate.addSeconds(
+      arrivalTime,
+      2,
+      new Cesium.JulianDate(),
+    );
   }
 };
 
@@ -1521,7 +2319,10 @@ const runningToPointWithTimeForDrone = (lng, lat, speed = 30, height) => {
   const newPosition = Cesium.Cartesian3.fromDegrees(lng, lat, 0);
   const now = mainViewer.clock.currentTime;
   let arrivalTime;
-  if (!lastDroneScheduledTime || Cesium.JulianDate.compare(lastDroneScheduledTime, now) < 0) {
+  if (
+    !lastDroneScheduledTime ||
+    Cesium.JulianDate.compare(lastDroneScheduledTime, now) < 0
+  ) {
     // When the car is stopped,start moving immediately
     // Start moving after 0.1 seconds to avoid time conflicts.
     arrivalTime = Cesium.JulianDate.addSeconds(now, 1, new Cesium.JulianDate());
@@ -1529,7 +2330,11 @@ const runningToPointWithTimeForDrone = (lng, lat, speed = 30, height) => {
     // When the car is in motion,we need to queue up and calcalate the travel time from that point to this one.
     const distance = Cesium.Cartesian3.distance(lastDronePosition, newPosition);
     const travelTime = Math.max(distance / speed, 0.1); // Time = Distance / Speed
-    arrivalTime = Cesium.JulianDate.addSeconds(lastDroneScheduledTime, travelTime, new Cesium.JulianDate());
+    arrivalTime = Cesium.JulianDate.addSeconds(
+      lastDroneScheduledTime,
+      travelTime,
+      new Cesium.JulianDate(),
+    );
   }
 
   // Update the position of the uav
@@ -1541,7 +2346,11 @@ const runningToPointWithTimeForDrone = (lng, lat, speed = 30, height) => {
 
   // 每增加一个点，就顺手把时钟的停止时间往后拨，防止时间跑出范围
   if (Cesium.JulianDate.compare(arrivalTime, mainViewer.clock.stopTime) > 0) {
-    mainViewer.clock.stopTime = Cesium.JulianDate.addSeconds(arrivalTime, 2, new Cesium.JulianDate());
+    mainViewer.clock.stopTime = Cesium.JulianDate.addSeconds(
+      arrivalTime,
+      2,
+      new Cesium.JulianDate(),
+    );
   }
 
   mainViewer.clock.clockRange = Cesium.ClockRange.CLAMPED;
@@ -1575,7 +2384,11 @@ const updateEntityPosition = (entityProp, lng, lat, height) => {
 
   // 核心改进：直接将目标时间定为“现在 + 0.5秒”
   // 这样无论消息频率多高，点永远都在“现在”的 0.5s 后，不会产生累积排队
-  const arrivalTime = Cesium.JulianDate.addSeconds(now, LEAD_TIME, new Cesium.JulianDate());
+  const arrivalTime = Cesium.JulianDate.addSeconds(
+    now,
+    LEAD_TIME,
+    new Cesium.JulianDate(),
+  );
   const position = Cesium.Cartesian3.fromDegrees(lng, lat, height);
 
   // 推入采样
@@ -1591,7 +2404,11 @@ const updateEntityPosition = (entityProp, lng, lat, height) => {
 
   // 动态调整时钟终点，确保不会超出范围
   if (Cesium.JulianDate.compare(arrivalTime, mainViewer.clock.stopTime) > 0) {
-    mainViewer.clock.stopTime = Cesium.JulianDate.addSeconds(arrivalTime, 2, new Cesium.JulianDate());
+    mainViewer.clock.stopTime = Cesium.JulianDate.addSeconds(
+      arrivalTime,
+      2,
+      new Cesium.JulianDate(),
+    );
   }
 };
 
@@ -1607,7 +2424,11 @@ const updateDroneRealtime = (lng, lat, height) => {
 
   // 直接将目标时间设为“当前时间 + 固定的微小延迟”
   // 无论汽车在哪，无论上一点在哪，无人机都会立即向这个新点滑动
-  const arrivalTime = Cesium.JulianDate.addSeconds(now, REALTIME_BUFFER, new Cesium.JulianDate());
+  const arrivalTime = Cesium.JulianDate.addSeconds(
+    now,
+    REALTIME_BUFFER,
+    new Cesium.JulianDate(),
+  );
 
   const position = Cesium.Cartesian3.fromDegrees(lng, lat, height);
 
@@ -1615,12 +2436,21 @@ const updateDroneRealtime = (lng, lat, height) => {
   dronePositionProp.addSample(arrivalTime, position);
 
   // 更新姿态（计算四元数并 addSample 到一个 SampledProperty 里）
-  const orientation = getDroneOrientation(position, droneState.attitude_head, droneState.attitude_pitch, droneState.attitude_roll);
+  const orientation = getDroneOrientation(
+    position,
+    droneState.attitude_head,
+    droneState.attitude_pitch,
+    droneState.attitude_roll,
+  );
   droneOrientationProp.addSample(arrivalTime, orientation);
 
   // 保持时钟步调（防止时间轴停止）
   if (Cesium.JulianDate.compare(arrivalTime, mainViewer.clock.stopTime) > 0) {
-    mainViewer.clock.stopTime = Cesium.JulianDate.addSeconds(arrivalTime, 5, new Cesium.JulianDate());
+    mainViewer.clock.stopTime = Cesium.JulianDate.addSeconds(
+      arrivalTime,
+      5,
+      new Cesium.JulianDate(),
+    );
   }
 };
 
@@ -1717,37 +2547,42 @@ const initVehicleClickHandler = (viewer) => {
   if (vehicleClickHandler) {
     vehicleClickHandler.destroy();
   }
-  
+
   vehicleClickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-  
+
   // 处理鼠标点击事件
   vehicleClickHandler.setInputAction((click) => {
     // 当允许添加位置时，不处理车辆点击
     if (isAllowAddLocation.value) return;
-    
+
     // 拾取点击的对象
     const pickedObject = viewer.scene.pick(click.position);
-    
+
     if (Cesium.defined(pickedObject) && pickedObject.id) {
       const entity = pickedObject.id;
-      
+
       // 检查是否是车辆实体
       if (entity && entity.model && entity.label) {
-        const deviceId = entity.label.text.getValue();
-        
+        const deviceId = getVehicleDeviceIdFromEntity(entity);
+
         if (deviceId) {
-          // 查找对应的车辆数据
           const vehicle = vehicleManager.vehicles.get(deviceId);
           if (vehicle) {
-            // 获取车辆最后位置
+            vehicleManager.setSelected(deviceId);
             const lastPos = vehicle.lastPosition;
-            
-            // 显示车辆信息弹窗
-            showVehicleDialog(deviceId, lastPos);
+            if (TEST_POLICE_VEHICLES.some((v) => v.id === deviceId)) {
+              showTestVehicleDialog(deviceId, lastPos);
+            } else {
+              showVehicleDialog(deviceId, lastPos);
+            }
+            return;
           }
         }
       }
     }
+
+    vehicleManager.clearSelection();
+    closePoliceVehiclePopup();
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 };
 
@@ -1760,17 +2595,17 @@ const initVehicleClickHandler = (viewer) => {
 const showVehicleDialog = (deviceId, position) => {
   // 从系统存储中获取最新的车辆消息
   const carMessages = systemStore.carMessageList;
-  const lastMessage = carMessages.find(msg => msg.deviceId === deviceId);
-  
+  const lastMessage = carMessages.find((msg) => msg.deviceId === deviceId);
+
   // 更新弹窗数据
   vehicleDialog.deviceId = deviceId;
   vehicleDialog.position = position;
   vehicleDialog.lastMessage = lastMessage;
-  
+
   // 无人机SN列表（可以从配置或store中获取）
   const droneSnList = [DEVICE_CONFIG.droneId];
   const defaultDroneSn = droneSnList[0];
-  
+
   // 构建弹窗内容
   const dialogContent = `
     <div style="padding: 10px;">
@@ -1778,26 +2613,34 @@ const showVehicleDialog = (deviceId, position) => {
       <div style="margin-bottom: 8px;">
         <strong>设备号:</strong> ${deviceId}
       </div>
-      ${position ? `
+      ${
+        position
+          ? `
         <div style="margin-bottom: 8px;">
           <strong>位置:</strong><br>
           经度: ${position.longitude.toFixed(6)}<br>
           纬度: ${position.latitude.toFixed(6)}<br>
           高度: ${position.height || 0}m
         </div>
-      ` : ''}
-      ${lastMessage ? `
+      `
+          : ""
+      }
+      ${
+        lastMessage
+          ? `
         <div style="margin-bottom: 8px;">
           <strong>最新状态:</strong><br>
           <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; font-size: 12px; overflow: auto; max-height: 150px;">
             ${JSON.stringify(lastMessage, null, 2)}
           </pre>
         </div>
-      ` : '<div style="color: #999;">暂无车辆数据</div>'}
+      `
+          : '<div style="color: #999;">暂无车辆数据</div>'
+      }
       <div style="margin-bottom: 12px;">
         <label for="drone-sn-select" style="display: block; margin-bottom: 5px;"><strong>无人机SN:</strong></label>
         <select id="drone-sn-select" style="width: 100%; padding: 8px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 14px;">
-          ${droneSnList.map(sn => `<option value="${sn}" ${sn === defaultDroneSn ? 'selected' : ''}>${sn}</option>`).join('')}
+          ${droneSnList.map((sn) => `<option value="${sn}" ${sn === defaultDroneSn ? "selected" : ""}>${sn}</option>`).join("")}
         </select>
       </div>
       <div style="margin-top: 15px; text-align: center;">
@@ -1806,44 +2649,86 @@ const showVehicleDialog = (deviceId, position) => {
       </div>
     </div>
   `;
-  
+
   // 显示弹窗
-  ElMessageBox.alert(dialogContent, '车辆详情', {
-    confirmButtonText: '关闭',
+  ElMessageBox.alert(dialogContent, "车辆详情", {
+    confirmButtonText: "关闭",
     dangerouslyUseHTMLString: true,
-    customClass: 'vehicle-dialog',
+    customClass: "vehicle-dialog",
     showCancelButton: false,
     callback: (action) => {
       // 清理事件监听
-      const takeOffBtn = document.getElementById('take-off-btn');
-      const returnHomeBtn = document.getElementById('return-home-btn');
+      const takeOffBtn = document.getElementById("take-off-btn");
+      const returnHomeBtn = document.getElementById("return-home-btn");
       if (takeOffBtn) {
-        takeOffBtn.removeEventListener('click', handleTakeOffForVehicle);
+        takeOffBtn.removeEventListener("click", handleTakeOffForVehicle);
       }
       if (returnHomeBtn) {
-        returnHomeBtn.removeEventListener('click', handleReturnHomeForVehicle);
+        returnHomeBtn.removeEventListener("click", handleReturnHomeForVehicle);
       }
-    }
+    },
   });
-  
+
   // 延迟添加事件监听，确保DOM已渲染
   setTimeout(() => {
-    const takeOffBtn = document.getElementById('take-off-btn');
-    const returnHomeBtn = document.getElementById('return-home-btn');
-    
+    const takeOffBtn = document.getElementById("take-off-btn");
+    const returnHomeBtn = document.getElementById("return-home-btn");
+
     if (takeOffBtn) {
-      takeOffBtn.addEventListener('click', () => {
-        const droneSn = document.getElementById('drone-sn-select').value;
+      takeOffBtn.addEventListener("click", () => {
+        const droneSn = document.getElementById("drone-sn-select").value;
         handleTakeOffForVehicle(deviceId, droneSn);
       });
     }
     if (returnHomeBtn) {
-      returnHomeBtn.addEventListener('click', () => {
-        const droneSn = document.getElementById('drone-sn-select').value;
+      returnHomeBtn.addEventListener("click", () => {
+        const droneSn = document.getElementById("drone-sn-select").value;
         handleReturnHomeForVehicle(deviceId, droneSn);
       });
     }
   }, 100);
+};
+
+/**
+ * @description: 测试警车详情浮层（锚定在车辆旁）
+ */
+const showTestVehicleDialog = (deviceId, position) => {
+  if (!position) return;
+
+  const policeData = TEST_POLICE_VEHICLES.find((v) => v.id === deviceId);
+
+  const droneList = droneTestManager.getAllDrones();
+  const dronesWithDistance = droneList
+    .map((droneId) => {
+      const drone = droneTestManager.drones.get(droneId);
+      if (!drone || !drone.lastPosition) return null;
+      const dist = Cesium.Cartesian3.distance(
+        Cesium.Cartesian3.fromDegrees(position.longitude, position.latitude, 0),
+        Cesium.Cartesian3.fromDegrees(
+          drone.lastPosition.lng,
+          drone.lastPosition.lat,
+          0,
+        ),
+      );
+      return {
+        id: droneId,
+        distance: dist,
+        label: `${droneId}（距离 ${(dist / 1000).toFixed(2)} km）`,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.distance - b.distance);
+
+  policeVehiclePopup.deviceId = deviceId;
+  policeVehiclePopup.vehicleName = policeData?.name || deviceId;
+  policeVehiclePopup.alertInfo = policeData?.alert || "暂无警情信息";
+  policeVehiclePopup.coordText = `${position.longitude.toFixed(6)}, ${position.latitude.toFixed(6)}`;
+  policeVehiclePopup.drones = dronesWithDistance;
+  policeVehiclePopup.selectedDroneId = dronesWithDistance[0]?.id || "";
+  policeVehiclePopup.visible = true;
+
+  updatePolicePopupScreenPosition();
+  attachPolicePopupTracker();
 };
 
 /**
@@ -1978,10 +2863,10 @@ const clearRunningRoute = () => {
   // Remove the point markers on the map
   routeMarkers.forEach((entity) => mainViewer.entities.remove(entity));
   routeMarkers.length = 0;
-  
+
   // 清除所有车辆
   vehicleManager.clearAll();
-  
+
   // 重置初始状态
   isFirstPoint = true;
   isLockMode.value = false;
@@ -2002,7 +2887,139 @@ const clearRunningRoute = () => {
   lastDronePosition = null;
   runPointIndex = 0;
   isFirstPoint = true;
+
+  // 清除测试数据
+  droneTestManager.clearAll();
+  escortTimers.forEach((timer) => clearInterval(timer));
+  escortTimers.clear();
+  deviceStore.clearTestDevices();
 };
+
+// ========== 测试数据设置 ==========
+// TEST_POLICE_VEHICLES / TEST_DRONES 从 @/config/test-devices.js 统一导入
+
+// 伴飞跟踪定时器
+const escortTimers = new Map();
+
+/**
+ * @description: 设置测试数据 - 在地图上放置3辆警车和3架无人机
+ */
+const setupTestData = () => {
+  if (!mainViewer) return;
+
+  // 清除旧数据
+  vehicleManager.clearAll();
+  droneTestManager.clearAll();
+  escortTimers.forEach((timer) => clearInterval(timer));
+  escortTimers.clear();
+
+  // 初始化 store（左侧面板同步响应）
+  deviceStore.initTestDevices();
+
+  // 创建警车实体
+  TEST_POLICE_VEHICLES.forEach((vehicle) => {
+    vehicleManager.createVehicle(mainViewer, vehicle.id);
+    vehicleManager.updateVehiclePosition(
+      vehicle.id,
+      vehicle.lng,
+      vehicle.lat,
+      0,
+    );
+  });
+
+  // 创建无人机实体
+  TEST_DRONES.forEach((drone) => {
+    droneTestManager.createDrone(
+      mainViewer,
+      drone.id,
+      drone.lng,
+      drone.lat,
+      80,
+    );
+  });
+
+  // 先解除跟踪，避免干扰 flyTo
+  mainViewer.trackedEntity = undefined;
+
+  // 视角居中覆盖所有车辆和无人机
+  const allLngs = [
+    ...TEST_POLICE_VEHICLES.map((v) => v.lng),
+    ...TEST_DRONES.map((d) => d.lng),
+  ];
+  const allLats = [
+    ...TEST_POLICE_VEHICLES.map((v) => v.lat),
+    ...TEST_DRONES.map((d) => d.lat),
+  ];
+  const centerLng = (Math.min(...allLngs) + Math.max(...allLngs)) / 2;
+  const centerLat = (Math.min(...allLats) + Math.max(...allLats)) / 2;
+  // 跨度(km) → 高度(m)：FOV≈60°时高度 ≈ 跨度 × 870，取 2x 安全系数
+  const lngSpan =
+    (Math.max(...allLngs) - Math.min(...allLngs)) *
+    111 *
+    Math.cos(Cesium.Math.toRadians(centerLat));
+  const latSpan = (Math.max(...allLats) - Math.min(...allLats)) * 111;
+  const altitude = Math.max(lngSpan, latSpan) * 1800 + 3000;
+
+  mainViewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(centerLng, centerLat, altitude),
+    orientation: {
+      heading: Cesium.Math.toRadians(0),
+      pitch: Cesium.Math.toRadians(-90),
+      roll: 0,
+    },
+    duration: 0.8,
+  });
+
+  ElMessage.success(
+    `已放置 ${TEST_POLICE_VEHICLES.length} 辆警车 和 ${TEST_DRONES.length} 架无人机`,
+  );
+};
+
+/**
+ * @description: 模拟伴飞 - 让指定无人机飞向并跟随指定车辆（本地模拟，不依赖后端）
+ */
+function startEscortSimulation(vehicleId, droneId) {
+  const vehicle = vehicleManager.vehicles.get(vehicleId);
+  const drone = droneTestManager.drones.get(droneId);
+  if (!vehicle || !drone) {
+    ElMessage.error("车辆或无人机不存在");
+    return;
+  }
+
+  // 清除该无人机旧的跟踪定时器
+  const oldTimer = escortTimers.get(droneId);
+  if (oldTimer) clearInterval(oldTimer);
+
+  // 立即飞向车辆当前位置
+  const vehiclePos = vehicle.lastPosition;
+  if (vehiclePos) {
+    droneTestManager.flyToPoint(
+      droneId,
+      vehiclePos.longitude,
+      vehiclePos.latitude,
+      30,
+      80,
+    );
+  }
+
+  // 每2秒更新一次，让无人机持续跟随车辆
+  const timer = setInterval(() => {
+    const curVehiclePos = vehicle.lastPosition;
+    if (curVehiclePos) {
+      droneTestManager.flyToPoint(
+        droneId,
+        curVehiclePos.longitude,
+        curVehiclePos.latitude,
+        30,
+        80,
+      );
+    }
+  }, 2000);
+
+  escortTimers.set(droneId, timer);
+  deviceStore.setDroneEscorting(droneId, vehicleId);
+  ElMessage.success(`无人机 ${droneId} 已开始伴飞车辆 ${vehicleId}`);
+}
 
 // 测试发送消息
 let sendCarMessageTimer = null;
@@ -2034,13 +3051,13 @@ const clearPublishMessageTimers = () => {
 const startPublishMessage = () => {
   // 先清理已有的定时器，避免重复创建
   clearPublishMessageTimers();
-  
+
   const { carMessageList, droneMessageList } = testJson;
   if (!carMessageList?.length || !droneMessageList?.length) {
     console.warn("测试数据为空，无法发送消息");
     return;
   }
-  
+
   // 发送消息
   sendCarMessageTimer = setInterval(() => {
     if (sendCarMessageCount < carMessageList.length) {
@@ -2051,7 +3068,8 @@ const startPublishMessage = () => {
         // 绘制以当前定位为圆心散开的随机10个点
         return {
           ...carMessage,
-          current_longitude: carMessage.current_longitude + 0.001 * Math.random(),
+          current_longitude:
+            carMessage.current_longitude + 0.001 * Math.random(),
           current_latitude: carMessage.current_latitude + 0.001 * Math.random(),
         };
       });
@@ -2182,14 +3200,21 @@ const addCustomLocationIcon = (viewer, lng, lat, name) => {
  * @param {*} destinationLat
  * @return {*}
  */
-const moveToNewPointAlongRoad = async (viewer, destinationLng, destinationLat) => {
+const moveToNewPointAlongRoad = async (
+  viewer,
+  destinationLng,
+  destinationLat,
+) => {
   // get start location
   const now = viewer.clock.currentTime;
 
   // If the car is moving, the new route should start from the lastScheduledTime moment
   // If the car is stopped, the new route should start from the current time
   let startTime;
-  if (lastScheduledTime && Cesium.JulianDate.compare(lastScheduledTime, now) > 0) {
+  if (
+    lastScheduledTime &&
+    Cesium.JulianDate.compare(lastScheduledTime, now) > 0
+  ) {
     startTime = lastScheduledTime;
   } else {
     startTime = now;
@@ -2213,7 +3238,11 @@ const moveToNewPointAlongRoad = async (viewer, destinationLng, destinationLat) =
   const startLat = Cesium.Math.toDegrees(startCarto.latitude);
 
   // get destina location
-  const destinaPosition = Cesium.Cartesian3.fromDegrees(destinationLng, destinationLat, 0);
+  const destinaPosition = Cesium.Cartesian3.fromDegrees(
+    destinationLng,
+    destinationLat,
+    0,
+  );
 
   // Get the driving route (from the car position at the startTime moment to the destination)
   // const routePoints = await requestRouteFromTDT(startLng, startLat, destinationLng, destinationLat);
@@ -2229,12 +3258,23 @@ const moveToNewPointAlongRoad = async (viewer, destinationLng, destinationLat) =
 
   // The new route should start from the startTime moment (if the car is moving, it should start from the lastScheduledTime moment)
   // Add a small delay to avoid conflicts with existing sampled points
-  let currentTime = Cesium.JulianDate.addSeconds(startTime, 0.1, new Cesium.JulianDate());
+  let currentTime = Cesium.JulianDate.addSeconds(
+    startTime,
+    0.1,
+    new Cesium.JulianDate(),
+  );
 
   // Check if the first point of the route is close to the start position
   // If the distance is greater than 10 meters, it means the route starts from a different point than the start position
-  const firstRoutePoint = Cesium.Cartesian3.fromDegrees(routePoints[0].lng, routePoints[0].lat, 0);
-  const distanceToFirstPoint = Cesium.Cartesian3.distance(startPosCartesian, firstRoutePoint);
+  const firstRoutePoint = Cesium.Cartesian3.fromDegrees(
+    routePoints[0].lng,
+    routePoints[0].lat,
+    0,
+  );
+  const distanceToFirstPoint = Cesium.Cartesian3.distance(
+    startPosCartesian,
+    firstRoutePoint,
+  );
   // If the distance is greater than 10 meters, start from the first point; otherwise, skip the first point
   let startIndex = distanceToFirstPoint > 10 ? 0 : 1;
 
@@ -2242,16 +3282,35 @@ const moveToNewPointAlongRoad = async (viewer, destinationLng, destinationLat) =
   if (startIndex === 0 && distanceToFirstPoint > 10) {
     // Add the start position as the first point (ensuring the drone starts from the actual car position)
     carPositionProp.addSample(currentTime, startPosCartesian);
-    const startDronePos = Cesium.Cartesian3.fromDegrees(startLng, startLat, DRONE_HEIGHT);
+    const startDronePos = Cesium.Cartesian3.fromDegrees(
+      startLng,
+      startLat,
+      DRONE_HEIGHT,
+    );
     dronePositionProp.addSample(currentTime, startDronePos);
     // Calculate the time it takes to reach the first point (at a speed of 15 meters per second)
     // Add a small delay to avoid conflicts with existing sampled points
     const durationToFirst = Math.max(distanceToFirstPoint / CAR_SPEED, 0.1);
-    currentTime = Cesium.JulianDate.addSeconds(currentTime, durationToFirst, new Cesium.JulianDate());
+    currentTime = Cesium.JulianDate.addSeconds(
+      currentTime,
+      durationToFirst,
+      new Cesium.JulianDate(),
+    );
     // Add the first point of the route (ensuring the drone moves to the actual first point)
-    const firstPointCartesian = Cesium.Cartesian3.fromDegrees(routePoints[0].lng, routePoints[0].lat, 0);
+    const firstPointCartesian = Cesium.Cartesian3.fromDegrees(
+      routePoints[0].lng,
+      routePoints[0].lat,
+      0,
+    );
     carPositionProp.addSample(currentTime, firstPointCartesian);
-    dronePositionProp.addSample(currentTime, Cesium.Cartesian3.fromDegrees(routePoints[0].lng, routePoints[0].lat, DRONE_HEIGHT));
+    dronePositionProp.addSample(
+      currentTime,
+      Cesium.Cartesian3.fromDegrees(
+        routePoints[0].lng,
+        routePoints[0].lat,
+        DRONE_HEIGHT,
+      ),
+    );
     lastPosition = firstPointCartesian;
     // Start from the second point of the route (ensuring the drone moves to the actual first point)
     startIndex = 1;
@@ -2276,7 +3335,11 @@ const moveToNewPointAlongRoad = async (viewer, destinationLng, destinationLat) =
 
     // Calculate the time it takes to walk this segment of the route (at a speed of 15 meters per second)
     const duration = Math.max(distance / CAR_SPEED, 0.1); // Minimum 0.1 seconds, avoid too short time
-    currentTime = Cesium.JulianDate.addSeconds(currentTime, duration, new Cesium.JulianDate());
+    currentTime = Cesium.JulianDate.addSeconds(
+      currentTime,
+      duration,
+      new Cesium.JulianDate(),
+    );
 
     // Add the current point to the car position sampling property
     carPositionProp.addSample(currentTime, p2Cartesian);
@@ -2292,7 +3355,11 @@ const moveToNewPointAlongRoad = async (viewer, destinationLng, destinationLat) =
 
   // Update the clock end time if necessary
   if (Cesium.JulianDate.compare(currentTime, viewer.clock.stopTime) > 0) {
-    viewer.clock.stopTime = Cesium.JulianDate.addSeconds(currentTime, 2, new Cesium.JulianDate());
+    viewer.clock.stopTime = Cesium.JulianDate.addSeconds(
+      currentTime,
+      2,
+      new Cesium.JulianDate(),
+    );
   }
 };
 
@@ -2323,7 +3390,8 @@ async function requestRouteFromTDT(startLng, startLat, endLng, endLat) {
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(response.data, "application/xml");
       console.log("xmlDoc", xmlDoc);
-      let routelatlon = xmlDoc.getElementsByTagName("routelatlon")[0].textContent;
+      let routelatlon =
+        xmlDoc.getElementsByTagName("routelatlon")[0].textContent;
       routelatlon = routelatlon.substring(0, routelatlon.length - 1);
       const points = routelatlon.split(";").map((item) => {
         const parts = item.split(",");
@@ -2338,155 +3406,195 @@ async function requestRouteFromTDT(startLng, startLat, endLng, endLat) {
 }
 
 /**
- * @description: Initialize MQTT connection
- * @return {*}
+ * @description: 锁定到指定车辆
  */
-const initialMqttConnect = () => {
-  // Initialize connection
-  mqttService.connect();
+const lockToVehicle = (deviceId) => {
+  const vehicle = vehicleManager.vehicles.get(deviceId);
+  if (vehicle && vehicle.entity) {
+    mainViewer.trackedEntity = vehicle.entity;
+    isLockMode.value = true;
+    switchTrackedView(mainViewer, vehicle.entity, false);
+    isPitch2D.value = false;
 
-
-  // Subscribe and handle messages for car (通配符订阅)
-  mqttService.subscribe('carBox/#', (topic, data) => {
-    console.log('🚗 收到车辆消息:', topic, data);
-    
-    if (!isEmpty(data)) {
-      // 从主题中提取设备号: carBox/{deviceId}/...
-      const topicParts = topic.split('/');
-      const deviceId = topicParts[1];
-      console.log("deviceId", deviceId);
-      if (!deviceId) {
-        console.warn('⚠️ 无法从主题中提取设备号:', topic);
-        return;
-      }
-      
-      const { latitude, longitude, alarmFlag } = data;
-      console.log("latitude, longitude, alarmFlag", latitude, longitude, alarmFlag);
-      if (latitude && longitude) {
-        // 为该设备创建或获取车辆实体
-        const vehicle = vehicleManager.createVehicle(mainViewer, deviceId);
-        
-        // 更新车辆位置
-        vehicleManager.updateVehiclePosition(deviceId, longitude, latitude, 0);
-        
-        // 如果是第一个车辆，设置追踪
-        if (isFirstPoint) {
-          mainViewer.trackedEntity = vehicle.entity;
-          isLockMode.value = true;
-          switchTrackedView(mainViewer, vehicle.entity, false);
-          isPitch2D.value = false;
-          isFirstPoint = false;
-        }
-      }
-      
-      // 检查alarm_flag，非0时弹出伴飞请求确认并锁定车辆
-      if (alarmFlag && alarmFlag !== 0) {
-        // 自动锁定到发送SOS信号的车辆
-        const vehicle = vehicleManager.vehicles.get(deviceId);
-        if (vehicle) {
-          mainViewer.trackedEntity = vehicle.entity;
-          isLockMode.value = true;
-          switchTrackedView(mainViewer, vehicle.entity, false);
-          isPitch2D.value = false;
-        }
-        // 显示伴飞请求确认对话框
-        lockToVehicle(deviceId);
-        showAlarmDialog(deviceId, alarmFlag);
-      }
-    }
-    
-    // 添加到系统存储
-    systemStore.addCarMessage(data);
-  });
-
-  /**
-   * @description: 锁定到指定车辆
-   * @param {string} deviceId - 设备号
-   * @return {*}
-   */
-  const lockToVehicle = (deviceId) => {
-    const vehicle = vehicleManager.vehicles.get(deviceId);
-    if (vehicle && vehicle.entity) {
-      mainViewer.trackedEntity = vehicle.entity;
-      isLockMode.value = true;
-      switchTrackedView(mainViewer, vehicle.entity, false);
-      isPitch2D.value = false;
-      
-      // 调整相机高度，使车辆显示得更小
-      const center = vehicle.entity.position.getValue(mainViewer.clock.currentTime);
-      if (center) {
-        // 设置更远的相机距离（从200米增加到500米）
-        mainViewer.camera.lookAt(center, new Cesium.HeadingPitchRange(
+    const center = vehicle.entity.position.getValue(mainViewer.clock.currentTime);
+    if (center) {
+      mainViewer.camera.lookAt(
+        center,
+        new Cesium.HeadingPitchRange(
           mainViewer.camera.heading,
           Cesium.Math.toRadians(-45),
-          300  // 增加相机高度，使车辆显示得更小
-        ));
-      }
-      
-      // 获取车辆最后位置并显示详情弹窗
-      // const lastPos = vehicle.lastPosition;
-      // if (lastPos) {
-      //   showVehicleDialog(deviceId, lastPos);
-      // }
-      
-      console.log(`🔒 已锁定到车辆: ${deviceId}`);
-      ElMessage.success(`已锁定到车辆 ${deviceId}`);
-    } else {
-      console.warn(`⚠️ 未找到车辆: ${deviceId}`);
-      ElMessage.warning(`未找到车辆 ${deviceId}`);
+          300,
+        ),
+      );
     }
-  };
 
-  /**
-   * @description: 显示告警伴飞请求对话框
-   * @param {string} deviceId - 设备号
-   * @param {number} alarmFlag - 告警标志
-   * @return {*}
-   */
-  const showAlarmDialog = (deviceId, alarmFlag) => {
-    ElMessageBox.confirm(
-      `<div style="padding: 10px;">
-        <h4 style="margin: 0 0 10px 0;">接收到伴飞请求</h4>
-        <p>车辆 ${deviceId} 发送了伴飞请求</p>
-        <p>告警标志: ${alarmFlag}</p>
-        <p>是否开始伴飞？</p>
-      </div>`,
-      '伴飞请求',
-      {
-        confirmButtonText: '开始伴飞',
-        cancelButtonText: '取消',
-        type: 'warning',
-        dangerouslyUseHTMLString: true,
-        customClass: 'alarm-dialog'
-      }
-    )
+    console.log(`🔒 已锁定到车辆: ${deviceId}`);
+    ElMessage.success(`已锁定到车辆 ${deviceId}`);
+  } else {
+    console.warn(`⚠️ 未找到车辆: ${deviceId}`);
+    ElMessage.warning(`未找到车辆 ${deviceId}`);
+  }
+};
+
+/**
+ * @description: 显示告警伴飞请求对话框
+ */
+const showAlarmDialog = (deviceId, alarmFlag) => {
+  ElMessageBox.confirm(
+    `<div style="padding: 10px;">
+      <h4 style="margin: 0 0 10px 0;">接收到伴飞请求</h4>
+      <p>车辆 ${deviceId} 发送了伴飞请求</p>
+      <p>告警标志: ${alarmFlag}</p>
+      <p>是否开始伴飞？</p>
+    </div>`,
+    "伴飞请求",
+    {
+      confirmButtonText: "开始伴飞",
+      cancelButtonText: "取消",
+      type: "warning",
+      dangerouslyUseHTMLString: true,
+      customClass: "alarm-dialog",
+    },
+  )
     .then(() => {
-      // 用户确认，开始伴飞
-      // 显示模式输入对话框
       ElMessageBox.prompt("请输入mode,1或5", "Tip", {
         confirmButtonText: "确定",
         cancelButtonText: "取消",
         inputPattern: /^[0-9]+$/,
         inputErrorMessage: "Invalid Number",
       })
-      .then(({ value }) => {
-        // 使用默认无人机SN
-        const defaultDroneSn = DEVICE_CONFIG.droneId;
-        requestTakeOff(value, deviceId, defaultDroneSn);
-      })
-      .catch(() => {});
+        .then(({ value }) => {
+          requestTakeOff(value, deviceId, DEVICE_CONFIG.droneId);
+        })
+        .catch(() => {});
     })
     .catch(() => {
-      // 用户取消，不做任何操作
-      console.log('用户取消伴飞请求');
+      console.log("用户取消伴飞请求");
     });
-  };
+};
+
+/**
+ * @description: 处理 carBox 主题车辆消息（MQTT 与本地模拟共用）
+ */
+const handleCarBoxMessage = (topic, data) => {
+  console.log("🚗 收到车辆消息:", topic, data);
+
+  if (!mainViewer || mainViewer.isDestroyed?.()) {
+    ElMessage.warning("地图未就绪");
+    return;
+  }
+
+  if (isEmpty(data)) return;
+
+  const topicParts = topic.split("/");
+  const deviceId = topicParts[1] || data.deviceId;
+  if (!deviceId) {
+    console.warn("⚠️ 无法从主题中提取设备号:", topic);
+    return;
+  }
+
+  const { latitude, longitude, alarmFlag } = data;
+
+  if (latitude && longitude) {
+    const vehicle = vehicleManager.createVehicle(mainViewer, deviceId);
+    vehicleManager.updateVehiclePosition(deviceId, longitude, latitude, 0);
+
+    if (isFirstPoint) {
+      mainViewer.trackedEntity = vehicle.entity;
+      isLockMode.value = true;
+      switchTrackedView(mainViewer, vehicle.entity, false);
+      isPitch2D.value = false;
+      isFirstPoint = false;
+    }
+  }
+
+  if (alarmFlag && alarmFlag !== 0) {
+    const vehicle = vehicleManager.vehicles.get(deviceId);
+    if (vehicle?.entity) {
+      mainViewer.trackedEntity = vehicle.entity;
+      isLockMode.value = true;
+      switchTrackedView(mainViewer, vehicle.entity, false);
+      isPitch2D.value = false;
+    }
+    lockToVehicle(deviceId);
+    showAlarmDialog(deviceId, alarmFlag);
+  }
+
+  systemStore.addCarMessage({ ...data, deviceId });
+};
+
+/**
+ * @description: 模拟实体车辆上报告警（本地测试，不依赖 MQTT Broker）
+ */
+const simulateVehicleAlarmMessage = () => {
+  if (!mainViewer || mainViewer.isDestroyed?.()) {
+    ElMessage.warning("请等待地图加载完成");
+    return;
+  }
+
+  let deviceId = DEVICE_CONFIG.targetId;
+  let latitude = DEFAULT_CENTER.lat;
+  let longitude = DEFAULT_CENTER.lng;
+
+  const mapVehicleIds = [...vehicleManager.vehicles.keys()];
+  if (vehicleManager.selectedDeviceId) {
+    deviceId = vehicleManager.selectedDeviceId;
+    const pos = vehicleManager.vehicles.get(deviceId)?.lastPosition;
+    if (pos) {
+      longitude = pos.longitude;
+      latitude = pos.latitude;
+    }
+  } else if (mapVehicleIds.length) {
+    deviceId = mapVehicleIds[0];
+    const pos = vehicleManager.vehicles.get(deviceId)?.lastPosition;
+    if (pos) {
+      longitude = pos.longitude;
+      latitude = pos.latitude;
+    }
+  } else if (TEST_POLICE_VEHICLES[0]) {
+    deviceId = TEST_POLICE_VEHICLES[0].id;
+    longitude = TEST_POLICE_VEHICLES[0].lng;
+    latitude = TEST_POLICE_VEHICLES[0].lat;
+  }
+
+  handleCarBoxMessage(`carBox/${deviceId}/alarm`, {
+    latitude,
+    longitude,
+    alarmFlag: 1,
+    deviceId,
+    simulated: true,
+  });
+
+  ElMessage.info(`已模拟车辆 ${deviceId} 的告警消息`);
+};
+
+/**
+ * @description: Initialize MQTT connection
+ * @return {*}
+ */
+const initialMqttConnect = () => {
+  mqttService.connect();
+
+  mqttService.subscribe("carBox/#", (topic, data) => {
+    handleCarBoxMessage(topic, data);
+  });
 
   // Subscribe and handle messages for drone
   mqttService.subscribe(droneTopic, (data) => {
     console.log("drone - 组件接收到消息:", data);
     if (!isEmpty(data)) {
-      const { current_latitude, current_longitude, current_height, attitude_head, attitude_pitch, attitude_roll, gimbal_pitch, gimbal_roll, gimbal_yaw, zoom_factor } = data;
+      const {
+        current_latitude,
+        current_longitude,
+        current_height,
+        attitude_head,
+        attitude_pitch,
+        attitude_roll,
+        gimbal_pitch,
+        gimbal_roll,
+        gimbal_yaw,
+        zoom_factor,
+      } = data;
 
       systemStore.setDroneCurrentState({
         attitude_head,
@@ -2509,7 +3617,11 @@ const initialMqttConnect = () => {
 
       // // 校验不是 null/undefined，且不是 NaN
       const isValid = (val) => typeof val === "number" && !isNaN(val);
-      if (isValid(attitude_head) && isValid(attitude_pitch) && isValid(attitude_roll)) {
+      if (
+        isValid(attitude_head) &&
+        isValid(attitude_pitch) &&
+        isValid(attitude_roll)
+      ) {
         isAttitudeValid = true; // 标记数据有效
       } else {
         isAttitudeValid = false;
@@ -2560,7 +3672,8 @@ const initSubViewer = () => {
     fullscreenButton: false,
     // animation: false,
     // timeline: false,
-    // infoBox: false,
+    infoBox: false,
+    selectionIndicator: false,
     // geocoder: false,
     // sceneModePicker: false,
     // baseLayerPicker: false,
@@ -2573,9 +3686,9 @@ const initSubViewer = () => {
   viewerLoadCount.value++;
 
   // 设置摄像头底图（与主图一致）
-  subViewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#2f3542");
+  subViewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#2B2D39");
   subViewer.imageryLayers.removeAll();
-  const ImgWLayer = getTdtLayerProvider("img_w");
+  const ImgWLayer = getTdtLayerProvider("img_w", { blueTint: true });
   satelliteLayer = subViewer.imageryLayers.addImageryProvider(ImgWLayer);
   satelliteLayer.maximumTerrainLevel = MAX_LEVEL;
   const CiaWLayer = getTdtLayerProvider("cia_w");
@@ -2630,7 +3743,10 @@ const addCameraHUD = (subViewer) => {
     const frustum = camera.frustum;
     if (!frustum || !frustum.fovy) return null;
 
-    const aspect = frustum.aspect || subViewer.canvas.clientWidth / subViewer.canvas.clientHeight || 1.0;
+    const aspect =
+      frustum.aspect ||
+      subViewer.canvas.clientWidth / subViewer.canvas.clientHeight ||
+      1.0;
     const fovy = frustum.fovy;
 
     const halfV = Math.tan(fovy / 2) * NEAR_DIST;
@@ -2644,10 +3760,26 @@ const addCameraHUD = (subViewer) => {
     const up = camera.upWC;
     const right = camera.rightWC;
 
-    const center = Cesium.Cartesian3.add(pos, Cesium.Cartesian3.multiplyByScalar(direction, NEAR_DIST, new Cesium.Cartesian3()), new Cesium.Cartesian3());
+    const center = Cesium.Cartesian3.add(
+      pos,
+      Cesium.Cartesian3.multiplyByScalar(
+        direction,
+        NEAR_DIST,
+        new Cesium.Cartesian3(),
+      ),
+      new Cesium.Cartesian3(),
+    );
 
-    const hVec = Cesium.Cartesian3.multiplyByScalar(right, hSign * scaledH, new Cesium.Cartesian3());
-    const vVec = Cesium.Cartesian3.multiplyByScalar(up, vSign * scaledV, new Cesium.Cartesian3());
+    const hVec = Cesium.Cartesian3.multiplyByScalar(
+      right,
+      hSign * scaledH,
+      new Cesium.Cartesian3(),
+    );
+    const vVec = Cesium.Cartesian3.multiplyByScalar(
+      up,
+      vSign * scaledV,
+      new Cesium.Cartesian3(),
+    );
 
     const corner = Cesium.Cartesian3.add(center, hVec, new Cesium.Cartesian3());
     return Cesium.Cartesian3.add(corner, vVec, new Cesium.Cartesian3());
@@ -2745,10 +3877,20 @@ const createVisualFrustum = (mainViewer, subViewer, cameraPos) => {
     // const halfH = Math.tan(Cesium.Math.toRadians(FOV_H) / 2) * distance;
     // const halfV = Math.tan(Cesium.Math.toRadians(FOV_V) / 2) * distance;
 
-    const halfH = Math.tan(Cesium.Math.toRadians(FOV_H) / 2) * distance * SCOPE_RATIO; // 和小窗必须一致
-    const halfV = Math.tan(Cesium.Math.toRadians(FOV_V) / 2) * distance * SCOPE_RATIO;
+    const halfH =
+      Math.tan(Cesium.Math.toRadians(FOV_H) / 2) * distance * SCOPE_RATIO; // 和小窗必须一致
+    const halfV =
+      Math.tan(Cesium.Math.toRadians(FOV_V) / 2) * distance * SCOPE_RATIO;
 
-    const center = Cesium.Cartesian3.add(cameraPos, Cesium.Cartesian3.multiplyByScalar(direction, distance, new Cesium.Cartesian3()), new Cesium.Cartesian3());
+    const center = Cesium.Cartesian3.add(
+      cameraPos,
+      Cesium.Cartesian3.multiplyByScalar(
+        direction,
+        distance,
+        new Cesium.Cartesian3(),
+      ),
+      new Cesium.Cartesian3(),
+    );
 
     return [
       calculateCorner(center, right, up, -halfH, halfV),
@@ -2767,7 +3909,12 @@ const createVisualFrustum = (mainViewer, subViewer, cameraPos) => {
           const far = getRectCorners(FAR_DIST);
           const next = (i + 1) % 4;
           // 顺时针连线：近点i -> 近点next -> 远点next -> 远点i
-          return new Cesium.PolygonHierarchy([near[i], near[next], far[next], far[i]]);
+          return new Cesium.PolygonHierarchy([
+            near[i],
+            near[next],
+            far[next],
+            far[i],
+          ]);
         }, false),
         material: Cesium.Color.CYAN.withAlpha(0.2),
         perPositionHeight: true,
@@ -2814,8 +3961,16 @@ const createVisualFrustum = (mainViewer, subViewer, cameraPos) => {
  * @return {*}
  */
 function calculateCorner(center, right, up, hOffset, vOffset) {
-  const hVec = Cesium.Cartesian3.multiplyByScalar(right, hOffset, new Cesium.Cartesian3());
-  const vVec = Cesium.Cartesian3.multiplyByScalar(up, vOffset, new Cesium.Cartesian3());
+  const hVec = Cesium.Cartesian3.multiplyByScalar(
+    right,
+    hOffset,
+    new Cesium.Cartesian3(),
+  );
+  const vVec = Cesium.Cartesian3.multiplyByScalar(
+    up,
+    vOffset,
+    new Cesium.Cartesian3(),
+  );
   const result = Cesium.Cartesian3.add(center, hVec, new Cesium.Cartesian3());
   return Cesium.Cartesian3.add(result, vVec, result);
 }
@@ -2833,14 +3988,23 @@ const addDynamicHorizontalFrustum = (mainViewer, subViewer, config) => {
 
     const camera = subViewer.camera;
     // 获取摄像头安装点的地面基础坐标系 (ENU)
-    const center = Cesium.Cartesian3.fromDegrees(config.position[0], config.position[1]);
+    const center = Cesium.Cartesian3.fromDegrees(
+      config.position[0],
+      config.position[1],
+    );
     const enuMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(center);
 
     // 只取 Heading，不取 Pitch
     // 这样确保了生成的坐标系中，Z轴永远是指向天空的（垂直于地面）
     const heading = camera.heading;
-    const rotation = Cesium.Matrix3.fromRotationZ(Cesium.Math.PI_OVER_TWO - heading);
-    const modelMatrix = Cesium.Matrix4.multiplyByMatrix3(enuMatrix, rotation, new Cesium.Matrix4());
+    const rotation = Cesium.Matrix3.fromRotationZ(
+      Cesium.Math.PI_OVER_TWO - heading,
+    );
+    const modelMatrix = Cesium.Matrix4.multiplyByMatrix3(
+      enuMatrix,
+      rotation,
+      new Cesium.Matrix4(),
+    );
 
     const { nearSize, farSize, distance } = config;
     const nW = nearSize.w * SCOPE_RATIO;
@@ -2850,7 +4014,11 @@ const addDynamicHorizontalFrustum = (mainViewer, subViewer, config) => {
 
     // 局部坐标转世界坐标
     const compute = (x, y, z) => {
-      return Cesium.Matrix4.multiplyByPoint(modelMatrix, new Cesium.Cartesian3(x, y, z), new Cesium.Cartesian3());
+      return Cesium.Matrix4.multiplyByPoint(
+        modelMatrix,
+        new Cesium.Cartesian3(x, y, z),
+        new Cesium.Cartesian3(),
+      );
     };
 
     // 定义顶点坐标
@@ -2909,9 +4077,17 @@ const addDynamicHorizontalFrustum = (mainViewer, subViewer, config) => {
  * @return {*}
  */
 const focusOnFrustum = (viewer, config) => {
-  const center = Cesium.Cartesian3.fromDegrees(config.position[0], config.position[1], 0);
+  const center = Cesium.Cartesian3.fromDegrees(
+    config.position[0],
+    config.position[1],
+    0,
+  );
   viewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromDegrees(config.position[0], config.position[1], 1500.0), // 飞到 1500 米高度
+    destination: Cesium.Cartesian3.fromDegrees(
+      config.position[0],
+      config.position[1],
+      1500.0,
+    ), // 飞到 1500 米高度
     orientation: {
       heading: Cesium.Math.toRadians(120), // 稍微偏转一点
       pitch: Cesium.Math.toRadians(-35), // 3D 俯视角度
@@ -3017,7 +4193,11 @@ const drawDynamicCar = (viewer, dynamicCarList) => {
   dynamicCarEntities = [];
   dynamicCarList.forEach((car) => {
     const { current_longitude, current_latitude } = car;
-    const position = Cesium.Cartesian3.fromDegrees(current_longitude, current_latitude, 0);
+    const position = Cesium.Cartesian3.fromDegrees(
+      current_longitude,
+      current_latitude,
+      0,
+    );
 
     const entity = viewer.entities.add({
       position,
@@ -3043,10 +4223,89 @@ const drawDynamicCar = (viewer, dynamicCarList) => {
     dynamicCarEntities.push(entity);
   });
 };
+const { triggerLockdown, clearLockdownMarkers, lockdownEntities } = useLockdown(
+  {
+    getViewer: () => mainViewer,
+    getDronePositionProp: () => dronePositionProp,
+    defaultCenter: DEFAULT_CENTER,
+    droneHeight: DRONE_HEIGHT,
+    getDroneCandidates: () =>
+      Array.from(droneTestManager.drones.entries()).map(([id, drone]) => ({
+        id,
+        lastPosition: drone.lastPosition,
+      })),
+    dispatchDroneToPoint: (lng, lat, speed, height, droneId) => {
+      if (droneId) {
+        const escortTimer = escortTimers.get(droneId);
+        if (escortTimer) {
+          clearInterval(escortTimer);
+          escortTimers.delete(droneId);
+        }
+        droneTestManager.flyToPoint(droneId, lng, lat, speed, height);
+        return;
+      }
 
+      runningToPointWithTimeForDrone(lng, lat, speed, height);
+    },
+  },
+);
+
+const toggleLayerVisibility = ({ key, active }) => {
+  if (!mainViewer) return;
+
+  const setEntitiesShow = (entities, show) => {
+    entities.forEach((e) => {
+      if (e && e.show !== undefined) e.show = show;
+    });
+  };
+
+  switch (key) {
+    case "drone":
+      droneTestManager.drones.forEach((drone) => {
+        if (drone.entity) drone.entity.show = active;
+      });
+      if (droneEntity) droneEntity.show = active;
+      break;
+    case "policeCar":
+      vehicleManager.vehicles.forEach((vehicle) => {
+        if (vehicle.entity) vehicle.entity.show = active;
+      });
+      if (carEntity) carEntity.show = active;
+      break;
+    case "checkpoint":
+      setEntitiesShow(lockdownEntities, active);
+      break;
+    case "route":
+      setEntitiesShow(routeMarkers, active);
+      setEntitiesShow(verticalLines, active);
+      break;
+    case "officer":
+      break;
+  }
+};
+
+const recallDrone = (device) => {
+  if (!device?.id) return;
+  const timer = escortTimers.get(device.id);
+  if (timer) {
+    clearInterval(timer);
+    escortTimers.delete(device.id);
+  }
+  deviceStore.setDroneStandby(device.id);
+  ElMessage.success(`无人机 ${device.name || device.id} 已召回`);
+};
+
+defineExpose({
+  triggerLockdown,
+  recallDrone,
+  toggleLayerVisibility,
+});
 watch(
   () => viewerLoadCount.value,
   (newVal) => {
+    if (newVal >= 1 && mainViewer && !mainViewer.isDestroyed?.()) {
+      syncFlightPlanPolygon();
+    }
     if (newVal === 2) {
       // 创建主窗口的视锥体，用于显示子窗口的可见区域
       // createVisualFrustum(mainViewer, subViewer, CAMERA_POS);
@@ -3068,19 +4327,23 @@ watch(
 );
 
 onMounted(() => {
-  initialMqttConnect();
-  if (typeof window.T !== "undefined") {
-    // 地图加载完成后初始化主窗口
+  try {
     initViewer();
-    // 初始化右下角子窗口
-    // initSubViewer();
-  } else {
-    console.error("地图尚未加载完成");
+  } finally {
+    isLoading.value = false;
   }
+
+  // 地图首屏优先，MQTT 连接放到 Viewer 初始化之后再启动。
+  setTimeout(() => {
+    initialMqttConnect();
+  }, 0);
 });
 
 onUnmounted(() => {
   mqttService.destroy();
+  clearLockdownMarkers();
+  closePoliceVehiclePopup();
+  vehicleManager.selectedDeviceId = null;
   if (mainViewer) {
     mainViewer.destroy();
     mainViewer = null;
@@ -3109,6 +4372,38 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   overflow: hidden;
+}
+
+.map-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: #2b2d39;
+  z-index: 1000;
+}
+
+.map-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #409eff;
+  border-radius: 50%;
+  animation: map-spin 0.8s linear infinite;
+}
+
+@keyframes map-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.map-loading-text {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
 }
 
 :deep(.cesium-viewer-bottom) {
@@ -3144,6 +4439,24 @@ onUnmounted(() => {
     justify-content: center;
     align-items: center;
     box-sizing: border-box;
+  }
+
+  .test-data-btn {
+    width: auto !important;
+    padding: 0 8px;
+    min-width: 30px;
+    font-size: 12px !important;
+    background-color: #409eff !important;
+    color: #fff !important;
+  }
+
+  .test-alarm-btn {
+    width: auto !important;
+    padding: 0 8px;
+    min-width: 30px;
+    font-size: 12px !important;
+    background-color: #e6a23c !important;
+    color: #fff !important;
   }
 
   .group-controls {
@@ -3222,6 +4535,126 @@ onUnmounted(() => {
       width: 18px;
       height: 18px;
       background-color: #1890ff;
+    }
+  }
+}
+
+.police-vehicle-popup {
+  position: absolute;
+  z-index: 200;
+  width: 280px;
+  padding: 12px 14px;
+  border-radius: 6px;
+  border: 1px solid #30363b;
+  background: rgba(3, 6, 10, 0.65);
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1.5;
+  pointer-events: auto;
+  box-sizing: border-box;
+  backdrop-filter: blur(6px);
+
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    // border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  &__icon {
+    font-size: 20px;
+    color: #558efc;
+    flex-shrink: 0;
+  }
+
+  &__title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #ffffff;
+  }
+
+  &__row {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 8px;
+
+    &--alert .police-vehicle-popup__value {
+      color: #ffcc66;
+    }
+  }
+
+  &__field {
+    display: flex;
+    // flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  &__label {
+    color: #FFF;
+font-family: "HarmonyOS Sans SC";
+font-size: 14px;
+font-style: normal;
+font-weight: 400;
+line-height: normal;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  &__value {
+    color: #ffffff;
+    flex: 1;
+    min-width: 0;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+  }
+
+  &__select {
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 2px;
+    border: 1px solid #30363b;
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    font-size: 12px;
+    outline: none;
+    cursor: pointer;
+
+    option {
+      background: #1a1f24;
+      color: #ffffff;
+    }
+  }
+
+  &__empty {
+    margin: 0 0 12px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  &__escort {
+    display: block;
+    width: 100%;
+    padding: 8px 0;
+    border: none;
+    border-radius: 2px;
+    background: #558efc;
+    color: #ffffff;
+    font-size: 14px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+
+    &:hover:not(:disabled) {
+      opacity: 0.9;
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
     }
   }
 }
