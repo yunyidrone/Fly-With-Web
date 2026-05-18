@@ -6,16 +6,20 @@
 -->
 <template>
   <div class="page-wrapper" :class="{ 'immersive-flight': immersiveFlight }">
-    <!-- 全屏地图 -->
-    <div class="map-container">
+    <!-- 全屏地图（图例叠在地图区域内，沉浸分屏时随左半屏地图居中） -->
+    <div class="map-container" @click="onMapAreaClick">
       <TiandituMap ref="mapRef" />
+      <MapLegend
+        @lockdown="mapRef?.triggerLockdown()"
+        @toggle="(e) => mapRef?.toggleLayerVisibility(e)"
+      />
     </div>
 
     <!-- 顶部覆盖层 -->
     <HomeHeader v-show="!immersiveFlight" />
 
     <!-- 左侧 Tab：无人设备 / 飞行计划 -->
-    <LeftSidebarTabs v-show="!immersiveFlight">
+    <LeftSidebarTabs v-show="!immersiveFlight" ref="leftSidebarRef">
       <template #device>
         <ResourcePanel
           embedded
@@ -30,13 +34,6 @@
         <PlanPanel embedded />
       </template>
     </LeftSidebarTabs>
-
-    <!-- 底部中间地图标注图例 -->
-    <MapLegend
-      v-show="!immersiveFlight"
-      @lockdown="mapRef?.triggerLockdown()"
-      @toggle="(e) => mapRef?.toggleLayerVisibility(e)"
-    />
 
     <!-- 无人机视频：无全屏遮罩，仅固定卡片，不阻挡地图操作 -->
     <Teleport to="body">
@@ -68,7 +65,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch, nextTick } from "vue";
 import TiandituMap from "@/components/TiandituMap.vue";
 import HomeHeader from "@/components/HomeHeader.vue";
 import DroneStream from "@/components/DroneStream.vue";
@@ -79,6 +76,7 @@ import LeftSidebarTabs from "@/components/LeftSidebarTabs.vue";
 import { useDeviceStore } from "@/stores/device.js";
 
 const mapRef = ref(null);
+const leftSidebarRef = ref(null);
 const droneStreamVisible = ref(false);
 const streamDrone = ref(null);
 const immersiveFlight = ref(false);
@@ -86,8 +84,22 @@ const immersiveFlight = ref(false);
 const deviceStore = useDeviceStore();
 
 onMounted(() => {
-  // deviceStore.fetchDroneList();
+  deviceStore.fetchDroneList();
+  deviceStore.fetchTargetList();
 });
+
+watch(immersiveFlight, () => {
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      mapRef.value?.resizeMapView?.();
+    });
+  });
+});
+
+/** 点击地图区域（不含图例）收起左侧 Tab 内容；顶栏、左 Tab 条不在 map-container 内 */
+function onMapAreaClick() {
+  leftSidebarRef.value?.clearSelection?.();
+}
 
 const streamDroneKey = computed(() => streamDrone.value?.id || "none");
 
@@ -97,14 +109,14 @@ const streamTargetLabel = computed(() => {
   return "—";
 });
 
-/** 与左侧资源卡片一致：伴飞中 / 就绪 / 离线 */
+/** 与左侧资源卡片一致：伴飞中 / 返航中 / 就绪 / 离线 */
 const streamStatusLabel = computed(() => {
   const d = streamDrone.value;
   if (!d) return "就绪";
   if (d.commOk === false) return "离线";
   if (d.isEscorting) return "伴飞中";
-  if (d.statusText === "待命") return "就绪";
-  return d.statusText || "就绪";
+  if (d.status === "returning") return d.statusText || "返航中";
+  return d.statusText === "待命" ? "就绪" : d.statusText || "就绪";
 });
 
 /** 伴飞任务标题副文案，示意稿为「任务一号」；无数据时回退设备名或占位 */
@@ -145,10 +157,20 @@ const closeDroneStream = () => {
   left: 0;
   width: 100%;
   height: 100%;
+  z-index: 0;
+  box-sizing: border-box;
+  /* 子级 MapLegend 的 position:absolute 相对本区域；沉浸时左半屏 = 地图可视区域 */
 }
 
 .page-wrapper.immersive-flight .map-container {
-  z-index: 0;
+  /* 用视口宽度一半，避免与内部 TiandituMap 根节点同 class 时百分比链叠加成 1/4 宽 */
+  width: 50vw;
+  max-width: 50vw;
+  left: 0;
+  top: 0;
+  height: 100%;
+  box-sizing: border-box;
+  border-right: 1px solid rgba(48, 54, 59, 0.85);
 }
 </style>
 
@@ -160,33 +182,29 @@ const closeDroneStream = () => {
   top: 96px;
   right: 16px;
   z-index: 2000;
-  width: min(568px, calc(100vw - 32px));
+  width: min(650px, calc(100vw - 32px));
   max-height: calc(100vh - 88px);
   box-sizing: border-box;
 }
 
 .drone-stream-float--immersive {
-  top: 16px;
-  right: 16px;
-  width: min(560px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
-}
-
-.drone-stream-shell {
-  position: relative;
-  width: 100%;
-  max-height: inherit;
+  top: 0;
+  left: 50vw;
+  right: auto;
+  width: 50vw;
+  max-width: none;
+  height: 100vh;
+  max-height: 100vh;
+  padding: 12px 16px 16px 12px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  box-sizing: border-box;
-  /* 为右上角关闭钮留白，避免压住顶栏「电量」 */
-  padding: 4px 44px 0 0;
+  min-height: 0;
 }
 
-.drone-stream-shell--immersive {
-  max-height: calc(100vh - 32px);
-  padding: 4px 44px 0 0;
-  box-sizing: border-box;
+.drone-stream-float--immersive .drone-stream-close {
+  top: 10px;
+  right: 12px;
 }
 
 .drone-stream-close {

@@ -5,7 +5,10 @@
  * @Description: 无人机视频流卡片（伴飞任务 / 遥测 / 视频 / 操作）
 -->
 <template>
-  <div class="drone-stream-card">
+  <div
+    class="drone-stream-card"
+    :class="{ 'drone-stream-card--immersive': immersiveFlight }"
+  >
     <header class="card-header">
       <!-- 顶行：箭头图 + 名称 | 状态（紧挨） + 右侧电量 -->
       <div class="card-topline">
@@ -445,6 +448,13 @@ onUnmounted(() => {
   background: rgba(3, 6, 10, 0.65);
   overflow: hidden;
   color: rgba(255, 255, 255, 0.88);
+}
+
+.drone-stream-card--immersive {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
 }
 
 .card-header {

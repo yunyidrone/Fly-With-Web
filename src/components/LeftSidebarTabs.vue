@@ -4,7 +4,11 @@
 <template>
   <aside class="left-sidebar-tabs">
     <div class="left-sidebar-tabs__head" role="tablist" aria-label="侧栏模块">
-      <div class="btn-wrap" :class="{ 'btn-wrap--active': activeTab === 'device' }" @click="activeTab = 'device'">
+      <div
+        class="btn-wrap"
+        :class="{ 'btn-wrap--active': activeTab === 'device' }"
+        @click.stop="selectTab('device')"
+      >
         <button
           type="button"
           role="tab"
@@ -18,7 +22,11 @@
           <span class="left-sidebar-tabs__tab-label">无人设备</span>
         </button>
       </div>
-      <div class="btn-wrap" :class="{ 'btn-wrap--active': activeTab === 'plan' }" @click="activeTab = 'plan'">
+      <div
+        class="btn-wrap"
+        :class="{ 'btn-wrap--active': activeTab === 'plan' }"
+        @click.stop="selectTab('plan')"
+      >
         <button
           type="button"
           role="tab"
@@ -33,8 +41,12 @@
         </button>
       </div>
     </div>
-    <div class="left-sidebar-tabs__divider" aria-hidden="true" />
-    <div class="left-sidebar-tabs__body">
+    <div
+      v-show="activeTab != null"
+      class="left-sidebar-tabs__divider"
+      aria-hidden="true"
+    />
+    <div v-show="activeTab != null" class="left-sidebar-tabs__body">
       <div
         v-show="activeTab === 'device'"
         class="left-sidebar-tabs__pane"
@@ -56,7 +68,19 @@
 <script setup>
 import { ref } from "vue";
 
-const activeTab = ref("device");
+/** @type {import('vue').Ref<'device' | 'plan' | null>} */
+const activeTab = ref(null);
+
+function selectTab(tab) {
+  activeTab.value = tab;
+}
+
+/** 取消选中并收起下方内容（如点击地图空白区域时由父组件调用） */
+function clearSelection() {
+  activeTab.value = null;
+}
+
+defineExpose({ clearSelection });
 </script>
 
 <style lang="scss" scoped>

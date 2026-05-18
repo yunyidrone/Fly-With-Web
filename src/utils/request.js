@@ -40,6 +40,19 @@ axiosRetry(client, { retries: 3 });
  */
 client.interceptors.request.use(
   (config) => {
+    const method = String(config.method || "").toLowerCase();
+
+    /** 避免静态资源式缓存：Chrome 对部分 GET JSON 返回 304 且 body 为空，解构 response.data 会异常 */
+    if (method === "get") {
+      config.headers["Cache-Control"] = "no-store";
+      config.headers.Pragma = "no-cache";
+      config.headers.Expires = "0";
+      config.params = {
+        ...(config.params || {}),
+        // _t: Date.now(),
+      };
+    }
+
     // const token = getToken();
     // if (token && config?.headers) {
     //   config.headers.Authorization = "Bearer " + token;
@@ -115,7 +128,14 @@ client.interceptors.request.use(
  */
 client.interceptors.response.use(
   (response) => {
-    let { code, message, ...rest } = response.data;
+    const { status } = response;
+    const payload = response.data;
+    /** 304 等情况下正文常为空，继续解构会破坏业务逻辑 */
+    if (status === 304 || payload === "" || payload == null) {
+      ElMessage.warning("接口响应为空（常见于 HTTP 304 缓存），请勿对 JSON 列表接口做强缓存");
+      return Promise.reject(new Error("EMPTY_OR_NOT_MODIFIED"));
+    }
+    let { code, message, ...rest } = payload;
     // 只在错误时提示，成功时不弹出消息避免干扰用户
     if (code !== successCode) {
       ElMessage.warning(message || "请求失败");
@@ -142,7 +162,12 @@ client.interceptors.response.use(
  * @returns {Promise<any>}
  */
 export async function request(url, data, method = "POST", ContentType) {
-  let config = method === "GET" ? { url, ...data, method } : { url, data, method };
+  const m = String(method || "POST").toLowerCase();
+  // axios / 拦截器里多用小写 method（如 "get"），统一小写避免分支失效
+  const config =
+    m === "get"
+      ? { url, ...(data || {}), method: m }
+      : { url, data, method: m };
   if (ContentType) {
     config.headers = { "Content-Type": ContentType };
   }

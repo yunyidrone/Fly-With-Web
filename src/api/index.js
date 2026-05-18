@@ -3,14 +3,27 @@ import { request } from "@/utils/request.js";
 export class AccompanyingFlyService {
   /**
    * 无人机列表（分页在 data.records）
-   * @param {Record<string, any>} [query] 可选查询参数（如分页）
+   * @param {Record<string, any>} [query] 可选查询参数；会与默认分页合并
    */
   static async droneList(query = {}) {
-    return request("/drone/list", { params: query }, "GET");
+    const params = {
+      current: 1, 
+      pageSize: 100,
+      ...query,
+    };
+    return request("/drone/pageQuery", { params }, "GET");
   }
-  // 伴飞目标物体
-  static async targetList() {
-    return request("/target/pageQuery", {}, "GET");
+  /**
+   * 伴飞目标列表分页（数据多在 data.records，兼容 list / data 数组）
+   * @param {Record<string, any>} [query]
+   */
+  static async targetList(query = {}) {
+    const params = {
+      current: 1,
+      pageSize: 100,
+      ...query,
+    };
+    return request("/target/pageQuery", { params }, "GET");
   }
   static async startFollow(params) {
     return request("/target/startFollow", params, "POST", "application/json");

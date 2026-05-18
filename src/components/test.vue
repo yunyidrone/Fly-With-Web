@@ -1,0 +1,4996 @@
+<!--
+ * @Author: ml
+ * @Date: 2026-01-12 15:09:59
+ * @LastEditTime: 2026-03-26 10:46:18
+ * @FilePath: /accompanying-fly-project/src/components/TiandituMap.vue
+ * @Description: map used by Tianditu
+-->
+<template>
+  <div class="map-container">
+    <!-- cesium container -->
+    <div id="cesiumContainer"></div>
+    <!-- 加载遮罩 -->
+    <div v-if="isLoading" class="map-loading-overlay">
+      <div class="map-loading-spinner"></div>
+      <span class="map-loading-text">地图加载中...</span>
+    </div>
+    <!-- map controls -->
+    <div class="custom-controls">
+      <el-tooltip effect="dark" content="一键清除" placement="left">
+        <button @click="clearRunningRoute">
+          <RiEraserLine size="18px" color="#4d4d4d" />
+        </button>
+      </el-tooltip>
+      <el-tooltip effect="dark" content="设置测试数据" placement="left">
+        <button @click="setupTestData" class="test-data-btn">测试</button>
+      </el-tooltip>
+      <el-tooltip effect="dark" content="模拟车辆告警伴飞请求" placement="left">
+        <button @click="simulateVehicleAlarmMessage" class="test-alarm-btn">
+          告警
+        </button>
+      </el-tooltip>
+      <el-tooltip effect="dark" content="发送消息" placement="left">
+        <button @click="startPublishMessage">
+          <RiSendPlaneFill size="18px" color="#4d4d4d" />
+        </button>
+      </el-tooltip>
+      <el-tooltip
+        effect="dark"
+        :content="isPitch2D ? '切换为3D地图' : '切换为2D地图'"
+        placement="left"
+      >
+        <button @click="toggleSceneMode">
+          {{ isPitch2D ? "3D" : "2D" }}
+        </button>
+      </el-tooltip>
+      <el-tooltip
+        effect="dark"
+        :content="isAllowAddLocation ? '关闭地图选点' : '允许地图选点'"
+        placement="left"
+      >
+        <button @click="toggleAddLocation">
+          <LocationAdd24Filled
+            size="18px"
+            color="#4d4d4d"
+            v-if="isAllowAddLocation"
+          />
+          <LocationOff48Filled size="18px" color="#4d4d4d" v-else />
+        </button>
+      </el-tooltip>
+      <el-tooltip
+        effect="dark"
+        :content="vehicleDisplayMode === 'model' ? '切换为点' : '切换为车'"
+        placement="left"
+      >
+        <button @click="toggleDisplayMode">
+          <RiBubbleChartFill
+            size="18px"
+            color="#4d4d4d"
+            v-if="vehicleDisplayMode === 'model'"
+          />
+          <RiCarFill size="18px" color="#4d4d4d" v-else />
+        </button>
+      </el-tooltip>
+      <el-tooltip
+        effect="dark"
+        :content="isLockMode ? '取消锁定模式' : '切换为锁定模式'"
+        placement="left"
+      >
+        <button @click="toggleLockMode">
+          <ScanObject20Filled size="18px" color="#4d4d4d" v-if="!isLockMode" />
+          <ScanDisabled size="18px" color="#4d4d4d" v-else />
+        </button>
+      </el-tooltip>
+      <div class="group-controls">
+        <el-tooltip effect="dark" content="放大地图" placement="left">
+          <button @click="zoomIn">
+            <RiAddLine size="18px" color="#4d4d4d" />
+          </button>
+        </el-tooltip>
+        <el-tooltip effect="dark" content="缩小地图" placement="left">
+          <button @click="zoomOut">
+            <RiSubtractLine size="18px" />
+          </button>
+        </el-tooltip>
+      </div>
+      <el-popover placement="left" :width="240" trigger="click">
+        <template #reference>
+          <div class="round-control" :style="mapSwitchStyle"></div>
+        </template>
+        <el-form :model="mapConfigForm">
+          <el-form-item label="路网和标注">
+            <el-switch
+              v-model="mapConfigForm.showMapRoadNet"
+              @change="handleMapRoadNetVisible"
+            />
+          </el-form-item>
+        </el-form>
+        <div class="mode-list">
+          <div
+            class="mode-list_img"
+            v-for="item in MAP_MODE_LIST"
+            :key="item.value"
+            @click="switchMapMode(item.value)"
+          >
+            <el-image :src="item.src"></el-image>
+            <div class="description">{{ item.label }}</div>
+            <div class="check-button" v-if="item.value === currentMode">
+              <RiCheckLine size="18px" color="#ffffff" />
+            </div>
+          </div>
+        </div>
+      </el-popover>
+    </div>
+    <!-- <div class="bottom-controls">
+      <el-popover
+        popper-class="mouse-operation-popover"
+        placement="top"
+        effect="dark"
+        :width="300"
+        trigger="click"
+        title="鼠标操作"
+        :auto-close="5000"
+        :show-arrow="false"
+      >
+        <template #reference>
+          <el-button
+            class="icon-button"
+            :icon="KeyboardRegular"
+            type="primary"
+            link
+          ></el-button>
+        </template>
+        <div class="mouse-operation">
+          <div class="mouse-operation-list">
+            <div class="mouse-operation-item">水平移动地图</div>
+            <div class="mouse-operation-item">旋转地图</div>
+            <div class="mouse-operation-item">缩放地图</div>
+            <div class="mouse-operation-item">环顾四周</div>
+            <div class="mouse-operation-item">查看模型垂直面</div>
+          </div>
+          <div class="mouse-operation-list">
+            <div class="mouse-operation-item">左键</div>
+            <div class="mouse-operation-item">ctrl + 左键</div>
+            <div class="mouse-operation-item">右键 或 滚轮</div>
+            <div class="mouse-operation-item">Alt + 左键</div>
+            <div class="mouse-operation-item">Shift + 左键</div>
+          </div>
+        </div>
+      </el-popover>
+      <div class="location-text" v-if="coords.lng && coords.lat">
+        {{ "经度:" + coords.lng }}，{{ "纬度:" + coords.lat }}
+      </div>
+    </div> -->
+    <!-- 右下角小窗 -->
+    <div class="sub-view-window" style="opacity: 0; display: none">
+      <div id="subViewerContainer"></div>
+    </div>
+
+    <!-- 警车详情：锚定在车辆旁 -->
+    <div
+      v-if="policeVehiclePopup.visible"
+      class="police-vehicle-popup"
+      :style="policeVehiclePopupStyle"
+      @click.stop
+    >
+      <div class="police-vehicle-popup__header">
+        <i class="ri-police-car-line police-vehicle-popup__icon" />
+        <span class="police-vehicle-popup__title">{{ policeVehiclePopup.vehicleName }}</span>
+      </div>
+      <div class="police-vehicle-popup__row">
+        <span class="police-vehicle-popup__label">坐标信息：</span>
+        <span class="police-vehicle-popup__value">{{ policeVehiclePopup.coordText }}</span>
+      </div>
+      <div class="police-vehicle-popup__row police-vehicle-popup__row--alert">
+        <span class="police-vehicle-popup__label">简要警情：</span>
+        <span class="police-vehicle-popup__value">{{ policeVehiclePopup.alertInfo }}</span>
+      </div>
+      <div
+        v-if="policeVehiclePopup.drones.length"
+        class="police-vehicle-popup__field"
+      >
+        <span class="police-vehicle-popup__label">临近无人机：</span>
+        <select
+          v-model="policeVehiclePopup.selectedDroneId"
+          class="police-vehicle-popup__select"
+        >
+          <option
+            v-for="d in policeVehiclePopup.drones"
+            :key="d.id"
+            :value="d.id"
+          >
+            {{ d.label }}
+          </option>
+        </select>
+      </div>
+      <p v-else class="police-vehicle-popup__empty">暂无可用无人机</p>
+      <button
+        type="button"
+        class="police-vehicle-popup__escort"
+        :disabled="!policeVehiclePopup.drones.length"
+        @click="handlePolicePopupEscort"
+      >
+        一键伴飞
+      </button>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import {
+  onMounted,
+  onUnmounted,
+  shallowRef,
+  ref,
+  computed,
+  watch,
+  reactive,
+} from "vue";
+import * as Cesium from "cesium";
+import {
+  RiAddLine,
+  RiSubtractLine,
+  RiCheckLine,
+  RiCarFill,
+  RiEraserLine,
+  RiMapPin5Line,
+  RiFocus3Line,
+  RiRouteFill,
+  RiSendPlaneFill,
+  RiBubbleChartFill,
+} from "@remixicon/vue";
+import { KeyboardRegular } from "@vicons/fa";
+import DefaultMapImg from "@/assets/images/img-map-default.png";
+import DefaultMapImg2 from "@/assets/images/img-map-default2.png";
+import axios from "axios";
+import { mqttService } from "@/utils/mqtt-service";
+import { cloneDeep, isEmpty } from "lodash-es";
+import { CameraFrustum } from "@/utils/cameraFrustum";
+import { CompanionFrustum } from "@/utils/companionFrustum";
+import { useSystemStore } from "@/stores/index";
+import {
+  ScanObject20Filled,
+  LocationOff48Filled,
+  LocationAdd24Filled,
+} from "@vicons/fluent";
+import { ScanDisabled } from "@vicons/carbon";
+import { ZoomFrustumManager } from "@/utils/zoomFrustumManager";
+import * as testJson from "@/assets/test.json";
+import {
+  TIANDITU_CONFIG,
+  DEVICE_CONFIG,
+  MAP_CONFIG,
+} from "@/config/app-config.js";
+import { TEST_POLICE_VEHICLES, TEST_DRONES } from "@/config/test-devices.js";
+import { useDeviceStore } from "@/stores/device.js";
+import { useFlightPlanStore } from "@/stores/flightPlan.js";
+import { useLockdown } from "@/composables/useLockdown.js";
+import { ElMessageBox, ElMessage } from "element-plus";
+import { AccompanyingFlyService } from "@/api";
+
+// 加载状态
+const isLoading = ref(true);
+
+// 车辆弹窗状态
+const vehicleDialog = reactive({
+  visible: false,
+  deviceId: "",
+  position: null,
+  lastMessage: null,
+  vehicleData: {},
+});
+
+const POLICE_POPUP_WIDTH = 280;
+const POLICE_POPUP_OFFSET = 16;
+
+const policeVehiclePopup = reactive({
+  visible: false,
+  deviceId: "",
+  vehicleName: "",
+  alertInfo: "",
+  coordText: "",
+  drones: [],
+  selectedDroneId: "",
+  left: 0,
+  top: 0,
+});
+
+const policeVehiclePopupStyle = computed(() => ({
+  left: `${policeVehiclePopup.left}px`,
+  top: `${policeVehiclePopup.top}px`,
+  transform: "translateY(-50%)",
+}));
+
+let policePopupPostRenderRemove = null;
+
+const updatePolicePopupScreenPosition = () => {
+  if (!policeVehiclePopup.visible || !mainViewer || mainViewer.isDestroyed?.()) {
+    return;
+  }
+  const vehicle = vehicleManager.vehicles.get(policeVehiclePopup.deviceId);
+  if (!vehicle) return;
+
+  const pos = vehicle.positionProp.getValue(mainViewer.clock.currentTime);
+  if (!Cesium.defined(pos)) return;
+
+  const canvasPos = Cesium.SceneTransforms.worldToWindowCoordinates(
+    mainViewer.scene,
+    pos,
+  );
+  if (!Cesium.defined(canvasPos)) {
+    policeVehiclePopup.visible = false;
+    return;
+  }
+
+  const w = mainViewer.canvas.clientWidth;
+  const h = mainViewer.canvas.clientHeight;
+  let left = canvasPos.x + POLICE_POPUP_OFFSET;
+  let top = canvasPos.y;
+
+  if (left + POLICE_POPUP_WIDTH > w - 8) {
+    left = canvasPos.x - POLICE_POPUP_WIDTH - POLICE_POPUP_OFFSET;
+  }
+  left = Math.max(8, Math.min(left, w - POLICE_POPUP_WIDTH - 8));
+  top = Math.max(80, Math.min(top, h - 100));
+
+  policeVehiclePopup.left = left;
+  policeVehiclePopup.top = top;
+};
+
+const attachPolicePopupTracker = () => {
+  if (policePopupPostRenderRemove || !mainViewer) return;
+  policePopupPostRenderRemove = mainViewer.scene.postRender.addEventListener(
+    updatePolicePopupScreenPosition,
+  );
+};
+
+const detachPolicePopupTracker = () => {
+  if (typeof policePopupPostRenderRemove === "function") {
+    policePopupPostRenderRemove();
+  }
+  policePopupPostRenderRemove = null;
+};
+
+const closePoliceVehiclePopup = () => {
+  policeVehiclePopup.visible = false;
+  detachPolicePopupTracker();
+};
+
+const handlePolicePopupEscort = () => {
+  const droneId = policeVehiclePopup.selectedDroneId;
+  if (!droneId) {
+    ElMessage.warning("没有可用的无人机");
+    return;
+  }
+  startEscortSimulation(policeVehiclePopup.deviceId, droneId);
+};
+
+// 车辆点击事件处理器
+let vehicleClickHandler = null;
+
+const systemStore = useSystemStore();
+const deviceStore = useDeviceStore();
+const flightPlanStore = useFlightPlanStore();
+
+/** @type {import('cesium').Entity[]} */
+let flightPlanPolygonEntities = [];
+
+const syncFlightPlanPolygon = () => {
+  if (!mainViewer || mainViewer.isDestroyed?.()) return;
+  if (flightPlanPolygonEntities.length) {
+    flightPlanPolygonEntities.forEach((e) => mainViewer.entities.remove(e));
+    flightPlanPolygonEntities = [];
+  }
+  // 临时需求：点击飞行计划条目时，不再根据经纬度在地图上绘制/定位圈选区域。
+  // 保留下面原逻辑（历史版本）以便后续恢复：
+  // const planId = flightPlanStore.selectedPlanId;
+  // if (!planId) return;
+  // const plan = flightPlanStore.getPlanById(planId);
+  // const rings =
+  //   plan?.polygonLngLatList?.filter((r) => r?.length >= 6) ||
+  //   (plan?.polygonLngLat?.length >= 6 ? [plan.polygonLngLat] : []);
+  // if (!rings.length) return;
+  //
+  // const allPositions = [];
+  // rings.forEach((ring, index) => {
+  //   const positions = Cesium.Cartesian3.fromDegreesArray(ring);
+  //   allPositions.push(...positions);
+  //   const entity = mainViewer.entities.add({
+  //     polygon: {
+  //       hierarchy: new Cesium.PolygonHierarchy(positions),
+  //       material: Cesium.Color.fromCssColorString("#409eff").withAlpha(0.28 + index * 0.04),
+  //       outline: true,
+  //       outlineColor: Cesium.Color.fromCssColorString("#67c23a"),
+  //       outlineWidth: 2,
+  //       perPositionHeight: false,
+  //       heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+  //     },
+  //   });
+  //   flightPlanPolygonEntities.push(entity);
+  // });
+  //
+  // mainViewer.scene.requestRender?.();
+  // try {
+  //   if (flightPlanPolygonEntities.length === 1) {
+  //     mainViewer.flyTo(flightPlanPolygonEntities[0], { duration: 1.0 });
+  //   } else {
+  //     const bs = Cesium.BoundingSphere.fromPoints(allPositions);
+  //     if (bs && bs.radius > 0) {
+  //       mainViewer.camera.flyToBoundingSphere(bs, { duration: 1.0 });
+  //     }
+  //   }
+  // } catch (_) {
+  //   const bs = Cesium.BoundingSphere.fromPoints(allPositions);
+  //   if (bs && bs.radius > 0) {
+  //     mainViewer.camera.flyToBoundingSphere(bs, { duration: 1.0 });
+  //   }
+  // }
+};
+
+watch(
+  () => flightPlanStore.selectedPlanId,
+  () => {
+    syncFlightPlanPolygon();
+  },
+);
+const TK_LIST = TIANDITU_CONFIG.keyList;
+const DEFAULT_CENTER = MAP_CONFIG.defaultCenter;
+const MAP_BASE_COLOR_HEX = "#292E38";
+/** 影像主题色映射（与原 blueTint 同思路）：灰度按此 RGB 比例染色，对齐设计底色的色相 */
+const MAP_TINT_RGB = { r: 0x29, g: 0x2e, b: 0x38 };
+
+/**
+ * 标注层（cia / cva）：略压暗，减轻过亮刺眼
+ * brightness 可在 0.7–0.9 区间微调
+ */
+function applyLabelImageryTone(layer) {
+  if (!layer) return;
+  layer.alpha = 0.9;
+  layer.brightness = 0.6;
+  layer.saturation = 0.85;
+  layer.contrast = 0.94;
+  layer.gamma = 1.0;
+  layer.hue = 0.0;
+}
+// map mode type list
+const MAP_MODE_LIST = [
+  { src: DefaultMapImg2, label: "标准地图", value: "normal" },
+  { src: DefaultMapImg, label: "卫星地图", value: "satellite" },
+];
+const MAX_LEVEL = MAP_CONFIG.maxLevel;
+const DRONE_HEIGHT = MAP_CONFIG.droneHeight;
+const CAR_SPEED = MAP_CONFIG.carSpeed;
+/** 首页相机高度（米）；仅影响视野远近，瓦片精度仍受 maxLevel / 天地图服务限制 */
+const INITIAL_VIEW_HEIGHT_METERS =
+  typeof MAP_CONFIG.initialViewHeightMeters === "number" &&
+  Number.isFinite(MAP_CONFIG.initialViewHeightMeters) &&
+  MAP_CONFIG.initialViewHeightMeters > 0
+    ? MAP_CONFIG.initialViewHeightMeters
+    : 20000;
+
+/** 解析车辆消息中的经纬度；无效或无坐标时与无人机一致，用地图默认中心占位 */
+function resolveVehicleMessageLngLat(data) {
+  const rawLng = data?.longitude ?? data?.lng;
+  const rawLat = data?.latitude ?? data?.lat;
+  const pick = (v) => {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "string" && v.trim() !== "") {
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  };
+  return {
+    lng: pick(rawLng) ?? DEFAULT_CENTER.lng,
+    lat: pick(rawLat) ?? DEFAULT_CENTER.lat,
+  };
+}
+const SCOPE_RATIO = MAP_CONFIG.scopeRatio; // 数值越小，取景框越靠中心
+// cesium viewer
+let mainViewer,
+  carEntity,
+  droneEntity,
+  satelliteLayer,
+  satelMarkLayer,
+  vectorLayer,
+  vectorMarkLayer;
+// car model position property
+let carPositionProp = new Cesium.SampledPositionProperty();
+// uav model position property
+let dronePositionProp = new Cesium.SampledPositionProperty();
+// uniformly set HOLD and Interpolation Optionst
+[carPositionProp, dronePositionProp].forEach((prop) => {
+  // If the time exceeds the last point, keep it there.
+  prop.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+  // When the time is earlier than the first point, the position remains at the first point.
+  prop.backwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+  prop.setInterpolationOptions({
+    interpolationDegree: 1,
+    interpolationAlgorithm: Cesium.HermitePolynomialApproximation,
+  });
+});
+
+const VEHICLE_HIGHLIGHT_COLOR = Cesium.Color.fromCssColorString("#ffcc00");
+const VEHICLE_NORMAL_PATH_COLOR =
+  Cesium.Color.fromCssColorString("#00eeee");
+
+/** 地图标牌：无人机模型 #0EF2F2；伴飞目标（接口占位）#5794DF；MQTT 警车未指定色时为白字 */
+const MAP_DRONE_LABEL_FILL_HEX = "#0EF2F2";
+const MAP_TARGET_LABEL_FILL_HEX = "#5794DF";
+const MAP_DRONE_LABEL_FILL = Cesium.Color.fromCssColorString(
+  MAP_DRONE_LABEL_FILL_HEX,
+);
+
+/** @param {unknown} hex */
+function cesiumColorFromCssHex(hex) {
+  if (hex == null) return null;
+  const s = String(hex).trim();
+  if (!s) return null;
+  return Cesium.Color.fromCssColorString(s.startsWith("#") ? s : `#${s}`);
+}
+
+/** 仅由 targetList 同步时创建的车辆 id；列表下线仅移除这类占位，避免误删 MQTT 已创建的同 id 车辆 */
+const targetPlaceholderVehicleIds = new Set();
+
+const getVehicleDeviceIdFromEntity = (entity) => {
+  const labelText = entity?.label?.text;
+  if (typeof labelText === "string") return labelText;
+  if (labelText && typeof labelText.getValue === "function") {
+    return labelText.getValue(mainViewer?.clock?.currentTime);
+  }
+  return null;
+};
+
+// 多车辆管理系统
+const vehicleManager = {
+  // 存储所有车辆实体 { deviceId: { entity, positionProp, orientationProp, lastPosition } }
+  vehicles: new Map(),
+  selectedDeviceId: null,
+
+  setSelected(deviceId) {
+    if (this.selectedDeviceId === deviceId) return;
+    if (this.selectedDeviceId) {
+      this._applyHighlight(this.selectedDeviceId, false);
+    }
+    this.selectedDeviceId = deviceId || null;
+    if (this.selectedDeviceId) {
+      this._applyHighlight(this.selectedDeviceId, true);
+    }
+    mainViewer?.scene?.requestRender?.();
+  },
+
+  clearSelection() {
+    this.setSelected(null);
+  },
+
+  _applyHighlight(deviceId, selected) {
+    const vehicle = this.vehicles.get(deviceId);
+    if (!vehicle?.entity) return;
+    const entity = vehicle.entity;
+
+    if (selected) {
+      entity.model.silhouetteColor = VEHICLE_HIGHLIGHT_COLOR;
+      entity.model.silhouetteSize = 2.5;
+      entity.label.fillColor = VEHICLE_HIGHLIGHT_COLOR;
+      entity.label.outlineColor = Cesium.Color.BLACK;
+      entity.label.outlineWidth = 3;
+      entity.label.font = "bold 15px Microsoft YaHei, sans-serif";
+      entity.label.pixelOffset = new Cesium.Cartesian2(0, -48);
+      entity.path.width = 7;
+      entity.path.material = vehicle.highlightPathMaterial;
+    } else {
+      entity.model.silhouetteSize = 0;
+      entity.model.silhouetteColor = undefined;
+      entity.label.fillColor =
+        vehicle.defaultLabelFill ?? Cesium.Color.WHITE;
+      entity.label.outlineColor = Cesium.Color.BLACK;
+      entity.label.outlineWidth = 2;
+      entity.label.font = "14px sans-serif";
+      entity.label.pixelOffset = new Cesium.Cartesian2(0, -40);
+      entity.path.width = 5;
+      entity.path.material = vehicle.defaultPathMaterial;
+    }
+  },
+
+  // displayLabel：地图标牌；labelFillHex：默认标牌文字色（接口伴飞目标用 #5794DF）
+  createVehicle(viewer, deviceId, displayLabel, labelFillHex) {
+    const incomingFill = cesiumColorFromCssHex(labelFillHex);
+
+    if (this.vehicles.has(deviceId)) {
+      const existing = this.vehicles.get(deviceId);
+      if (
+        displayLabel != null &&
+        displayLabel !== "" &&
+        existing?.entity?.label &&
+        typeof existing.entity.label.text !== "undefined"
+      ) {
+        existing.entity.label.text = displayLabel;
+      }
+      if (incomingFill != null) {
+        existing.defaultLabelFill = incomingFill;
+        if (this.selectedDeviceId !== deviceId) {
+          existing.entity.label.fillColor = incomingFill;
+        }
+      }
+      return existing;
+    }
+
+    const defaultLabelFill = incomingFill ?? Cesium.Color.WHITE;
+    const labelText =
+      displayLabel != null && String(displayLabel).trim() !== ""
+        ? String(displayLabel)
+        : String(deviceId);
+
+    const positionProp = new Cesium.SampledPositionProperty();
+    positionProp.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+    positionProp.backwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+    positionProp.setInterpolationOptions({
+      interpolationDegree: 1,
+      interpolationAlgorithm: Cesium.HermitePolynomialApproximation,
+    });
+
+    const velocityOrientation = new Cesium.VelocityOrientationProperty(
+      positionProp,
+    );
+    let lastValidOrientation = null;
+
+    const defaultPathMaterial = new Cesium.PolylineGlowMaterialProperty({
+      glowPower: 0.2,
+      taperPower: 0.7,
+      color: VEHICLE_NORMAL_PATH_COLOR,
+    });
+    const highlightPathMaterial = new Cesium.PolylineGlowMaterialProperty({
+      glowPower: 0.35,
+      taperPower: 0.6,
+      color: Cesium.Color.fromCssColorString("#ff9900"),
+    });
+
+    const entity = viewer.entities.add({
+      availability: new Cesium.TimeIntervalCollection([
+        new Cesium.TimeInterval({
+          start: viewer.clock.startTime,
+          stop: Cesium.JulianDate.fromIso8601("9999-12-31T23:59:59Z"),
+        }),
+      ]),
+      position: positionProp,
+      orientation: new Cesium.CallbackProperty((time, result) => {
+        const currentOrientation = velocityOrientation.getValue(time);
+        if (Cesium.defined(currentOrientation)) {
+          lastValidOrientation = Cesium.Quaternion.clone(
+            currentOrientation,
+            lastValidOrientation,
+          );
+          return currentOrientation;
+        } else {
+          return lastValidOrientation;
+        }
+      }, false),
+      model: {
+        uri: "/models/car.glb",
+        minimumPixelSize: 32,
+        maximumScale: 200,
+        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+        nodeTransformations: {
+          root: new Cesium.NodeTransformationProperty({
+            rotation: new Cesium.CallbackProperty(() => {
+              const hpr = new Cesium.HeadingPitchRoll(
+                Cesium.Math.toRadians(180),
+                0,
+                0,
+              );
+              return Cesium.Quaternion.fromHeadingPitchRoll(hpr);
+            }, false),
+          }),
+        },
+      },
+      path: {
+        show: true,
+        width: 5,
+        material: defaultPathMaterial,
+        leadTime: 0,
+        trailTime: 999999,
+      },
+      label: {
+        text: labelText,
+        font: "14px sans-serif",
+        fillColor: defaultLabelFill,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new Cesium.Cartesian2(0, -40),
+        show: true,
+        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
+
+    this.vehicles.set(deviceId, {
+      entity,
+      positionProp,
+      velocityOrientation,
+      lastValidOrientation,
+      lastPosition: null,
+      defaultPathMaterial,
+      highlightPathMaterial,
+      defaultLabelFill,
+    });
+
+    console.log(`🚗 创建车辆实体: ${deviceId}`);
+    return this.vehicles.get(deviceId);
+  },
+
+  // 更新车辆位置
+  updateVehiclePosition(deviceId, longitude, latitude, height = 0) {
+    const vehicle = this.vehicles.get(deviceId);
+    if (!vehicle) {
+      console.warn(`⚠️ 车辆 ${deviceId} 不存在，跳过更新`);
+      return;
+    }
+
+    const currentTime = mainViewer.clock.currentTime;
+    const newPosition = Cesium.Cartesian3.fromDegrees(
+      longitude,
+      latitude,
+      height,
+    );
+
+    vehicle.positionProp.addSample(currentTime, newPosition);
+    vehicle.lastPosition = { longitude, latitude, height };
+  },
+
+  /** 从地图移除单辆车（伴飞目标接口列表下线占位用） */
+  removeVehicle(deviceId) {
+    const vehicle = this.vehicles.get(deviceId);
+    if (!vehicle) return;
+    if (mainViewer && !mainViewer.isDestroyed?.()) {
+      mainViewer.entities.remove(vehicle.entity);
+    }
+    this.vehicles.delete(deviceId);
+    targetPlaceholderVehicleIds.delete(deviceId);
+    if (this.selectedDeviceId === deviceId) {
+      closePoliceVehiclePopup();
+      this.setSelected(null);
+    }
+  },
+
+  // 获取所有车辆
+  getAllVehicles() {
+    return Array.from(this.vehicles.keys());
+  },
+
+  // 清除所有车辆
+  clearAll() {
+    this.selectedDeviceId = null;
+    closePoliceVehiclePopup();
+    this.vehicles.forEach((vehicle) => {
+      mainViewer.entities.remove(vehicle.entity);
+    });
+    this.vehicles.clear();
+    targetPlaceholderVehicleIds.clear();
+    console.log("🗑️ 已清除所有车辆");
+  },
+};
+
+// 多无人机测试管理器
+const droneTestManager = {
+  drones: new Map(),
+
+  createDrone(viewer, droneId, lng, lat, height = 80, displayLabel) {
+    if (this.drones.has(droneId)) return this.drones.get(droneId);
+
+    const positionProp = new Cesium.SampledPositionProperty();
+    positionProp.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+    positionProp.setInterpolationOptions({
+      interpolationDegree: 2,
+      interpolationAlgorithm: Cesium.HermitePolynomialApproximation,
+    });
+
+    const orientationProp = new Cesium.SampledProperty(Cesium.Quaternion);
+    orientationProp.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+    orientationProp.setInterpolationOptions({
+      interpolationDegree: 2,
+      interpolationAlgorithm: Cesium.HermitePolynomialApproximation,
+    });
+
+    const entity = viewer.entities.add({
+      availability: new Cesium.TimeIntervalCollection([
+        new Cesium.TimeInterval({
+          start: Cesium.JulianDate.fromIso8601("1970-01-01T00:00:00Z"),
+          stop: Cesium.JulianDate.fromIso8601("9999-12-31T23:59:59Z"),
+        }),
+      ]),
+      position: positionProp,
+      orientation: orientationProp,
+      model: {
+        uri: "/models/uav.glb",
+        minimumPixelSize: 48,
+        runAnimations: true,
+      },
+      path: {
+        show: true,
+        width: 3,
+        material: new Cesium.PolylineGlowMaterialProperty({
+          glowPower: 0.2,
+          taperPower: 0.7,
+          color: Cesium.Color.GOLD,
+        }),
+        leadTime: 0,
+        trailTime: 999999,
+        resolution: 1,
+      },
+      label: {
+        text: displayLabel ?? String(droneId),
+        font: "14px sans-serif",
+        fillColor: MAP_DRONE_LABEL_FILL,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new Cesium.Cartesian2(0, -40),
+        show: true,
+        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
+
+    // 设置初始位置
+    const initPos = Cesium.Cartesian3.fromDegrees(lng, lat, height);
+    const now = viewer.clock.currentTime;
+    positionProp.addSample(now, initPos);
+
+    this.drones.set(droneId, {
+      entity,
+      positionProp,
+      orientationProp,
+      lastPosition: { lng, lat, height },
+      lastScheduledTime: null,
+    });
+
+    console.log(`🛸 创建无人机实体: ${droneId}`);
+    return this.drones.get(droneId);
+  },
+
+  updateDronePosition(droneId, lng, lat, height) {
+    const drone = this.drones.get(droneId);
+    if (!drone) {
+      console.warn(`无人机 ${droneId} 不存在`);
+      return;
+    }
+
+    const now = mainViewer.clock.currentTime;
+    const position = Cesium.Cartesian3.fromDegrees(lng, lat, height);
+    drone.positionProp.addSample(now, position);
+    drone.lastPosition = { lng, lat, height };
+  },
+
+  flyToPoint(droneId, lng, lat, speed = 30, height = 80) {
+    const drone = this.drones.get(droneId);
+    if (!drone) return;
+
+    const newPosition = Cesium.Cartesian3.fromDegrees(lng, lat, 0);
+    const now = mainViewer.clock.currentTime;
+    let arrivalTime;
+
+    if (
+      !drone.lastScheduledTime ||
+      Cesium.JulianDate.compare(drone.lastScheduledTime, now) < 0
+    ) {
+      arrivalTime = Cesium.JulianDate.addSeconds(
+        now,
+        1,
+        new Cesium.JulianDate(),
+      );
+    } else {
+      const lastPos = Cesium.Cartesian3.fromDegrees(
+        drone.lastPosition.lng,
+        drone.lastPosition.lat,
+        drone.lastPosition.height,
+      );
+      const distance = Cesium.Cartesian3.distance(lastPos, newPosition);
+      const travelTime = Math.max(distance / speed, 0.1);
+      arrivalTime = Cesium.JulianDate.addSeconds(
+        drone.lastScheduledTime,
+        travelTime,
+        new Cesium.JulianDate(),
+      );
+    }
+
+    const dronePos = Cesium.Cartesian3.fromDegrees(lng, lat, height);
+    drone.positionProp.addSample(arrivalTime, dronePos);
+    drone.lastScheduledTime = arrivalTime;
+    drone.lastPosition = { lng, lat, height };
+
+    if (Cesium.JulianDate.compare(arrivalTime, mainViewer.clock.stopTime) > 0) {
+      mainViewer.clock.stopTime = Cesium.JulianDate.addSeconds(
+        arrivalTime,
+        2,
+        new Cesium.JulianDate(),
+      );
+    }
+  },
+
+  getAllDrones() {
+    return Array.from(this.drones.keys());
+  },
+
+  clearAll() {
+    this.drones.forEach((drone) => {
+      mainViewer.entities.remove(drone.entity);
+    });
+    this.drones.clear();
+    console.log("🗑️ 已清除所有测试无人机");
+  },
+};
+
+/**
+ * 接口拉取的无人机写入 Pinia 后，同步为多架地图模型（默认中心点占位无经纬度时）
+ */
+function syncDronesFromDeviceStore() {
+  if (!mainViewer || mainViewer.isDestroyed?.()) return;
+  if (!deviceStore.dronesLoadedFromApi) return;
+  droneTestManager.clearAll();
+  const list = deviceStore.drones;
+  if (!list.length) {
+    if (droneEntity) droneEntity.show = true;
+    return;
+  }
+  list.forEach((d) => {
+    const lng =
+      typeof d.lng === "number" && Number.isFinite(d.lng)
+        ? d.lng
+        : DEFAULT_CENTER.lng;
+    const lat =
+      typeof d.lat === "number" && Number.isFinite(d.lat)
+        ? d.lat
+        : DEFAULT_CENTER.lat;
+    droneTestManager.createDrone(
+      mainViewer,
+      d.id,
+      lng,
+      lat,
+      DRONE_HEIGHT,
+      d.name,
+    );
+  });
+  if (droneEntity) droneEntity.show = false;
+}
+
+/**
+ * 伴飞目标 targetList → 地图车辆占位；无经纬度时用 DEFAULT_CENTER（与 MQTT 缺省一致）
+ */
+function syncTargetsFromDeviceStore() {
+  if (!mainViewer || mainViewer.isDestroyed?.()) return;
+  if (!deviceStore.targetsLoadedFromApi) return;
+
+  const nextIds = new Set(deviceStore.targets.map((t) => t.id));
+
+  for (const id of [...targetPlaceholderVehicleIds]) {
+    if (!nextIds.has(id)) {
+      vehicleManager.removeVehicle(id);
+    }
+  }
+
+  deviceStore.targets.forEach((t) => {
+    const lng =
+      typeof t.lng === "number" && Number.isFinite(t.lng)
+        ? t.lng
+        : DEFAULT_CENTER.lng;
+    const lat =
+      typeof t.lat === "number" && Number.isFinite(t.lat)
+        ? t.lat
+        : DEFAULT_CENTER.lat;
+    const hadVehicle = vehicleManager.vehicles.has(t.id);
+    vehicleManager.createVehicle(
+      mainViewer,
+      t.id,
+      t.name,
+      MAP_TARGET_LABEL_FILL_HEX,
+    );
+    vehicleManager.updateVehiclePosition(t.id, lng, lat, 0);
+    if (!hadVehicle) {
+      targetPlaceholderVehicleIds.add(t.id);
+    }
+  });
+}
+
+// 定义姿态属性 (注意：这里需要指定类型为 Cesium.Quaternion)
+let droneOrientationProp = new Cesium.SampledProperty(Cesium.Quaternion);
+// 姿态属性设置外推
+droneOrientationProp.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+droneOrientationProp.backwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+// 设置平滑插值，防止姿态跳动
+droneOrientationProp.setInterpolationOptions({
+  interpolationDegree: 2,
+  interpolationAlgorithm: Cesium.HermitePolynomialApproximation,
+});
+// Record the location markers
+let locationMarkers = [];
+// Record route marker point
+let routeMarkers = [];
+// Record vertical lines
+let verticalLines = [];
+// Record the point is first or not
+let isFirstPoint = true;
+// Record the next point index
+let runPointIndex = 0;
+// Record the time of the last path point for car
+let lastScheduledTime = null;
+// Record the last location for car
+let lastPosition = null;
+// Record the time of the last path point for drone
+let lastDroneScheduledTime = null;
+// Record the last location for dronw
+let lastDronePosition = null;
+// 汽车的朝向
+let lastValidOrientation = null;
+const velocityOrientation = new Cesium.VelocityOrientationProperty(
+  carPositionProp,
+);
+// 无人机的朝向
+let lastValidDroneOrientation = null;
+const droneVelocityOrientation = new Cesium.VelocityOrientationProperty(
+  dronePositionProp,
+);
+// 固定延迟 0.5 秒，用于平滑过渡
+const LEAD_TIME = 0.5;
+// 记录真实时间戳（ms）
+let lastDronePushTime = 0;
+// 无人机点位推送最小间隔：100ms (即最高 10Hz)
+const DRONE_MIN_INTERVAL = 100;
+
+// 定义一个固定延迟缓冲区（秒）
+// 0.2 ~ 0.5秒是最佳平衡点：既能平滑插值，又不会感到肉眼可见的延迟
+const REALTIME_BUFFER = 0.3;
+
+// 右下角小窗
+let subViewer = null;
+const CAMERA_POS = Cesium.Cartesian3.fromDegrees(
+  DEFAULT_CENTER.lng,
+  DEFAULT_CENTER.lat,
+  INITIAL_VIEW_HEIGHT_METERS,
+); // 与小窗/首屏一致的可视高度
+
+// 视图加载的完成度
+const viewerLoadCount = ref(0);
+
+// 定义展示模式：'model' 代表车，'point' 代表立体圆点
+const vehicleDisplayMode = ref("model");
+
+// refs
+/** true = 默认俯视 2D（pitch -90°）；false = 3D 斜视（pitch -45°） */
+const isPitch2D = ref(true);
+const currentMode = ref("satellite");
+const isLockMode = ref(false);
+const isAllowAddLocation = ref(false);
+const mapConfigForm = ref({
+  showMapRoadNet: true,
+});
+// const isConnected = ref(false);
+// const msgList = ref([]);
+const target_id = DEVICE_CONFIG.targetId;
+const drone_id = DEVICE_CONFIG.droneId;
+const targetTopic = `flywith/target/${target_id}`;
+const droneTopic = `flywith/uav/${drone_id}`;
+
+// 无人机姿态
+const droneState = reactive({
+  attitude_head: null,
+  attitude_pitch: null,
+  attitude_roll: null,
+  gimbal_pitch: null,
+  gimbal_roll: null,
+  gimbal_yaw: null,
+  zoom_factor: 1.0,
+});
+let isAttitudeValid = false;
+let currentFovH = 62;
+let currentFovV = 41.2;
+let zoomManager;
+
+// 响应式数据，用于 UI 自动更新
+const coords = reactive({
+  lng: null,
+  lat: null,
+  alt: null,
+});
+
+let handler = null; // 存储事件处理器
+
+// computed
+const mapSwitchStyle = computed(() => {
+  return {
+    "--switch-background": `url(${DefaultMapImg}) 100% no-repeat`,
+  };
+});
+
+// get Tianditu Key by random
+const getTDT_TK = () => TK_LIST[Math.floor(Math.random() * TK_LIST.length)];
+
+// 切换展示模式
+const toggleDisplayMode = () => {
+  vehicleDisplayMode.value =
+    vehicleDisplayMode.value === "model" ? "point" : "model";
+};
+
+/**
+ * @description: Control map road net show or not
+ * @param {*} e
+ * @return {*}
+ */
+const handleMapRoadNetVisible = (e) => {
+  if (e) {
+    if (currentMode.value === "satellite") {
+      ensureSatelliteMarkLayer();
+      satelMarkLayer.show = true;
+    } else {
+      ensureVectorMarkLayer();
+      vectorMarkLayer.show = true;
+    }
+  } else {
+    if (currentMode.value === "satellite") {
+      if (satelMarkLayer) satelMarkLayer.show = false;
+    } else {
+      if (vectorMarkLayer) vectorMarkLayer.show = false;
+    }
+  }
+};
+
+const applyDarkMapTone = (layer, layerCode) => {
+  if (!layer) return;
+
+  const isBaseLayer = layerCode === "img_w" || layerCode === "vec_w";
+  const isLabelLayer = layerCode === "cia_w" || layerCode === "cva_w";
+  if (isBaseLayer) {
+    // 底图颜色走瓦片内 mapTint（原 blueTint 路径）；此处不再叠加重滤镜，以免发灰发紫。
+    layer.alpha = 1.0;
+    layer.brightness = 1.0;
+    layer.contrast = 1.0;
+    layer.saturation = 1.0;
+    layer.gamma = 1.0;
+    layer.hue = 0.0;
+  }
+  if (isLabelLayer) {
+    applyLabelImageryTone(layer);
+  }
+};
+
+const createMainImageryLayer = (layerCode, options = {}, show = true) => {
+  if (!mainViewer) return null;
+
+  const layer = mainViewer.imageryLayers.addImageryProvider(
+    getTdtLayerProvider(layerCode, options),
+  );
+  // 不在此设置 maximumTerrainLevel：该属性与地形 LOD 相关；
+  // 无地形时误导 Cesium 易导致底图不绘制，只剩 globe.baseColor（发暗/发黑）。
+  layer.show = show;
+  applyDarkMapTone(layer, layerCode);
+  return layer;
+};
+
+const ensureSatelliteMarkLayer = () => {
+  if (!satelMarkLayer) {
+    satelMarkLayer = createMainImageryLayer(
+      "cia_w",
+      {},
+      mapConfigForm.value.showMapRoadNet && currentMode.value === "satellite",
+    );
+  }
+  return satelMarkLayer;
+};
+
+const ensureVectorLayer = () => {
+  if (!vectorLayer) {
+    vectorLayer = createMainImageryLayer(
+      "vec_w",
+      { blueTint: true },
+      currentMode.value === "normal",
+    );
+  }
+  return vectorLayer;
+};
+
+const ensureVectorMarkLayer = () => {
+  if (!vectorMarkLayer) {
+    vectorMarkLayer = createMainImageryLayer(
+      "cva_w",
+      { blueTint: false, bright: 1.7 },
+      mapConfigForm.value.showMapRoadNet && currentMode.value === "normal",
+    );
+  }
+  return vectorMarkLayer;
+};
+
+const scheduleAfterFirstPaint = (callback) => {
+  requestAnimationFrame(() => {
+    const run = () => {
+      if (!mainViewer || mainViewer.isDestroyed?.()) return;
+      callback();
+    };
+
+    if ("requestIdleCallback" in window) {
+      window.requestIdleCallback(run, { timeout: 1500 });
+      return;
+    }
+
+    setTimeout(run, 0);
+  });
+};
+
+let modelsPreloaded = false;
+const preloadModels = () => {
+  if (modelsPreloaded) return;
+  modelsPreloaded = true;
+  ["/models/car.glb", "/models/uav.glb"].forEach((url) => {
+    fetch(url).catch(() => {});
+  });
+};
+preloadModels();
+
+const warmUpPicker = (viewer) => {
+  try {
+    viewer.scene.pick(new Cesium.Cartesian2(0, 0));
+  } catch (_) {}
+};
+
+const warmUpMessageBox = () => {
+  const el = document.createElement("div");
+  el.style.cssText =
+    "position:fixed;left:-9999px;top:-9999px;opacity:0;pointer-events:none";
+  document.body.appendChild(el);
+  ElMessageBox.alert("", "", {
+    customClass: "warmup-hidden",
+    showConfirmButton: false,
+    showCancelButton: false,
+    showClose: false,
+  }).catch(() => {});
+  setTimeout(() => {
+    ElMessageBox.close();
+    el.remove();
+  }, 50);
+};
+
+const initDeferredViewerFeatures = (viewer) => {
+  if (mapConfigForm.value.showMapRoadNet && currentMode.value === "satellite") {
+    ensureSatelliteMarkLayer();
+  }
+
+  preloadModels();
+  initScene(viewer);
+  initClickControl(viewer);
+  initManualUnlock(viewer);
+  initCoordinateTracker(viewer);
+  initVehicleClickHandler(viewer);
+
+  warmUpPicker(viewer);
+  warmUpMessageBox();
+};
+
+/**
+ * @description: initialize cesium viewer by Tianditu
+ * @return {*}
+ */
+const initViewer = () => {
+  // initialize cesium Viewer
+  mainViewer = new Cesium.Viewer("cesiumContainer", {
+    sceneMode: Cesium.SceneMode.SCENE3D,
+    shouldAnimate: true,
+    sceneModePicker: false,
+    navigationHelpButton: false,
+    geocoder: false,
+    homeButton: false,
+    baseLayerPicker: false,
+    animation: false,
+    timeline: false,
+    fullscreenButton: false,
+    infoBox: false,
+    selectionIndicator: false,
+    baseLayer: false,
+    creditContainer: document.createElement("div"),
+    contextOptions: {
+      webgl: {
+        alpha: true,
+        depth: true,
+        stencil: true,
+        antialias: true,
+        // 这里的配置有时在初始化参数中，有时需要手动在scene设置
+      },
+    },
+  });
+
+  mainViewer.scene.logarithmicDepthBuffer = true;
+  // 关闭大气/雾效，避免整体偏色（发紫/发蓝）。
+  mainViewer.scene.skyAtmosphere.show = false;
+  mainViewer.scene.fog.enabled = false;
+  if (mainViewer.scene.skyBox) {
+    mainViewer.scene.skyBox.show = false;
+  }
+  mainViewer.scene.backgroundColor =
+    Cesium.Color.fromCssColorString(MAP_BASE_COLOR_HEX);
+
+  mainViewer.clock.shouldAnimate = true; // 开启时间轴
+  mainViewer.clock.clockRange = Cesium.ClockRange.CLAMPED; // 运行到终点后停下，而不是循环或停止动画
+
+  viewerLoadCount.value++;
+
+  // When you zoom in on the map or the tiles haven't loaded yet, change the background color.
+  mainViewer.scene.globe.baseColor =
+    Cesium.Color.fromCssColorString(MAP_BASE_COLOR_HEX);
+
+  // hide default map
+  mainViewer.imageryLayers.removeAll();
+
+  // 首屏只加载影像底图，标注层/矢量层延后或按需加载。
+  satelliteLayer = createMainImageryLayer("img_w", { blueTint: true });
+
+  // set original degree
+  mainViewer.camera.setView({
+    destination: Cesium.Cartesian3.fromDegrees(
+      DEFAULT_CENTER.lng,
+      DEFAULT_CENTER.lat,
+      INITIAL_VIEW_HEIGHT_METERS,
+    ),
+    orientation: {
+      heading: Cesium.Math.toRadians(0), // 正北
+      pitch: Cesium.Math.toRadians(-90), // 默认俯视 2D
+      roll: 0,
+    },
+  });
+
+  // Global deceleration by half
+  mainViewer.clock.multiplier = 0.5;
+
+  // 锁定位置：禁止用户通过洗盘/拖拽改变位置，只能右键旋转视角
+  mainViewer.scene.screenSpaceCameraController.enableTranslate = true; // 允许平移
+  mainViewer.scene.screenSpaceCameraController.enableZoom = true; // 允许缩放(FOV)
+  mainViewer.scene.screenSpaceCameraController.enableTilt = true; // 允许倾斜
+  mainViewer.scene.screenSpaceCameraController.enableRotate = true; // 允许旋转
+
+  // 开启深度测试，确保模型在地形上
+  mainViewer.scene.globe.depthTestAgainstTerrain = true;
+
+  scheduleAfterFirstPaint(() => initDeferredViewerFeatures(mainViewer));
+};
+
+/**
+ * @description: switch 2D and 3D pitch
+ * @return {*}
+ */
+const toggleSceneMode = () => {
+  const hasCar =
+    carEntity && carEntity.position.getValue(mainViewer.clock.currentTime);
+  isPitch2D.value = !isPitch2D.value;
+  // Switch camera pitch angle
+  switchGlobalView(mainViewer, isPitch2D.value);
+  // 子窗口 Viewer 未初始化时跳过，避免空引用导致整页脚本中断
+  switchGlobalView(subViewer, isPitch2D.value);
+  if (hasCar) {
+    // Switch tracking offset
+    switchTrackedView(mainViewer, carEntity, isPitch2D.value);
+    switchTrackedView(subViewer, carEntity, isPitch2D.value);
+  }
+};
+
+/**
+ * @description: switch camera pitch angle
+ * @param {*} viewer
+ * @param {*} to2D
+ * @return {*}
+ */
+const switchGlobalView = (viewer, to2D) => {
+  if (!viewer || viewer.isDestroyed?.()) return;
+  viewer.trackedEntity = undefined;
+  isLockMode.value = false;
+
+  const targetPitch = to2D ? -90 : -45;
+  viewer.camera.flyTo({
+    destination: viewer.camera.position,
+    orientation: {
+      heading: viewer.camera.heading,
+      pitch: Cesium.Math.toRadians(targetPitch),
+      roll: 0,
+    },
+    duration: 1.0,
+  });
+};
+
+/**
+ * @description: Switch tracking offset
+ * @param {*} viewer
+ * @param {*} carEntity
+ * @param {*} to2D
+ * @return {*}
+ */
+const switchTrackedView = (viewer, carEntity, to2D) => {
+  if (!viewer || viewer.isDestroyed?.()) return;
+  if (!viewer.trackedEntity) return;
+
+  const center = viewer.trackedEntity.position.getValue(
+    viewer.clock.currentTime,
+  );
+  if (!center) return;
+
+  if (to2D) {
+    viewer.camera.lookAt(
+      center,
+      new Cesium.HeadingPitchRange(
+        viewer.camera.heading,
+        Cesium.Math.toRadians(-90),
+        800,
+      ),
+    );
+  } else {
+    viewer.camera.lookAt(
+      center,
+      new Cesium.HeadingPitchRange(
+        viewer.camera.heading,
+        Cesium.Math.toRadians(-45),
+        200,
+      ),
+    );
+  }
+};
+
+/**
+ * @description: zoom in
+ * @return {*}
+ */
+const zoomIn = () => {
+  mainViewer.camera.zoomIn(mainViewer.camera.positionCartographic.height * 0.5);
+  if (subViewer && !subViewer.isDestroyed?.()) {
+    subViewer.camera.zoomIn(subViewer.camera.positionCartographic.height * 0.5);
+  }
+};
+
+/**
+ * @description: zoom out
+ * @return {*}
+ */
+const zoomOut = () => {
+  mainViewer.camera.zoomOut(
+    mainViewer.camera.positionCartographic.height * 0.5,
+  );
+  if (subViewer && !subViewer.isDestroyed?.()) {
+    subViewer.camera.zoomOut(
+      subViewer.camera.positionCartographic.height * 0.5,
+    );
+  }
+};
+
+/**
+ * @description: switch map mode
+ * @param {*} mode
+ * @return {*}
+ */
+const switchMapMode = (mode) => {
+  if (mode === "satellite") {
+    // img_w + cia_w
+    if (satelliteLayer) satelliteLayer.show = true;
+    if (mapConfigForm.value.showMapRoadNet) ensureSatelliteMarkLayer();
+    if (satelMarkLayer)
+      satelMarkLayer.show = mapConfigForm.value.showMapRoadNet;
+    if (vectorLayer) vectorLayer.show = false;
+    if (vectorMarkLayer) vectorMarkLayer.show = false;
+    currentMode.value = "satellite";
+  } else {
+    // vec_w + cva_w
+    ensureVectorLayer();
+    if (mapConfigForm.value.showMapRoadNet) ensureVectorMarkLayer();
+    if (satelliteLayer) satelliteLayer.show = false;
+    if (satelMarkLayer) satelMarkLayer.show = false;
+    if (vectorLayer) vectorLayer.show = true;
+    if (vectorMarkLayer)
+      vectorMarkLayer.show = mapConfigForm.value.showMapRoadNet;
+    currentMode.value = "normal";
+  }
+};
+
+/**
+ * @description: get Tianditu layer provider
+ * @param {*} layerCode
+ * @return {*}
+ */
+const getTdtLayerProvider = (layerCode, options = {}) => {
+  const provider = new Cesium.WebMapTileServiceImageryProvider({
+    url: `http://t${Math.floor(Math.random() * 8)}.tianditu.gov.cn/${layerCode}/wmts?service=wmts&request=GetTile&version=1.0.0&LAYER=${
+      layerCode.split("_")[0]
+    }&style=default&tileMatrixSet=w&TileMatrix={TileMatrix}&TileRow={TileRow}&TileCol={TileCol}&format=tiles&tk=${getTDT_TK()}`,
+    layer: layerCode.split("_")[0],
+    style: "default",
+    format: "tiles",
+    tileMatrixSetID: "w",
+    maximumLevel: MAX_LEVEL,
+  });
+
+  // ===== 瓦片主题色映射（沿用原 blueTint 管道）：灰度按 MAP_TINT_RGB 比例着色，对齐 #292E38 色相 =====
+  if (options.blueTint) {
+    const bright = options.bright ?? 1.0;
+    const { r: tintR, g: tintG, b: tintB } = MAP_TINT_RGB;
+    const tintAnchor = Math.max(tintR, tintG, tintB) || 1;
+    /** 与原实现同量级亮度系数，色相由 RGB 比例决定 */
+    const bGain = 0.55 * bright;
+    const rGain = bGain * (tintR / tintAnchor);
+    const gGain = bGain * (tintG / tintAnchor);
+
+    const origRequestImage = provider.requestImage.bind(provider);
+    provider.requestImage = (x, y, level, request) => {
+      if (request && request.cancelled) return undefined;
+
+      const promise = origRequestImage(x, y, level, request);
+      if (!promise) return promise;
+
+      return promise
+        .then((image) => {
+          if (!image) return image;
+
+          try {
+            const w = image.width || 0;
+            const h = image.height || 0;
+            if (w === 0 || h === 0) return image;
+
+            const canvas = document.createElement("canvas");
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext("2d", { willReadFrequently: true });
+            ctx.translate(0, h);
+            ctx.scale(1, -1);
+            ctx.drawImage(image, 0, 0);
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+            const imgData = ctx.getImageData(0, 0, w, h);
+            const px = imgData.data;
+            const len = px.length;
+            for (let i = 0; i < len; i += 4) {
+              const gray =
+                px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114;
+              px[i] = gray * rGain;
+              px[i + 1] = gray * gGain;
+              px[i + 2] = gray * bGain;
+            }
+            ctx.putImageData(imgData, 0, 0);
+            return canvas;
+          } catch (e) {
+            console.warn(
+              "mapTint tile processing failed, fallback to original:",
+              e,
+            );
+            return image;
+          }
+        })
+        .catch((err) => {
+          console.warn("mapTint tile request failed:", err);
+          return undefined;
+        });
+    };
+  }
+  // ===== 瓦片主题色映射 END =====
+
+  return provider;
+};
+
+/**
+ * @description: Load all models (cars & drones)
+ * @param {*} viewer
+ * @return {*}
+ */
+const initScene = (viewer) => {
+  carEntity = createDynamicVehicle(viewer);
+  // carEntity = viewer.entities.add({
+  //   availability: new Cesium.TimeIntervalCollection([
+  //     new Cesium.TimeInterval({
+  //       start: viewer.clock.startTime,
+  //       stop: Cesium.JulianDate.fromIso8601("9999-12-31T23:59:59Z"),
+  //     }),
+  //   ]),
+  //   position: carPositionProp,
+  //   // orientation: new Cesium.VelocityOrientationProperty(carPositionProp),
+  //   orientation: new Cesium.CallbackProperty((time, result) => {
+  //     // Obtain the direction calculated based on the speed at the current moment
+  //     const currentOrientation = velocityOrientation.getValue(time);
+
+  //     if (Cesium.defined(currentOrientation)) {
+  //       // If the current direction is valid (indicating movement), then record it and return it.
+  //       lastValidOrientation = Cesium.Quaternion.clone(currentOrientation, lastValidOrientation);
+  //       return currentOrientation;
+  //     } else {
+  //       // If the direction is invalid (the car has stopped), then return to the last valid direction.
+  //       return lastValidOrientation;
+  //     }
+  //   }, false), // false means not constant and needs to be calculated for each frame
+  //   model: {
+  //     uri: "/models/car.glb",
+  //     minimumPixelSize: 64,
+  //     maximumScale: 20000,
+  //     // Correct the deviation in the direction of the front of the car model
+  //     nodeTransformations: {
+  //       root: new Cesium.NodeTransformationProperty({
+  //         rotation: new Cesium.CallbackProperty(() => {
+  //           const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(180), 0, 0);
+  //           return Cesium.Quaternion.fromHeadingPitchRoll(hpr);
+  //         }, false),
+  //       }),
+  //     },
+  //   },
+  //   path: {
+  //     show: true,
+  //     width: 10,
+  //     material: new Cesium.PolylineGlowMaterialProperty({
+  //       glowPower: 0.2,
+  //       taperPower: 0.7,
+  //       color: Cesium.Color.fromCssColorString("#00eeee"),
+  //     }),
+  //     leadTime: 0,
+  //     trailTime: 999999,
+  //   },
+  //   viewFrom: new Cesium.Cartesian3(-150, -150, 100),
+  // });
+  droneEntity = viewer.entities.add({
+    // 设置可用时间范围为从 1970 年到 9999 年，确保无人机在任何时间都可见
+    availability: new Cesium.TimeIntervalCollection([
+      new Cesium.TimeInterval({
+        start: Cesium.JulianDate.fromIso8601("1970-01-01T00:00:00Z"),
+        stop: Cesium.JulianDate.fromIso8601("9999-12-31T23:59:59Z"),
+      }),
+    ]),
+    position: dronePositionProp,
+    orientation: droneOrientationProp,
+    // orientation: new Cesium.CallbackProperty((time) => {
+    //   const currentOri = droneVelocityOrientation.getValue(time);
+    //   if (Cesium.defined(currentOri)) {
+    //     lastValidDroneOrientation = Cesium.Quaternion.clone(currentOri, lastValidDroneOrientation);
+    //     return currentOri;
+    //   }
+    //   return lastValidDroneOrientation; // 如果没速度了，返回上一次存的方向
+    // }, false),
+    model: {
+      uri: "/models/uav.glb",
+      minimumPixelSize: 48,
+      runAnimations: true,
+    },
+    path: {
+      show: true,
+      width: 3,
+      material: new Cesium.PolylineGlowMaterialProperty({
+        glowPower: 0.2,
+        taperPower: 0.7,
+        color: Cesium.Color.GOLD,
+      }),
+      leadTime: 0,
+      trailTime: 999999,
+      resolution: 1,
+    },
+  });
+
+  // 无人机视角方向锥体
+  // const cameraFrustum = new CameraFrustum(viewer, droneEntity, 60, 40);
+
+  //  companion 视角方向锥体
+  // const companionFrustum = new CompanionFrustum(viewer, droneEntity, carEntity);
+
+  // 转换大疆姿态绘制视场锥
+  // 标准广角镜头：fovH: 60 到 75，fovV: 35 到 45。
+  // 超广角镜头：fovH: 90 到 110。
+  // 长焦镜头：fovH: 15 到 30
+  // addDJIFrustum(mainViewer, droneEntity, 62, 41.2);
+
+  addDJIZoomFrustum(mainViewer, droneEntity, 84);
+
+  // 绘制【基准全景视场】：固定 Zoom 为 1.0
+  // addFrustumLayer(mainViewer, droneEntity, 1.0, Cesium.Color.CYAN, "Base");
+
+  // 绘制【当前变焦视场】：传入动态函数
+  // addFrustumLayer(mainViewer, droneEntity, () => droneState.zoom_factor, Cesium.Color.YELLOW, "Zoomed");
+
+  viewer.entities.add({
+    polyline: {
+      positions: new Cesium.CallbackProperty(() => {
+        const carPos = carPositionProp.getValue(viewer.clock.currentTime);
+        const dronePos = dronePositionProp.getValue(viewer.clock.currentTime);
+        if (carPos && dronePos) return [carPos, dronePos];
+        return [];
+      }, false),
+      width: 1,
+      material: new Cesium.PolylineDashMaterialProperty({
+        color: Cesium.Color.WHITE.withAlpha(0.3),
+        dashLength: 4,
+      }),
+    },
+  });
+};
+
+const createDynamicVehicle = (viewer) => {
+  return viewer.entities.add({
+    availability: new Cesium.TimeIntervalCollection([
+      new Cesium.TimeInterval({
+        start: viewer.clock.startTime,
+        stop: Cesium.JulianDate.fromIso8601("9999-12-31T23:59:59Z"),
+      }),
+    ]),
+    position: carPositionProp,
+    orientation: new Cesium.CallbackProperty((time, result) => {
+      // Obtain the direction calculated based on the speed at the current moment
+      const currentOrientation = velocityOrientation.getValue(time);
+
+      if (Cesium.defined(currentOrientation)) {
+        // If the current direction is valid (indicating movement), then record it and return it.
+        lastValidOrientation = Cesium.Quaternion.clone(
+          currentOrientation,
+          lastValidOrientation,
+        );
+        return currentOrientation;
+      } else {
+        // If the direction is invalid (the car has stopped), then return to the last valid direction.
+        return lastValidOrientation;
+      }
+    }, false),
+
+    // 车辆模型形态
+    model: {
+      uri: "/models/car.glb",
+      // 无论相机多高，模型在屏幕上至少保持 64 像素大，不会消失
+      minimumPixelSize: 32,
+      // 限制最大缩放比例，防止拉近时车变得巨大无比（可选）
+      maximumScale: 200,
+      // 动态显示逻辑
+      show: new Cesium.CallbackProperty(
+        () => vehicleDisplayMode.value === "model",
+        false,
+      ),
+      heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+      nodeTransformations: {
+        root: new Cesium.NodeTransformationProperty({
+          rotation: new Cesium.CallbackProperty(() => {
+            const hpr = new Cesium.HeadingPitchRoll(
+              Cesium.Math.toRadians(180),
+              0,
+              0,
+            );
+            return Cesium.Quaternion.fromHeadingPitchRoll(hpr);
+          }, false),
+        }),
+      },
+    },
+
+    // 立体圆点形态（使用球体 ellipsoid）
+    ellipsoid: {
+      radii: new Cesium.Cartesian3(1.0, 1.0, 1.0), // 物理大小：5米半径
+      material: Cesium.Color.BLUE,
+      outline: false,
+      outlineColor: Cesium.Color.WHITE,
+      // 动态显示逻辑
+      show: new Cesium.CallbackProperty(
+        () => vehicleDisplayMode.value === "point",
+        false,
+      ),
+      heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+      nodeTransformations: {
+        root: new Cesium.NodeTransformationProperty({
+          rotation: new Cesium.CallbackProperty(() => {
+            const hpr = new Cesium.HeadingPitchRoll(
+              Cesium.Math.toRadians(180),
+              0,
+              0,
+            );
+            return Cesium.Quaternion.fromHeadingPitchRoll(hpr);
+          }, false),
+        }),
+      },
+    },
+    // cylinder: {
+    //   length: 1.0, // 高度（厚度）1米
+    //   topRadius: 1.0, // 半径 2米
+    //   bottomRadius: 1.0,
+    //   material: Cesium.Color.BLUE.withAlpha(0.8),
+    //   outline: false,
+    //   outlineColor: Cesium.Color.RED,
+    //   show: new Cesium.CallbackProperty(() => vehicleDisplayMode.value === "point", false),
+    //   heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+    //   nodeTransformations: {
+    //     root: new Cesium.NodeTransformationProperty({
+    //       rotation: new Cesium.CallbackProperty(() => {
+    //         const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(180), 0, 0);
+    //         return Cesium.Quaternion.fromHeadingPitchRoll(hpr);
+    //       }, false),
+    //     }),
+    //   },
+    // },
+    path: {
+      show: true,
+      width: 10,
+      material: new Cesium.PolylineGlowMaterialProperty({
+        glowPower: 0.2,
+        taperPower: 0.7,
+        color: Cesium.Color.fromCssColorString("#00eeee"),
+      }),
+      leadTime: 0,
+      trailTime: 999999,
+    },
+    viewFrom: new Cesium.Cartesian3(-150, -150, 100),
+  });
+};
+
+/**
+ * 根据屏幕分辨率计算 H/V FOV
+ * @param {Number} dFOV 官方对角线FOV (度)
+ * @param {Number} width 屏幕/视频宽像素 (如 1920)
+ * @param {Number} height 屏幕/视频高像素 (如 1080)
+ */
+const calcFovByResolution = (dFOV, width = 16, height = 9) => {
+  const radD = Cesium.Math.toRadians(dFOV);
+  const r = Math.sqrt(width * width + height * height);
+
+  const hfov = 2 * Math.atan(Math.tan(radD / 2) * (width / r));
+  const vfov = 2 * Math.atan(Math.tan(radD / 2) * (height / r));
+
+  return {
+    h: Cesium.Math.toDegrees(hfov),
+    v: Cesium.Math.toDegrees(vfov),
+  };
+};
+
+/**
+ * @description: 计算变焦后的 H/V FOV
+ * @param {*} baseFov 原始对角线FOV (度)
+ * @param {*} zoomFactor 变焦倍数 (如 1.5 表示 150% 变焦)
+ * @param {*} w 屏幕/视频宽像素 (如 1920)
+ * @param {*} h 屏幕/视频高像素 (如 1080)
+ * @return {*} 变焦后的 H/V FOV (度)
+ */
+const calcZoomFov = (baseFov, zoomFactor, w = 16, h = 9) => {
+  const aspect = w / h;
+  const halfDiagBase = Cesium.Math.toRadians(baseFov / 2);
+
+  // 计算变焦后的对角线切值
+  const tanHalfDiagZoom = Math.tan(halfDiagBase) / zoomFactor;
+
+  // 换算为水平和垂直 FOV (弧度)
+  const tanHalfV = tanHalfDiagZoom / Math.sqrt(aspect * aspect + 1);
+  const tanHalfH = tanHalfV * aspect;
+  return {
+    hfov: Math.atan(tanHalfH) * 2,
+    vfov: Math.atan(tanHalfV) * 2,
+  };
+};
+
+/**
+ * 将大疆姿态转换为 Cesium 四元数
+ */
+const getDroneOrientation = (position, head, pitch, roll) => {
+  const hpr = new Cesium.HeadingPitchRoll(
+    Cesium.Math.toRadians(head),
+    Cesium.Math.toRadians(pitch),
+    Cesium.Math.toRadians(roll),
+  );
+  // 基于当前位置的东-北-上 (ENU) 坐标系计算四元数
+  return Cesium.Transforms.headingPitchRollQuaternion(position, hpr);
+};
+
+/**
+ * @description: 绘制大疆无人机的视场锥
+ * @param {*} viewer
+ * @param {*} droneEntity
+ * @param {*} fovH 水平视场角度，指相机从最左侧到最右侧能看到的角度
+ * @param {*} fovV 垂直视场角度，指相机从最上方到最下方能看到的角度
+ * @return {*}
+ */
+const addDJIFrustum = (viewer, droneEntity, fovH = 60, fovV = 40) => {
+  const hfov = Cesium.Math.toRadians(fovH);
+  const vfov = Cesium.Math.toRadians(fovV);
+
+  const getCorners = (time) => {
+    // 获取机身的基础位置和姿态
+    const position = droneEntity.position.getValue(time);
+    const bodyOrientation = droneEntity.orientation.getValue(time);
+
+    // 如果位置或姿态属性本身没有数据，或者状态位为 false
+    if (
+      !Cesium.defined(position) ||
+      !Cesium.defined(bodyOrientation) ||
+      !isAttitudeValid
+    ) {
+      return null;
+    }
+
+    // 检查四元数数值是否有效（防止 NaN 崩溃）
+    if (isNaN(bodyOrientation.x) || isNaN(bodyOrientation.y)) {
+      return null;
+    }
+
+    // --- 云台俯仰叠加逻辑 ---
+
+    // 假设从 MQTT 获取到的云台俯仰角，如果没有，默认下看 -90 度
+    // 注意：大疆云台 0度是水平，-90度是垂直向下
+    const gimbalPitchValue = droneState?.gimbal_pitch ?? -90; // droneState.gimbal_pitch
+    const gimbalPitchRad = Cesium.Math.toRadians(gimbalPitchValue);
+
+    // 创建云台的旋转四元数 (围绕机身的本地 X 轴旋转)
+    const gimbalQuaternion = Cesium.Quaternion.fromAxisAngle(
+      Cesium.Cartesian3.UNIT_X,
+      gimbalPitchRad,
+      new Cesium.Quaternion(),
+    );
+
+    // 将【机身姿态】与【云台姿态】合并
+    // 最终姿态 = 机身姿态 * 云台姿态
+    const finalOrientation = Cesium.Quaternion.multiply(
+      bodyOrientation,
+      gimbalQuaternion,
+      new Cesium.Quaternion(),
+    );
+
+    // 使用合并后的 finalOrientation 生成旋转矩阵
+    const matrix = Cesium.Matrix3.fromQuaternion(finalOrientation);
+
+    const tanH = Math.tan(hfov / 2);
+    const tanV = Math.tan(vfov / 2);
+
+    // 定义视场四个角的本地方向 (此时 localDirs 是相对于镜头中心的)
+    const directions = [
+      new Cesium.Cartesian3(-tanH, 1, tanV), // 左上
+      new Cesium.Cartesian3(tanH, 1, tanV), // 右上
+      new Cesium.Cartesian3(tanH, 1, -tanV), // 右下
+      new Cesium.Cartesian3(-tanH, 1, -tanV), // 左下
+    ];
+
+    const corners = [];
+    directions.forEach((dir) => {
+      // 使用合并了云台旋转的矩阵进行转换
+      const worldDir = Cesium.Matrix3.multiplyByVector(
+        matrix,
+        dir,
+        new Cesium.Cartesian3(),
+      );
+      Cesium.Cartesian3.normalize(worldDir, worldDir);
+
+      const ray = new Cesium.Ray(position, worldDir);
+      let intersect = viewer.scene.globe.pick(ray, viewer.scene);
+
+      if (!intersect) {
+        intersect = Cesium.Ray.getPoint(ray, 500.0);
+      }
+      corners.push(intersect);
+    });
+
+    return { apex: position, corners };
+  };
+
+  // 绘制 4 个侧面
+  for (let i = 0; i < 4; i++) {
+    viewer.entities.add({
+      polygon: {
+        hierarchy: new Cesium.CallbackProperty((time) => {
+          const res = getCorners(time);
+          if (!res || !res.apex || res.corners.length < 4) {
+            // 返回一个空的对象，而不是 null，这样实体不会消失，只是暂时不画
+            return new Cesium.PolygonHierarchy([]);
+          }
+          return new Cesium.PolygonHierarchy([
+            res.apex,
+            res.corners[i],
+            res.corners[(i + 1) % 4],
+          ]);
+        }, false),
+        material: Cesium.Color.YELLOW.withAlpha(0.3),
+        perPositionHeight: true,
+        outline: true,
+        outlineColor: Cesium.Color.WHITE,
+        show: new Cesium.CallbackProperty(() => isAttitudeValid, false), // 双重保险
+      },
+    });
+  }
+};
+
+/**
+ * @description: 绘制大疆无人机的视场锥
+ * @param {*} viewer
+ * @param {*} droneEntity
+ * @param {*} fovH 水平视场角度，指相机从最左侧到最右侧能看到的角度
+ * @param {*} fovV 垂直视场角度，指相机从最上方到最下方能看到的角度
+ * @return {*}
+ */
+let lastTime, cachedResult;
+const addDJIZoomFrustum = (viewer, droneEntity, dfov = 84) => {
+  const { hfov, vfov } = calcZoomFov(dfov, droneState?.zoom_factor ?? 1.0);
+  console.log("变焦后的 H/V FOV", { hfov, vfov, droneState });
+
+  const getCorners = (time) => {
+    if (lastTime && Cesium.JulianDate.equals(lastTime, time))
+      return cachedResult;
+    // 获取机身的基础位置和姿态
+    const position = droneEntity.position.getValue(time);
+    const bodyOrientation = droneEntity.orientation.getValue(time);
+
+    // 如果位置或姿态属性本身没有数据，或者状态位为 false
+    if (
+      !Cesium.defined(position) ||
+      !Cesium.defined(bodyOrientation) ||
+      !isAttitudeValid
+    ) {
+      return null;
+    }
+
+    // 检查四元数数值是否有效（防止 NaN 崩溃）
+    if (isNaN(bodyOrientation.x) || isNaN(bodyOrientation.y)) {
+      return null;
+    }
+
+    // --- 云台俯仰叠加逻辑 ---
+
+    // 假设从 MQTT 获取到的云台俯仰角，如果没有，默认下看 -90 度
+    // 注意：大疆云台 0度是水平，-90度是垂直向下
+    const gimbalPitchValue = droneState?.gimbal_pitch ?? -90; // droneState.gimbal_pitch
+    const gimbalPitchRad = Cesium.Math.toRadians(gimbalPitchValue);
+
+    // 创建云台的旋转四元数 (围绕机身的本地 X 轴旋转)
+    const gimbalQuaternion = Cesium.Quaternion.fromAxisAngle(
+      Cesium.Cartesian3.UNIT_X,
+      gimbalPitchRad,
+      new Cesium.Quaternion(),
+    );
+
+    // 将【机身姿态】与【云台姿态】合并
+    // 最终姿态 = 机身姿态 * 云台姿态
+    const finalOrientation = Cesium.Quaternion.multiply(
+      bodyOrientation,
+      gimbalQuaternion,
+      new Cesium.Quaternion(),
+    );
+
+    // 使用合并后的 finalOrientation 生成旋转矩阵
+    const matrix = Cesium.Matrix3.fromQuaternion(finalOrientation);
+
+    // --- 计算中心交点 (光轴) ---
+    // 假设相机前向是 Y 轴 (0, 1, 0)
+    const centerLocalDir = new Cesium.Cartesian3(0, 1, 0);
+    const centerWorldDir = Cesium.Matrix3.multiplyByVector(
+      matrix,
+      centerLocalDir,
+      new Cesium.Cartesian3(),
+    );
+    Cesium.Cartesian3.normalize(centerWorldDir, centerWorldDir);
+
+    const centerRay = new Cesium.Ray(position, centerWorldDir);
+    let centerIntersect = viewer.scene.globe.pick(centerRay, viewer.scene);
+
+    if (centerIntersect) {
+      // 同样做高度抬升，防止与地面闪烁
+      const carto = Cesium.Cartographic.fromCartesian(centerIntersect);
+      carto.height += 0.8; // 比底框线再高一点
+      centerIntersect = Cesium.Cartographic.toCartesian(carto);
+    } else {
+      centerIntersect = Cesium.Ray.getPoint(centerRay, 500.0);
+    }
+
+    const tanH = Math.tan(hfov / 2);
+    const tanV = Math.tan(vfov / 2);
+
+    // 定义视场四个角的本地方向 (此时 localDirs 是相对于镜头中心的)
+    const directions = [
+      new Cesium.Cartesian3(-tanH, 1, tanV), // 左上
+      new Cesium.Cartesian3(tanH, 1, tanV), // 右上
+      new Cesium.Cartesian3(tanH, 1, -tanV), // 右下
+      new Cesium.Cartesian3(-tanH, 1, -tanV), // 左下
+    ];
+    const corners = [];
+    directions.forEach((dir) => {
+      // 使用合并了云台旋转的矩阵进行转换
+      const worldDir = Cesium.Matrix3.multiplyByVector(
+        matrix,
+        dir,
+        new Cesium.Cartesian3(),
+      );
+      Cesium.Cartesian3.normalize(worldDir, worldDir);
+
+      const ray = new Cesium.Ray(position, worldDir);
+      let intersect = viewer.scene.globe.pick(ray, viewer.scene);
+
+      if (intersect) {
+        // --- 将交点稍微抬高一点 ---
+        const carto = Cesium.Cartographic.fromCartesian(intersect);
+        carto.height += 0.5; // 抬高0.5米，避开地面
+        intersect = Cesium.Cartographic.toCartesian(carto);
+      } else {
+        intersect = Cesium.Ray.getPoint(ray, 1000.0);
+      }
+
+      // if (!intersect) {
+      //   intersect = Cesium.Ray.getPoint(ray, 500.0);
+      // }
+      corners.push(intersect);
+    });
+
+    const result = { apex: position, corners, center: centerIntersect };
+
+    lastTime = time;
+    cachedResult = result;
+    return result;
+  };
+
+  // 绘制 4 个侧面
+  for (let i = 0; i < 4; i++) {
+    viewer.entities.add({
+      polygon: {
+        hierarchy: new Cesium.CallbackProperty((time) => {
+          const res = getCorners(time);
+          if (!res || !res.apex || res.corners.length < 4) {
+            // 返回一个空的对象，而不是 null，这样实体不会消失，只是暂时不画
+            return new Cesium.PolygonHierarchy([]);
+          }
+          return new Cesium.PolygonHierarchy([
+            res.apex,
+            res.corners[i],
+            res.corners[(i + 1) % 4],
+          ]);
+        }, false),
+        material: Cesium.Color.CYAN.withAlpha(0.3),
+        perPositionHeight: true,
+        outline: false,
+        outlineColor: Cesium.Color.CYAN,
+        show: new Cesium.CallbackProperty(() => isAttitudeValid, false), // 双重保险
+        // 解决被地形遮挡导致的闪烁
+        classificationType: Cesium.ClassificationType.BOTH,
+        // 如果还是闪烁严重，可以尝试强制置顶（慎用，会穿透所有建筑）
+        // disableDepthTestDistance: Number.POSITIVE_INFINITY
+      },
+    });
+  }
+
+  // 绘制底面 (Base Face)
+  viewer.entities.add({
+    name: `Frustum_Base`,
+    polygon: {
+      hierarchy: new Cesium.CallbackProperty((time) => {
+        const res = getCorners(time);
+        if (!res) return new Cesium.PolygonHierarchy([]);
+        // 底面四边形：连接所有地面交点
+        return new Cesium.PolygonHierarchy(res.corners);
+      }, false),
+      material: Cesium.Color.YELLOW.withAlpha(0.5),
+      // material: new Cesium.StripeMaterialProperty({
+      //   evenColor: Cesium.Color.YELLOW.withAlpha(0.4),
+      //   oddColor: Cesium.Color.YELLOW.withAlpha(0.1),
+      //   repeat: 10,
+      //   orientation: Cesium.StripeOrientation.VERTICAL,
+      // }),
+      perPositionHeight: true,
+      outline: false,
+      outlineColor: Cesium.Color.YELLOW,
+      outlineWidth: 2,
+      // 确保底面在最上层显示
+      zIndex: 10,
+    },
+  });
+
+  // 绘制 4 条侧棱线 (Apex 到 Corners)
+  for (let i = 0; i < 4; i++) {
+    viewer.entities.add({
+      name: `Frustum_Line_Slant_${i}`,
+      polyline: {
+        positions: new Cesium.CallbackProperty((time) => {
+          const res = getCorners(time);
+          if (!res) return [];
+          return [res.apex, res.corners[i]];
+        }, false),
+        width: 2,
+        // 使用发光材质，更美观
+        material: new Cesium.PolylineGlowMaterialProperty({
+          glowPower: 0.1,
+          color: Cesium.Color.CYAN.withAlpha(0.8),
+        }),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY, // 确保线条不被模型或地形遮挡
+      },
+    });
+  }
+
+  // 绘制底面边框线 (4 个地面点连成圈)
+  viewer.entities.add({
+    name: `Frustum_Line_Base_Outline`,
+    polyline: {
+      positions: new Cesium.CallbackProperty((time) => {
+        const res = getCorners(time);
+        if (!res) return [];
+        // 闭合路径：p1 -> p2 -> p3 -> p4 -> p1
+        return [...res.corners, res.corners[0]];
+      }, false),
+      width: 3,
+      material: Cesium.Color.YELLOW,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  });
+
+  // 绘制中心线 (Apex 到 Center)
+  viewer.entities.add({
+    name: "Frustum_Center_Line",
+    polyline: {
+      positions: new Cesium.CallbackProperty((time) => {
+        const data = getCorners(time);
+        if (!data) return [];
+        return [data.apex, data.center];
+      }, false),
+      width: 2,
+      // 使用虚线材质，增加科技感且不遮挡目标
+      material: new Cesium.PolylineDashMaterialProperty({
+        color: Cesium.Color.RED.withAlpha(0.8),
+        dashLength: 12,
+        gapColor: Cesium.Color.TRANSPARENT,
+      }),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  });
+
+  // 在中心交点处画一个小的十字准星或圆点
+  viewer.entities.add({
+    name: "Frustum_Center_Point",
+    position: new Cesium.CallbackProperty((time) => {
+      const data = getCorners(time);
+      return data ? data.center : undefined;
+    }, false),
+    point: {
+      pixelSize: 6,
+      color: Cesium.Color.RED,
+      outlineColor: Cesium.Color.WHITE,
+      outlineWidth: 2,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  });
+};
+
+/**
+ * 根据变焦倍数计算当前的 HFOV 和 VFOV
+ * @param {Number} zoomFactor 当前变焦倍数 (1.0, 2.0...)
+ * @param {Number} baseDFOV 厂家标称的对角线FOV (大疆通常为 84)
+ * @param {Number} aspect 宽高比 (通常 16/9)
+ */
+const getZoomedFOV = (zoomFactor, baseDFOV = 84, aspect = 16 / 9) => {
+  const halfDiagRad = Cesium.Math.toRadians(baseDFOV / 2);
+  // 变焦公式：tan(新视角/2) = tan(原视角/2) / 变焦倍数
+  const tanHalfDiagZoom = Math.tan(halfDiagRad) / zoomFactor;
+
+  const tanHalfV = tanHalfDiagZoom / Math.sqrt(aspect * aspect + 1);
+  const tanHalfH = tanHalfV * aspect;
+
+  return {
+    h: Math.atan(tanHalfH) * 2, // 弧度
+    v: Math.atan(tanHalfV) * 2,
+  };
+};
+
+/**
+ * 根据等效焦距计算 HFOV 和 VFOV
+ * @param {Number} focalLength 等效焦距 (单位: mm，例如 24)
+ * @param {Number} aspect 画面宽高比 (例如 16/9 ≈ 1.778)
+ * @returns {Object} { h, v } 弧度制的水平和垂直视角
+ */
+const calcFovByFocalLength = (focalLength, aspect = 16 / 9) => {
+  // 35mm 全画幅基准宽度为 36mm
+  const sensorWidth = 36.0;
+
+  // 计算水平视角 (HFOV)
+  const hfov = 2 * Math.atan(sensorWidth / (2 * focalLength));
+
+  // 根据宽高比推算垂直视角 (VFOV)
+  // 原理：tan(VFOV/2) = tan(HFOV/2) / aspect
+  const vfov = 2 * Math.atan(Math.tan(hfov / 2) / aspect);
+
+  return {
+    h: hfov, // 弧度
+    v: vfov, // 弧度
+  };
+};
+
+/**
+ * 绘制视场层（可用于基准和变焦对比）
+ * @param {Number|Function} zoomSource 变焦倍数，可以是数字，也可以是动态获取倍数的函数
+ * @param {Cesium.Color} color 颜色
+ */
+const addFrustumLayer = (viewer, droneEntity, zoomSource, color, name) => {
+  const getCorners = (time) => {
+    // 获取机身的基础位置和姿态 (attitude_head/pitch/roll)
+    const position = droneEntity.position.getValue(time);
+    const bodyOrientation = droneEntity.orientation.getValue(time);
+    if (!position || !bodyOrientation) return null;
+
+    // 获取云台俯仰角并合成新姿态
+    // 注意：大疆云台 0 为水平，-90 为垂直向下。这里根据droneState.gimbal_pitch 获取
+    const gPitch = Cesium.Math.toRadians(droneState.gimbal_pitch || -90);
+
+    // 创建云台旋转：绕机身的本地 X 轴旋转（即俯仰）
+    const gimbalQuaternion = Cesium.Quaternion.fromAxisAngle(
+      Cesium.Cartesian3.UNIT_X,
+      gPitch,
+      new Cesium.Quaternion(),
+    );
+
+    // 合成最终姿态：机身姿态 * 云台姿态
+    const finalOrientation = Cesium.Quaternion.multiply(
+      bodyOrientation,
+      gimbalQuaternion,
+      new Cesium.Quaternion(),
+    );
+
+    // 使用合成后的 finalOrientation 生成旋转矩阵
+    const matrix = Cesium.Matrix3.fromQuaternion(finalOrientation);
+
+    const zoom = typeof zoomSource === "function" ? zoomSource() : zoomSource;
+    const fov = getZoomedFOV(zoom);
+    const tanH = Math.tan(fov.h / 2);
+    const tanV = Math.tan(fov.v / 2);
+
+    // 定义射线方向 (假设相机朝向无人机的前方，即 Y 轴)
+    // 如果发现视锥体偏了90度，请尝试交换 Cartesian3 里的坐标位置
+    const directions = [
+      new Cesium.Cartesian3(-tanH, 1, tanV), // 左上
+      new Cesium.Cartesian3(tanH, 1, tanV), // 右上
+      new Cesium.Cartesian3(tanH, 1, -tanV), // 右下
+      new Cesium.Cartesian3(-tanH, 1, -tanV), // 左下
+    ];
+
+    const corners = directions.map((dir) => {
+      const worldDir = Cesium.Matrix3.multiplyByVector(
+        matrix,
+        dir,
+        new Cesium.Cartesian3(),
+      );
+      Cesium.Cartesian3.normalize(worldDir, worldDir);
+      const ray = new Cesium.Ray(position, worldDir);
+
+      const intersection = viewer.scene.globe.pick(ray, viewer.scene);
+      return intersection || Cesium.Ray.getPoint(ray, 1000.0);
+    });
+
+    return { apex: position, corners };
+  };
+
+  // 绘制 4 个侧面
+  for (let i = 0; i < 4; i++) {
+    viewer.entities.add({
+      name: `${name}_side_${i}`,
+      polygon: {
+        hierarchy: new Cesium.CallbackProperty((time) => {
+          const res = getCorners(time);
+          if (!res) return new Cesium.PolygonHierarchy([]);
+          return new Cesium.PolygonHierarchy([
+            res.apex,
+            res.corners[i],
+            res.corners[(i + 1) % 4],
+          ]);
+        }, false),
+        material: color.withAlpha(0.3),
+        perPositionHeight: true,
+        outline: true,
+        outlineColor: color.withAlpha(0.5),
+      },
+    });
+  }
+};
+
+/**
+ * @description: Focus on the car entity
+ * @return {*}
+ */
+const toggleLockMode = () => {
+  isLockMode.value = !isLockMode.value;
+  if (isLockMode.value) {
+    if (carEntity) {
+      mainViewer.trackedEntity = carEntity;
+      switchTrackedView(mainViewer, carEntity, false);
+      isPitch2D.value = false;
+    }
+  } else {
+    if (mainViewer.trackedEntity) {
+      mainViewer.trackedEntity = undefined;
+    }
+  }
+};
+
+/**
+ * @description: Toggle the allowAddLocation state
+ * @return {*}
+ */
+const toggleAddLocation = () => {
+  isAllowAddLocation.value = !isAllowAddLocation.value;
+};
+
+/**
+ * @description: Draw vertical height indication lines
+ * @param {*} viewer
+ * @param {*} lng
+ * @param {*} lat
+ * @param {*} height
+ * @param {*} color
+ * @return {*}
+ */
+const drawVerticalLine = (viewer, lng, lat, height, color) => {
+  const lineEntity = viewer.entities.add({
+    polyline: {
+      positions: Cesium.Cartesian3.fromDegreesArrayHeights([
+        lng,
+        lat,
+        0, // Ground point
+        lng,
+        lat,
+        height, // Aerial point
+      ]),
+      width: 2,
+      material: new Cesium.PolylineDashMaterialProperty({
+        color: color,
+        dashLength: 8,
+      }),
+    },
+  });
+  verticalLines.push(lineEntity);
+};
+
+/**
+ * @description: Manually invoke the drawing of the finish line
+ * @param {*} viewer
+ * @return {*}
+ */
+const drawEndPointMarker = (viewer) => {
+  const { lng, lat, height } = window.lastPointData;
+  drawVerticalLine(viewer, lng, lat, height, Cesium.Color.LAWNGREEN);
+};
+
+/**
+ * @description: manually add position for running route
+ * @return {*}
+ */
+const manuallyAddPosition = () => {
+  if (runPointIndex > 4) return;
+  // Simulation route
+  const pathData = [
+    { lng: 121.427, lat: 28.6528 },
+    { lng: 121.428, lat: 28.6538 },
+    { lng: 121.429, lat: 28.6548 },
+    { lng: 121.43, lat: 28.6549 },
+    { lng: 121.431, lat: 28.655 },
+  ];
+  const currentPoint = pathData[runPointIndex];
+  // runningToPointWithTimeForCar(currentPoint.lng, currentPoint.lat);
+  runPointIndex++;
+};
+
+/**
+ * @description: move the car to the specified point with time
+ * @param {*} lng
+ * @param {*} lat
+ * @param {*} speed
+ * @return {*}
+ */
+const runningToPointWithTimeForCar = (lng, lat, speed = 15) => {
+  const newPosition = Cesium.Cartesian3.fromDegrees(lng, lat, 0);
+  const now = mainViewer.clock.currentTime;
+  let arrivalTime;
+  if (
+    !lastScheduledTime ||
+    Cesium.JulianDate.compare(lastScheduledTime, now) < 0
+  ) {
+    // When the car is stopped,start moving immediately
+    // Start moving after 0.1 seconds to avoid time conflicts.
+    arrivalTime = Cesium.JulianDate.addSeconds(
+      now,
+      1.0,
+      new Cesium.JulianDate(),
+    );
+  } else {
+    // When the car is in motion,we need to queue up and calcalate the travel time from that point to this one.
+    const distance = Cesium.Cartesian3.distance(lastPosition, newPosition);
+    const travelTime = Math.max(distance / speed, 1.0); // Time = Distance / Speed
+    arrivalTime = Cesium.JulianDate.addSeconds(
+      lastScheduledTime,
+      travelTime,
+      new Cesium.JulianDate(),
+    );
+  }
+  // Update the position of the car(no height)
+  carPositionProp.addSample(arrivalTime, newPosition);
+
+  // Draw a point on the ground
+  drawRoutePoint(mainViewer, newPosition);
+
+  lastScheduledTime = arrivalTime;
+  lastPosition = newPosition;
+
+  // Draw the starting height line
+  if (isFirstPoint) {
+    mainViewer.trackedEntity = carEntity;
+    isLockMode.value = true;
+    switchTrackedView(mainViewer, carEntity, false);
+    isPitch2D.value = false;
+    // drawVerticalLine(mainViewer, lng, lat, DRONE_HEIGHT, Cesium.Color.LAWNGREEN);
+    isFirstPoint = false;
+  }
+
+  // Automatically extend the end time to prevent the model from disappearing
+  if (Cesium.JulianDate.compare(arrivalTime, mainViewer.clock.stopTime) > 0) {
+    mainViewer.clock.stopTime = Cesium.JulianDate.addSeconds(
+      arrivalTime,
+      2,
+      new Cesium.JulianDate(),
+    );
+  }
+};
+
+/**
+ * @description: move the dronw to the specified point with time
+ * @param {*} lng
+ * @param {*} lat
+ * @param {*} speed
+ * @return {*}
+ */
+const runningToPointWithTimeForDrone = (lng, lat, speed = 30, height) => {
+  const newPosition = Cesium.Cartesian3.fromDegrees(lng, lat, 0);
+  const now = mainViewer.clock.currentTime;
+  let arrivalTime;
+  if (
+    !lastDroneScheduledTime ||
+    Cesium.JulianDate.compare(lastDroneScheduledTime, now) < 0
+  ) {
+    // When the car is stopped,start moving immediately
+    // Start moving after 0.1 seconds to avoid time conflicts.
+    arrivalTime = Cesium.JulianDate.addSeconds(now, 1, new Cesium.JulianDate());
+  } else {
+    // When the car is in motion,we need to queue up and calcalate the travel time from that point to this one.
+    const distance = Cesium.Cartesian3.distance(lastDronePosition, newPosition);
+    const travelTime = Math.max(distance / speed, 0.1); // Time = Distance / Speed
+    arrivalTime = Cesium.JulianDate.addSeconds(
+      lastDroneScheduledTime,
+      travelTime,
+      new Cesium.JulianDate(),
+    );
+  }
+
+  // Update the position of the uav
+  const dronePos = Cesium.Cartesian3.fromDegrees(lng, lat, height);
+  dronePositionProp.addSample(arrivalTime, dronePos);
+
+  lastDroneScheduledTime = arrivalTime;
+  lastDronePosition = newPosition;
+
+  // 每增加一个点，就顺手把时钟的停止时间往后拨，防止时间跑出范围
+  if (Cesium.JulianDate.compare(arrivalTime, mainViewer.clock.stopTime) > 0) {
+    mainViewer.clock.stopTime = Cesium.JulianDate.addSeconds(
+      arrivalTime,
+      2,
+      new Cesium.JulianDate(),
+    );
+  }
+
+  mainViewer.clock.clockRange = Cesium.ClockRange.CLAMPED;
+
+  // Draw the starting height line
+  // if (isFirstPoint) {
+  // mainViewer.trackedEntity = carEntity;
+  // switchTrackedView(mainViewer, carEntity, false);
+  // isPitch2D.value = false;
+  // drawVerticalLine(mainViewer, lng, lat, DRONE_HEIGHT, Cesium.Color.LAWNGREEN);
+  // isFirstPoint = false;
+  // }
+
+  // Automatically extend the end time to prevent the model from disappearing
+  // if (Cesium.JulianDate.compare(arrivalTime, mainViewer.clock.stopTime) > 0) {
+  //   mainViewer.clock.stopTime = Cesium.JulianDate.addSeconds(arrivalTime, 2, new Cesium.JulianDate());
+  // }
+};
+
+/**
+ * @description: update the position of the entity with time
+ * @param {*} entityProp
+ * @param {*} lng
+ * @param {*} lat
+ * @param {*} height
+ * @return {*}
+ */
+const updateEntityPosition = (entityProp, lng, lat, height) => {
+  // 获取当前 Cesium 运行的绝对时间
+  const now = mainViewer.clock.currentTime;
+
+  // 核心改进：直接将目标时间定为“现在 + 0.5秒”
+  // 这样无论消息频率多高，点永远都在“现在”的 0.5s 后，不会产生累积排队
+  const arrivalTime = Cesium.JulianDate.addSeconds(
+    now,
+    LEAD_TIME,
+    new Cesium.JulianDate(),
+  );
+  const position = Cesium.Cartesian3.fromDegrees(lng, lat, height);
+
+  // 推入采样
+  entityProp.addSample(arrivalTime, position);
+
+  if (isFirstPoint) {
+    mainViewer.trackedEntity = carEntity;
+    isLockMode.value = true;
+    switchTrackedView(mainViewer, carEntity, false);
+    isPitch2D.value = false;
+    isFirstPoint = false;
+  }
+
+  // 动态调整时钟终点，确保不会超出范围
+  if (Cesium.JulianDate.compare(arrivalTime, mainViewer.clock.stopTime) > 0) {
+    mainViewer.clock.stopTime = Cesium.JulianDate.addSeconds(
+      arrivalTime,
+      2,
+      new Cesium.JulianDate(),
+    );
+  }
+};
+
+/**
+ * 无人机独立实时更新
+ * 不计算距离，不计算速度，只根据接收时刻点位进行投影
+ */
+const updateDroneRealtime = (lng, lat, height) => {
+  if (!mainViewer || !dronePositionProp) return;
+
+  // 获取当前 Cesium 时钟显示的“现在”时间
+  const now = mainViewer.clock.currentTime;
+
+  // 直接将目标时间设为“当前时间 + 固定的微小延迟”
+  // 无论汽车在哪，无论上一点在哪，无人机都会立即向这个新点滑动
+  const arrivalTime = Cesium.JulianDate.addSeconds(
+    now,
+    REALTIME_BUFFER,
+    new Cesium.JulianDate(),
+  );
+
+  const position = Cesium.Cartesian3.fromDegrees(lng, lat, height);
+
+  // 推入采样点
+  dronePositionProp.addSample(arrivalTime, position);
+
+  // 更新姿态（计算四元数并 addSample 到一个 SampledProperty 里）
+  const orientation = getDroneOrientation(
+    position,
+    droneState.attitude_head,
+    droneState.attitude_pitch,
+    droneState.attitude_roll,
+  );
+  droneOrientationProp.addSample(arrivalTime, orientation);
+
+  // 保持时钟步调（防止时间轴停止）
+  if (Cesium.JulianDate.compare(arrivalTime, mainViewer.clock.stopTime) > 0) {
+    mainViewer.clock.stopTime = Cesium.JulianDate.addSeconds(
+      arrivalTime,
+      5,
+      new Cesium.JulianDate(),
+    );
+  }
+};
+
+/**
+ * @description: draw a point on the ground
+ * @param {*} viewer
+ * @param {*} point
+ * @return {*}
+ */
+const drawRoutePoint = (viewer, point) => {
+  const entity = viewer.entities.add({
+    position: point,
+    point: {
+      pixelSize: 8,
+      color: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.fromCssColorString("#00eeee"),
+      outlineWidth: 2,
+    },
+    // label:{
+    //   text: '我的标注',  // 要显示的文字
+    //   font: '14px sans-serif',
+    //   fillColor: Cesium.Color.YELLOW,
+    //   outlineColor: Cesium.Color.BLACK,
+    //   outlineWidth: 2,
+    //   style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+    //   // 调整标签位置，使其居中在点上
+    //   pixelOffset: new Cesium.Cartesian2(0, 0),  // 水平和垂直偏移
+    //   verticalOrigin: Cesium.VerticalOrigin.CENTER,  // 垂直居中
+    //   horizontalOrigin: Cesium.HorizontalOrigin.CENTER,  // 水平居中
+    //   showBackground: true,  // 可选：显示背景
+    //   backgroundColor: new Cesium.Color(0.1, 0.1, 0.1, 0.8),  // 背景颜色
+    //   backgroundPadding: new Cesium.Cartesian2(5, 3)  // 背景内边距
+    // }
+  });
+  routeMarkers.push(entity);
+};
+
+/**
+ * @description: Initialization of click control
+ * @param {*} viewer
+ * @return {*}
+ */
+const initClickControl = (viewer) => {
+  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  handler.setInputAction((click) => {
+    if (!isAllowAddLocation.value) return;
+    const ray = viewer.camera.getPickRay(click.position);
+    const cartesian = viewer.scene.globe.pick(ray, viewer.scene);
+
+    if (Cesium.defined(cartesian)) {
+      const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+      const lng = Cesium.Math.toDegrees(cartographic.longitude);
+      const lat = Cesium.Math.toDegrees(cartographic.latitude);
+
+      if (isFirstPoint) {
+        // runningToPointWithTimeForCar(lng, lat);
+        mainViewer.trackedEntity = carEntity;
+        isLockMode.value = true;
+        switchTrackedView(mainViewer, carEntity, false);
+        isPitch2D.value = false;
+        isFirstPoint = false;
+      } else {
+        // moveToNewPointAlongRoad(viewer, lng, lat);
+      }
+
+      droneState.attitude_head = 40.8;
+      droneState.attitude_pitch = 0;
+      droneState.attitude_roll = -0.6;
+      droneState.gimbal_pitch = -90;
+      droneState.gimbal_roll = 0;
+      droneState.gimbal_yaw = 0;
+      droneState.zoom_factor += 0.05;
+      isAttitudeValid = true;
+
+      systemStore.setDroneCurrentState(cloneDeep(droneState));
+
+      updateEntityPosition(carPositionProp, lng, lat, 0);
+
+      // !TEST: move the drone to the specified point with time
+      // runningToPointWithTimeForDrone(lng, lat, 15, 30);
+
+      updateDroneRealtime(lng, lat, 80);
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+};
+
+/**
+ * @description: 初始化车辆点击事件
+ * @param {*} viewer
+ * @return {*}
+ */
+const initVehicleClickHandler = (viewer) => {
+  // 清除之前的处理器
+  if (vehicleClickHandler) {
+    vehicleClickHandler.destroy();
+  }
+
+  vehicleClickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+
+  // 处理鼠标点击事件
+  vehicleClickHandler.setInputAction((click) => {
+    // 当允许添加位置时，不处理车辆点击
+    if (isAllowAddLocation.value) return;
+
+    // 拾取点击的对象
+    const pickedObject = viewer.scene.pick(click.position);
+
+    if (Cesium.defined(pickedObject) && pickedObject.id) {
+      const entity = pickedObject.id;
+
+      // 检查是否是车辆实体
+      if (entity && entity.model && entity.label) {
+        const deviceId = getVehicleDeviceIdFromEntity(entity);
+
+        if (deviceId) {
+          const vehicle = vehicleManager.vehicles.get(deviceId);
+          if (vehicle) {
+            vehicleManager.setSelected(deviceId);
+            const lastPos = vehicle.lastPosition;
+            if (TEST_POLICE_VEHICLES.some((v) => v.id === deviceId)) {
+              showTestVehicleDialog(deviceId, lastPos);
+            } else {
+              showVehicleDialog(deviceId, lastPos);
+            }
+            return;
+          }
+        }
+      }
+    }
+
+    vehicleManager.clearSelection();
+    closePoliceVehiclePopup();
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+};
+
+/**
+ * @description: 显示车辆信息弹窗
+ * @param {string} deviceId - 设备号
+ * @param {Object} position - 位置信息
+ * @return {*}
+ */
+const showVehicleDialog = (deviceId, position) => {
+  // 从系统存储中获取最新的车辆消息
+  const carMessages = systemStore.carMessageList;
+  const lastMessage = carMessages.find((msg) => msg.deviceId === deviceId);
+
+  // 更新弹窗数据
+  vehicleDialog.deviceId = deviceId;
+  vehicleDialog.position = position;
+  vehicleDialog.lastMessage = lastMessage;
+
+  // 无人机SN列表（可以从配置或store中获取）
+  const droneSnList = [DEVICE_CONFIG.droneId];
+  const defaultDroneSn = droneSnList[0];
+
+  // 构建弹窗内容
+  const dialogContent = `
+    <div style="padding: 10px;">
+      <h3 style="margin: 0 0 10px 0;">车辆信息</h3>
+      <div style="margin-bottom: 8px;">
+        <strong>设备号:</strong> ${deviceId}
+      </div>
+      ${
+        position
+          ? `
+        <div style="margin-bottom: 8px;">
+          <strong>位置:</strong><br>
+          经度: ${position.longitude.toFixed(6)}<br>
+          纬度: ${position.latitude.toFixed(6)}<br>
+          高度: ${position.height || 0}m
+        </div>
+      `
+          : ""
+      }
+      ${
+        lastMessage
+          ? `
+        <div style="margin-bottom: 8px;">
+          <strong>最新状态:</strong><br>
+          <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; font-size: 12px; overflow: auto; max-height: 150px;">
+            ${JSON.stringify(lastMessage, null, 2)}
+          </pre>
+        </div>
+      `
+          : '<div style="color: #999;">暂无车辆数据</div>'
+      }
+      <div style="margin-bottom: 12px;">
+        <label for="drone-sn-select" style="display: block; margin-bottom: 5px;"><strong>无人机SN:</strong></label>
+        <select id="drone-sn-select" style="width: 100%; padding: 8px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 14px;">
+          ${droneSnList.map((sn) => `<option value="${sn}" ${sn === defaultDroneSn ? "selected" : ""}>${sn}</option>`).join("")}
+        </select>
+      </div>
+      <div style="margin-top: 15px; text-align: center;">
+        <button id="take-off-btn" style="margin-right: 10px; padding: 8px 16px; background: #409eff; color: white; border: none; border-radius: 4px; cursor: pointer;">一键伴飞</button>
+        <button id="return-home-btn" style="padding: 8px 16px; background: #67c23a; color: white; border: none; border-radius: 4px; cursor: pointer;">一键返航</button>
+      </div>
+    </div>
+  `;
+
+  // 显示弹窗
+  ElMessageBox.alert(dialogContent, "车辆详情", {
+    confirmButtonText: "关闭",
+    dangerouslyUseHTMLString: true,
+    customClass: "vehicle-dialog",
+    showCancelButton: false,
+    callback: (action) => {
+      // 清理事件监听
+      const takeOffBtn = document.getElementById("take-off-btn");
+      const returnHomeBtn = document.getElementById("return-home-btn");
+      if (takeOffBtn) {
+        takeOffBtn.removeEventListener("click", handleTakeOffForVehicle);
+      }
+      if (returnHomeBtn) {
+        returnHomeBtn.removeEventListener("click", handleReturnHomeForVehicle);
+      }
+    },
+  });
+
+  // 延迟添加事件监听，确保DOM已渲染
+  setTimeout(() => {
+    const takeOffBtn = document.getElementById("take-off-btn");
+    const returnHomeBtn = document.getElementById("return-home-btn");
+
+    if (takeOffBtn) {
+      takeOffBtn.addEventListener("click", () => {
+        const droneSn = document.getElementById("drone-sn-select").value;
+        handleTakeOffForVehicle(deviceId, droneSn);
+      });
+    }
+    if (returnHomeBtn) {
+      returnHomeBtn.addEventListener("click", () => {
+        const droneSn = document.getElementById("drone-sn-select").value;
+        handleReturnHomeForVehicle(deviceId, droneSn);
+      });
+    }
+  }, 100);
+};
+
+/**
+ * @description: 测试警车详情浮层（锚定在车辆旁）
+ */
+const showTestVehicleDialog = (deviceId, position) => {
+  if (!position) return;
+
+  const policeData = TEST_POLICE_VEHICLES.find((v) => v.id === deviceId);
+
+  const droneList = droneTestManager.getAllDrones();
+  const dronesWithDistance = droneList
+    .map((droneId) => {
+      const drone = droneTestManager.drones.get(droneId);
+      if (!drone || !drone.lastPosition) return null;
+      const dist = Cesium.Cartesian3.distance(
+        Cesium.Cartesian3.fromDegrees(position.longitude, position.latitude, 0),
+        Cesium.Cartesian3.fromDegrees(
+          drone.lastPosition.lng,
+          drone.lastPosition.lat,
+          0,
+        ),
+      );
+      return {
+        id: droneId,
+        distance: dist,
+        label: `${droneId}（距离 ${(dist / 1000).toFixed(2)} km）`,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.distance - b.distance);
+
+  policeVehiclePopup.deviceId = deviceId;
+  policeVehiclePopup.vehicleName = policeData?.name || deviceId;
+  policeVehiclePopup.alertInfo = policeData?.alert || "暂无警情信息";
+  policeVehiclePopup.coordText = `${position.longitude.toFixed(6)}, ${position.latitude.toFixed(6)}`;
+  policeVehiclePopup.drones = dronesWithDistance;
+  policeVehiclePopup.selectedDroneId = dronesWithDistance[0]?.id || "";
+  policeVehiclePopup.visible = true;
+
+  updatePolicePopupScreenPosition();
+  attachPolicePopupTracker();
+};
+
+/**
+ * @description: 为指定车辆一键伴飞
+ * @param {string} deviceId - 车辆设备号
+ * @param {string} droneSn - 无人机SN
+ * @return {*}
+ */
+const handleTakeOffForVehicle = (deviceId, droneSn) => {
+  ElMessageBox.prompt("请输入mode,1或5", "Tip", {
+    confirmButtonText: "确定",
+    cancelButtonText: "取消",
+    inputPattern: /^[0-9]+$/,
+    inputErrorMessage: "Invalid Number",
+  })
+    .then(({ value }) => {
+      requestTakeOff(value, deviceId, droneSn);
+    })
+    .catch(() => {});
+};
+
+/**
+ * @description: 为指定车辆一键返航
+ * @param {string} deviceId - 车辆设备号
+ * @param {string} droneSn - 无人机SN
+ * @return {*}
+ */
+const handleReturnHomeForVehicle = (deviceId, droneSn) => {
+  ElMessageBox.prompt("请输入mode,1或5", "Tip", {
+    confirmButtonText: "确定",
+    cancelButtonText: "取消",
+    inputPattern: /^[0-9]+$/,
+    inputErrorMessage: "Invalid Number",
+  })
+    .then(({ value }) => {
+      requestReturnHome(value, deviceId, droneSn);
+    })
+    .catch(() => {});
+};
+
+/**
+ * @description: 请求起飞
+ * @param {number} mode - 模式
+ * @param {string} deviceId - 车辆设备号
+ * @param {string} droneSn - 无人机SN
+ * @return {*}
+ */
+const requestTakeOff = async (mode, deviceId, droneSn) => {
+  let params = {
+    target_id: deviceId,
+    mode: Number(mode),
+    uav_id: droneSn,
+  };
+  isLoading.value = true;
+  try {
+    const res = await AccompanyingFlyService.takeOff(params);
+    console.log("一键伴飞响应:", res);
+    const { code } = res;
+    if (code === 200 || code === 201) {
+      systemStore.setDroneStatus(1);
+      ElMessage.success(`已开始为车辆 ${deviceId} 伴飞，使用无人机 ${droneSn}`);
+    }
+  } catch (error) {
+    console.log(error);
+    ElMessage.error("一键伴飞失败");
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+/**
+ * @description: 请求返航
+ * @param {number} mode - 模式
+ * @param {string} deviceId - 车辆设备号
+ * @param {string} droneSn - 无人机SN
+ * @return {*}
+ */
+const requestReturnHome = async (mode, deviceId, droneSn) => {
+  let params = {
+    target_id: deviceId,
+    mode,
+    drone_id: droneSn,
+  };
+  isLoading.value = true;
+  try {
+    const res = await AccompanyingFlyService.returnHome(params);
+    console.log("一键返航响应:", res);
+    const { code } = res;
+    if (code === 200 || code === 404) {
+      systemStore.setDroneStatus(0);
+      ElMessage.success(`无人机 ${droneSn} 已开始返航`);
+    }
+  } catch (error) {
+    console.log(error);
+    ElMessage.error("一键返航失败");
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+/**
+ * @description: 清理车辆点击事件处理器
+ * @return {*}
+ */
+const cleanupVehicleClickHandler = () => {
+  if (vehicleClickHandler) {
+    vehicleClickHandler.destroy();
+    vehicleClickHandler = null;
+  }
+};
+
+/**
+ * @description: clear running route
+ * @return {*}
+ */
+const clearRunningRoute = () => {
+  // Reset the position attribute of the model
+  carPositionProp = new Cesium.SampledPositionProperty();
+  dronePositionProp = new Cesium.SampledPositionProperty();
+  [carPositionProp, dronePositionProp].forEach((prop) => {
+    prop.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+    prop.setInterpolationOptions({
+      interpolationDegree: 1,
+      interpolationAlgorithm: Cesium.LagrangePolynomialApproximation, //HermitePolynomialApproximation
+    });
+  });
+  droneOrientationProp = new Cesium.SampledProperty(Cesium.Quaternion);
+  // Rebind the position attribute to the model
+  if (carEntity) carEntity.position = carPositionProp;
+  if (droneEntity) droneEntity.position = dronePositionProp;
+
+  // Remove the point markers on the map
+  routeMarkers.forEach((entity) => mainViewer.entities.remove(entity));
+  routeMarkers.length = 0;
+
+  // 清除所有车辆
+  vehicleManager.clearAll();
+
+  // 重置初始状态
+  isFirstPoint = true;
+  isLockMode.value = false;
+  mainViewer.trackedEntity = undefined;
+
+  // Remove the location markers on the map
+  locationMarkers.forEach((entity) => mainViewer.entities.remove(entity));
+  locationMarkers.length = 0;
+
+  // Remove the vertical lines on the map
+  verticalLines.forEach((entity) => mainViewer.entities.remove(entity));
+  verticalLines.length = 0;
+
+  // Reset the logical variable
+  lastScheduledTime = null;
+  lastPosition = null;
+  lastDroneScheduledTime = null;
+  lastDronePosition = null;
+  runPointIndex = 0;
+  isFirstPoint = true;
+
+  // 清除测试数据
+  droneTestManager.clearAll();
+  escortTimers.forEach((timer) => clearInterval(timer));
+  escortTimers.clear();
+  deviceStore.clearTestDevices();
+  if (droneEntity) droneEntity.show = true;
+};
+
+// ========== 测试数据设置 ==========
+// TEST_POLICE_VEHICLES / TEST_DRONES 从 @/config/test-devices.js 统一导入
+
+// 伴飞跟踪定时器
+const escortTimers = new Map();
+
+/**
+ * @description: 设置测试数据 - 在地图上放置3辆警车和3架无人机
+ */
+const setupTestData = () => {
+  if (!mainViewer) return;
+
+  // 清除旧数据
+  vehicleManager.clearAll();
+  droneTestManager.clearAll();
+  escortTimers.forEach((timer) => clearInterval(timer));
+  escortTimers.clear();
+
+  // 初始化 store（左侧面板同步响应）
+  deviceStore.initTestDevices();
+
+  // 创建警车实体
+  TEST_POLICE_VEHICLES.forEach((vehicle) => {
+    vehicleManager.createVehicle(mainViewer, vehicle.id, vehicle.name);
+    vehicleManager.updateVehiclePosition(
+      vehicle.id,
+      vehicle.lng,
+      vehicle.lat,
+      0,
+    );
+  });
+
+  // 创建无人机实体
+  TEST_DRONES.forEach((drone) => {
+    droneTestManager.createDrone(
+      mainViewer,
+      drone.id,
+      drone.lng,
+      drone.lat,
+      80,
+      drone.name,
+    );
+  });
+
+  // 先解除跟踪，避免干扰 flyTo
+  mainViewer.trackedEntity = undefined;
+
+  // 视角居中覆盖所有车辆和无人机
+  const allLngs = [
+    ...TEST_POLICE_VEHICLES.map((v) => v.lng),
+    ...TEST_DRONES.map((d) => d.lng),
+  ];
+  const allLats = [
+    ...TEST_POLICE_VEHICLES.map((v) => v.lat),
+    ...TEST_DRONES.map((d) => d.lat),
+  ];
+  const centerLng = (Math.min(...allLngs) + Math.max(...allLngs)) / 2;
+  const centerLat = (Math.min(...allLats) + Math.max(...allLats)) / 2;
+  // 跨度(km) → 高度(m)：FOV≈60°时高度 ≈ 跨度 × 870，取 2x 安全系数
+  const lngSpan =
+    (Math.max(...allLngs) - Math.min(...allLngs)) *
+    111 *
+    Math.cos(Cesium.Math.toRadians(centerLat));
+  const latSpan = (Math.max(...allLats) - Math.min(...allLats)) * 111;
+  const altitude = Math.max(lngSpan, latSpan) * 1800 + 3000;
+
+  mainViewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(centerLng, centerLat, altitude),
+    orientation: {
+      heading: Cesium.Math.toRadians(0),
+      pitch: Cesium.Math.toRadians(-90),
+      roll: 0,
+    },
+    duration: 0.8,
+  });
+
+  if (droneEntity) droneEntity.show = false;
+
+  ElMessage.success(
+    `已放置 ${TEST_POLICE_VEHICLES.length} 辆警车 和 ${TEST_DRONES.length} 架无人机`,
+  );
+};
+
+/**
+ * @description: 模拟伴飞 - 让指定无人机飞向并跟随指定车辆（本地模拟，不依赖后端）
+ */
+function startEscortSimulation(vehicleId, droneId) {
+  const vehicle = vehicleManager.vehicles.get(vehicleId);
+  const drone = droneTestManager.drones.get(droneId);
+  if (!vehicle || !drone) {
+    ElMessage.error("车辆或无人机不存在");
+    return;
+  }
+
+  // 清除该无人机旧的跟踪定时器
+  const oldTimer = escortTimers.get(droneId);
+  if (oldTimer) clearInterval(oldTimer);
+
+  // 立即飞向车辆当前位置
+  const vehiclePos = vehicle.lastPosition;
+  if (vehiclePos) {
+    droneTestManager.flyToPoint(
+      droneId,
+      vehiclePos.longitude,
+      vehiclePos.latitude,
+      30,
+      80,
+    );
+  }
+
+  // 每2秒更新一次，让无人机持续跟随车辆
+  const timer = setInterval(() => {
+    const curVehiclePos = vehicle.lastPosition;
+    if (curVehiclePos) {
+      droneTestManager.flyToPoint(
+        droneId,
+        curVehiclePos.longitude,
+        curVehiclePos.latitude,
+        30,
+        80,
+      );
+    }
+  }, 2000);
+
+  escortTimers.set(droneId, timer);
+  deviceStore.setDroneEscorting(droneId, vehicleId);
+  ElMessage.success(`无人机 ${droneId} 已开始伴飞车辆 ${vehicleId}`);
+}
+
+// 测试发送消息
+let sendCarMessageTimer = null;
+let sendDroneMessageTimer = null;
+let sendCarMessageCount = 0;
+let sendDroneMessageCount = 0;
+
+/**
+ * @description: 清理测试消息定时器
+ * @return {*}
+ */
+const clearPublishMessageTimers = () => {
+  if (sendCarMessageTimer) {
+    clearInterval(sendCarMessageTimer);
+    sendCarMessageTimer = null;
+    sendCarMessageCount = 0;
+  }
+  if (sendDroneMessageTimer) {
+    clearInterval(sendDroneMessageTimer);
+    sendDroneMessageTimer = null;
+    sendDroneMessageCount = 0;
+  }
+};
+
+/**
+ * @description: 开始发送测试消息
+ * @return {*}
+ */
+const startPublishMessage = () => {
+  // 先清理已有的定时器，避免重复创建
+  clearPublishMessageTimers();
+
+  const { carMessageList, droneMessageList } = testJson;
+  if (!carMessageList?.length || !droneMessageList?.length) {
+    console.warn("测试数据为空，无法发送消息");
+    return;
+  }
+
+  // 发送消息
+  sendCarMessageTimer = setInterval(() => {
+    if (sendCarMessageCount < carMessageList.length) {
+      const carMessage = carMessageList[sendCarMessageCount];
+      mqttService.publish(targetTopic, JSON.stringify(carMessage));
+
+      const dynamicCarMessage = new Array(10).fill(null).map((item, index) => {
+        // 绘制以当前定位为圆心散开的随机10个点
+        return {
+          ...carMessage,
+          current_longitude:
+            carMessage.current_longitude + 0.001 * Math.random(),
+          current_latitude: carMessage.current_latitude + 0.001 * Math.random(),
+        };
+      });
+      drawDynamicCar(mainViewer, dynamicCarMessage);
+
+      sendCarMessageCount++;
+    } else {
+      clearInterval(sendCarMessageTimer);
+      sendCarMessageTimer = null;
+      sendCarMessageCount = 0;
+    }
+  }, 1000);
+
+  sendDroneMessageTimer = setInterval(() => {
+    if (sendDroneMessageCount < droneMessageList.length) {
+      const droneMessage = droneMessageList[sendDroneMessageCount];
+      mqttService.publish(droneTopic, JSON.stringify(droneMessage));
+      sendDroneMessageCount++;
+    } else {
+      clearInterval(sendDroneMessageTimer);
+      sendDroneMessageTimer = null;
+      sendDroneMessageCount = 0;
+    }
+  }, 1000);
+};
+
+/**
+ * @description: get current location and set center
+ * @return {*}
+ */
+const getCurrentLocation = () => {
+  /** Notes
+   * The browser, for the sake of privacy and security, makes the Geolocation API (navigator.geolocation) effective only in an HTTPS environment.
+   * During local development, http://localhost or http://127.0.0.1 are usually regarded as a secure context and can be used for normal testing.
+   * Once deployed to the online environment, an SSL certificate (HTTPS) must be configured; otherwise, navigator.geolocation will be undefined.
+   */
+  // addCustomLocationIcon(mainViewer, 121.408921, 28.654725, "您的当前位置"); //{ lng: 121.427, lat: 28.6528 }
+  // return;
+  if (!navigator.geolocation) {
+    alert("您的浏览器不支持地理定位");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const { longitude, latitude } = position.coords;
+
+      mainViewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(
+          longitude,
+          latitude,
+          INITIAL_VIEW_HEIGHT_METERS,
+        ),
+        orientation: {
+          heading: Cesium.Math.toRadians(0),
+          pitch: Cesium.Math.toRadians(-90),
+          roll: 0,
+        },
+        duration: 2.0,
+      });
+
+      // Mark the location on the map
+      addCustomLocationIcon(mainViewer, longitude, latitude, "您的当前位置");
+    },
+    (error) => {
+      switch (error.code) {
+        case error.PERMISSION_DENIED:
+          alert("用户拒绝了地理定位请求");
+          break;
+        case error.POSITION_UNAVAILABLE:
+          alert("位置信息不可用");
+          break;
+        case error.TIMEOUT:
+          alert("请求用户地理定位超时");
+          break;
+        default:
+          alert("发生未知错误");
+          break;
+      }
+    },
+    {
+      // Enabling high accuracy will attempt to obtain more precise location (such as GPS), but it will be slower.
+      enableHighAccuracy: true,
+      timeout: 5000,
+      maximumAge: 0,
+    },
+  );
+};
+
+/**
+ * @description: add custom location icon
+ * @param {*} viewer
+ * @param {*} lng
+ * @param {*} lat
+ * @param {*} name
+ * @return {*}
+ */
+const addCustomLocationIcon = (viewer, lng, lat, name) => {
+  console.log(lng, lat, name);
+  const entity = viewer.entities.add({
+    name: name,
+    position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
+    // The Billboard property is used to display icons.
+    billboard: {
+      image: "/icons/location.png",
+      width: 48,
+      height: 48,
+      scale: 1.0,
+      // Set the alignment
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      // Scale with distance (smaller at a distance, larger up close)
+      scaleByDistance: new Cesium.NearFarScalar(100, 1.5, 5000, 0.5),
+      // Solve the problem where the icons are obscured by 3D buildings or terrain.
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+    label: {
+      text: name,
+      font: "14px sans-serif bold",
+      fillColor: Cesium.Color.DEEPSKYBLUE,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      outlineWidth: 2,
+      verticalOrigin: Cesium.VerticalOrigin.TOP,
+      pixelOffset: new Cesium.Cartesian2(0, 5),
+    },
+  });
+  locationMarkers.push(entity);
+};
+
+/**
+ * @description: Move to point along road
+ * @param {*} viewer
+ * @param {*} destinationLng
+ * @param {*} destinationLat
+ * @return {*}
+ */
+const moveToNewPointAlongRoad = async (
+  viewer,
+  destinationLng,
+  destinationLat,
+) => {
+  // get start location
+  const now = viewer.clock.currentTime;
+
+  // If the car is moving, the new route should start from the lastScheduledTime moment
+  // If the car is stopped, the new route should start from the current time
+  let startTime;
+  if (
+    lastScheduledTime &&
+    Cesium.JulianDate.compare(lastScheduledTime, now) > 0
+  ) {
+    startTime = lastScheduledTime;
+  } else {
+    startTime = now;
+  }
+
+  // Get the car position at the startTime moment
+  // If the car is moving, this position is the car position at the lastScheduledTime moment
+  // If the car is stopped, this position is the current position
+  let startPosCartesian = carPositionProp.getValue(startTime);
+  if (!startPosCartesian && lastPosition) {
+    // If can not get the position, use the lastPosition as the backup
+    startPosCartesian = lastPosition;
+  }
+  if (!startPosCartesian) {
+    console.warn("无法获取起始位置，请先设置起始点");
+    return;
+  }
+
+  const startCarto = Cesium.Cartographic.fromCartesian(startPosCartesian);
+  const startLng = Cesium.Math.toDegrees(startCarto.longitude);
+  const startLat = Cesium.Math.toDegrees(startCarto.latitude);
+
+  // get destina location
+  const destinaPosition = Cesium.Cartesian3.fromDegrees(
+    destinationLng,
+    destinationLat,
+    0,
+  );
+
+  // Get the driving route (from the car position at the startTime moment to the destination)
+  // const routePoints = await requestRouteFromTDT(startLng, startLat, destinationLng, destinationLat);
+
+  // console.log("routePoints", routePoints);
+  const routePoints = [
+    { lng: startLng, lat: startLat },
+    { lng: destinationLng, lat: destinationLat },
+  ];
+
+  if (!routePoints || routePoints.length === 0) return;
+  console.log("routePoints", routePoints);
+
+  // The new route should start from the startTime moment (if the car is moving, it should start from the lastScheduledTime moment)
+  // Add a small delay to avoid conflicts with existing sampled points
+  let currentTime = Cesium.JulianDate.addSeconds(
+    startTime,
+    0.1,
+    new Cesium.JulianDate(),
+  );
+
+  // Check if the first point of the route is close to the start position
+  // If the distance is greater than 10 meters, it means the route starts from a different point than the start position
+  const firstRoutePoint = Cesium.Cartesian3.fromDegrees(
+    routePoints[0].lng,
+    routePoints[0].lat,
+    0,
+  );
+  const distanceToFirstPoint = Cesium.Cartesian3.distance(
+    startPosCartesian,
+    firstRoutePoint,
+  );
+  // If the distance is greater than 10 meters, start from the first point; otherwise, skip the first point
+  let startIndex = distanceToFirstPoint > 10 ? 0 : 1;
+
+  // If the first point of the route is far away from the start position, add the start position as the first point to ensure smooth transition
+  if (startIndex === 0 && distanceToFirstPoint > 10) {
+    // Add the start position as the first point (ensuring the drone starts from the actual car position)
+    carPositionProp.addSample(currentTime, startPosCartesian);
+    const startDronePos = Cesium.Cartesian3.fromDegrees(
+      startLng,
+      startLat,
+      DRONE_HEIGHT,
+    );
+    dronePositionProp.addSample(currentTime, startDronePos);
+    // Calculate the time it takes to reach the first point (at a speed of 15 meters per second)
+    // Add a small delay to avoid conflicts with existing sampled points
+    const durationToFirst = Math.max(distanceToFirstPoint / CAR_SPEED, 0.1);
+    currentTime = Cesium.JulianDate.addSeconds(
+      currentTime,
+      durationToFirst,
+      new Cesium.JulianDate(),
+    );
+    // Add the first point of the route (ensuring the drone moves to the actual first point)
+    const firstPointCartesian = Cesium.Cartesian3.fromDegrees(
+      routePoints[0].lng,
+      routePoints[0].lat,
+      0,
+    );
+    carPositionProp.addSample(currentTime, firstPointCartesian);
+    dronePositionProp.addSample(
+      currentTime,
+      Cesium.Cartesian3.fromDegrees(
+        routePoints[0].lng,
+        routePoints[0].lat,
+        DRONE_HEIGHT,
+      ),
+    );
+    lastPosition = firstPointCartesian;
+    // Start from the second point of the route (ensuring the drone moves to the actual first point)
+    startIndex = 1;
+  }
+
+  // Traverse the route points returned by the route calculation, adding each point to the path
+  for (let i = startIndex; i < routePoints.length; i++) {
+    const p2 = routePoints[i];
+    const p2Cartesian = Cesium.Cartesian3.fromDegrees(p2.lng, p2.lat, 0);
+
+    // Calculate the distance between the current point and the previous point
+    let distance;
+    if (i === startIndex && startIndex === 1) {
+      // If the first point is skipped (startIndex === 1), the distance to the first point should be calculated from the start position
+      distance = Cesium.Cartesian3.distance(startPosCartesian, p2Cartesian);
+    } else {
+      // For other points, calculate the distance from the previous point
+      const p1 = routePoints[i - 1];
+      const p1Cartesian = Cesium.Cartesian3.fromDegrees(p1.lng, p1.lat);
+      distance = Cesium.Cartesian3.distance(p1Cartesian, p2Cartesian);
+    }
+
+    // Calculate the time it takes to walk this segment of the route (at a speed of 15 meters per second)
+    const duration = Math.max(distance / CAR_SPEED, 0.1); // Minimum 0.1 seconds, avoid too short time
+    currentTime = Cesium.JulianDate.addSeconds(
+      currentTime,
+      duration,
+      new Cesium.JulianDate(),
+    );
+
+    // Add the current point to the car position sampling property
+    carPositionProp.addSample(currentTime, p2Cartesian);
+    // Add the current point to the drone position sampling property (with a height offset)
+    // dronePositionProp.addSample(currentTime, Cesium.Cartesian3.fromDegrees(p2.lng, p2.lat, DRONE_HEIGHT));
+    // Update the last recorded position
+    lastPosition = p2Cartesian;
+  }
+
+  drawRoutePoint(viewer, destinaPosition);
+
+  lastScheduledTime = currentTime;
+
+  // Update the clock end time if necessary
+  if (Cesium.JulianDate.compare(currentTime, viewer.clock.stopTime) > 0) {
+    viewer.clock.stopTime = Cesium.JulianDate.addSeconds(
+      currentTime,
+      2,
+      new Cesium.JulianDate(),
+    );
+  }
+};
+
+/**
+ * @description: get route from Tianditu
+ * @param {*} startLng
+ * @param {*} startLat
+ * @param {*} endLng
+ * @param {*} endLat
+ * @return {*}
+ */
+async function requestRouteFromTDT(startLng, startLat, endLng, endLat) {
+  const postStr = JSON.stringify({
+    orig: `${startLng},${startLat}`,
+    dest: `${endLng},${endLat}`,
+    style: "0", // 0:least time, 1:shortest distance 2.avoid high speed 3.walk
+  });
+  console.log("postStr", {
+    orig: `${startLng},${startLat}`,
+    dest: `${endLng},${endLat}`,
+    style: "0",
+  });
+  const url = `https://api.tianditu.gov.cn/drive?postStr=${postStr}&type=search&tk=${getTDT_TK()}`;
+  try {
+    const response = await axios.get(url);
+    console.log("response", response);
+    if (response.status === 200) {
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(response.data, "application/xml");
+      console.log("xmlDoc", xmlDoc);
+      let routelatlon =
+        xmlDoc.getElementsByTagName("routelatlon")[0].textContent;
+      routelatlon = routelatlon.substring(0, routelatlon.length - 1);
+      const points = routelatlon.split(";").map((item) => {
+        const parts = item.split(",");
+        return { lng: parseFloat(parts[0]), lat: parseFloat(parts[1]) };
+      });
+      return points;
+    }
+  } catch (e) {
+    console.error("request route fail", e);
+    return [];
+  }
+}
+
+/**
+ * @description: 锁定到指定车辆
+ */
+const lockToVehicle = (deviceId) => {
+  const vehicle = vehicleManager.vehicles.get(deviceId);
+  if (vehicle && vehicle.entity) {
+    mainViewer.trackedEntity = vehicle.entity;
+    isLockMode.value = true;
+    switchTrackedView(mainViewer, vehicle.entity, false);
+    isPitch2D.value = false;
+
+    const center = vehicle.entity.position.getValue(mainViewer.clock.currentTime);
+    if (center) {
+      mainViewer.camera.lookAt(
+        center,
+        new Cesium.HeadingPitchRange(
+          mainViewer.camera.heading,
+          Cesium.Math.toRadians(-45),
+          300,
+        ),
+      );
+    }
+
+    console.log(`🔒 已锁定到车辆: ${deviceId}`);
+    ElMessage.success(`已锁定到车辆 ${deviceId}`);
+  } else {
+    console.warn(`⚠️ 未找到车辆: ${deviceId}`);
+    ElMessage.warning(`未找到车辆 ${deviceId}`);
+  }
+};
+
+/**
+ * @description: 显示告警伴飞请求对话框
+ */
+const showAlarmDialog = (deviceId, alarmFlag) => {
+  ElMessageBox.confirm(
+    `<div style="padding: 10px;">
+      <h4 style="margin: 0 0 10px 0;">接收到伴飞请求</h4>
+      <p>车辆 ${deviceId} 发送了伴飞请求</p>
+      <p>告警标志: ${alarmFlag}</p>
+      <p>是否开始伴飞？</p>
+    </div>`,
+    "伴飞请求",
+    {
+      confirmButtonText: "开始伴飞",
+      cancelButtonText: "取消",
+      type: "warning",
+      dangerouslyUseHTMLString: true,
+      customClass: "alarm-dialog",
+    },
+  )
+    .then(() => {
+      ElMessageBox.prompt("请输入mode,1或5", "Tip", {
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+        inputPattern: /^[0-9]+$/,
+        inputErrorMessage: "Invalid Number",
+      })
+        .then(({ value }) => {
+          requestTakeOff(value, deviceId, DEVICE_CONFIG.droneId);
+        })
+        .catch(() => {});
+    })
+    .catch(() => {
+      console.log("用户取消伴飞请求");
+    });
+};
+
+/**
+ * @description: 处理 carBox 主题车辆消息（MQTT 与本地模拟共用）
+ */
+const handleCarBoxMessage = (topic, data) => {
+  console.log("🚗 收到车辆消息:", topic, data);
+
+  if (!mainViewer || mainViewer.isDestroyed?.()) {
+    ElMessage.warning("地图未就绪");
+    return;
+  }
+
+  if (isEmpty(data)) return;
+
+  const topicParts = topic.split("/");
+  const deviceId = topicParts[1] || data.deviceId;
+  if (!deviceId) {
+    console.warn("⚠️ 无法从主题中提取设备号:", topic);
+    return;
+  }
+
+  const { alarmFlag } = data;
+  const { lng, lat } = resolveVehicleMessageLngLat(data);
+
+  const vehicle = vehicleManager.createVehicle(mainViewer, deviceId);
+  vehicleManager.updateVehiclePosition(deviceId, lng, lat, 0);
+
+  if (isFirstPoint) {
+    mainViewer.trackedEntity = vehicle.entity;
+    isLockMode.value = true;
+    switchTrackedView(mainViewer, vehicle.entity, false);
+    isPitch2D.value = false;
+    isFirstPoint = false;
+  }
+
+  if (alarmFlag && alarmFlag !== 0) {
+    const vehicle = vehicleManager.vehicles.get(deviceId);
+    if (vehicle?.entity) {
+      mainViewer.trackedEntity = vehicle.entity;
+      isLockMode.value = true;
+      switchTrackedView(mainViewer, vehicle.entity, false);
+      isPitch2D.value = false;
+    }
+    lockToVehicle(deviceId);
+    showAlarmDialog(deviceId, alarmFlag);
+  }
+
+  systemStore.addCarMessage({ ...data, deviceId });
+};
+
+/**
+ * @description: 模拟实体车辆上报告警（本地测试，不依赖 MQTT Broker）
+ */
+const simulateVehicleAlarmMessage = () => {
+  if (!mainViewer || mainViewer.isDestroyed?.()) {
+    ElMessage.warning("请等待地图加载完成");
+    return;
+  }
+
+  let deviceId = DEVICE_CONFIG.targetId;
+  let latitude = DEFAULT_CENTER.lat;
+  let longitude = DEFAULT_CENTER.lng;
+
+  const mapVehicleIds = [...vehicleManager.vehicles.keys()];
+  if (vehicleManager.selectedDeviceId) {
+    deviceId = vehicleManager.selectedDeviceId;
+    const pos = vehicleManager.vehicles.get(deviceId)?.lastPosition;
+    if (pos) {
+      longitude = pos.longitude;
+      latitude = pos.latitude;
+    }
+  } else if (mapVehicleIds.length) {
+    deviceId = mapVehicleIds[0];
+    const pos = vehicleManager.vehicles.get(deviceId)?.lastPosition;
+    if (pos) {
+      longitude = pos.longitude;
+      latitude = pos.latitude;
+    }
+  } else if (TEST_POLICE_VEHICLES[0]) {
+    deviceId = TEST_POLICE_VEHICLES[0].id;
+    longitude = TEST_POLICE_VEHICLES[0].lng;
+    latitude = TEST_POLICE_VEHICLES[0].lat;
+  }
+
+  handleCarBoxMessage(`carBox/${deviceId}/alarm`, {
+    latitude,
+    longitude,
+    alarmFlag: 1,
+    deviceId,
+    simulated: true,
+  });
+
+  ElMessage.info(`已模拟车辆 ${deviceId} 的告警消息`);
+};
+
+/**
+ * @description: Initialize MQTT connection
+ * @return {*}
+ */
+const initialMqttConnect = () => {
+  mqttService.connect();
+
+  mqttService.subscribe("carBox/#", (topic, data) => {
+    handleCarBoxMessage(topic, data);
+  });
+
+  // Subscribe and handle messages for drone
+  mqttService.subscribe(droneTopic, (data) => {
+    console.log("drone - 组件接收到消息:", data);
+    if (!isEmpty(data)) {
+      const {
+        current_latitude,
+        current_longitude,
+        current_height,
+        attitude_head,
+        attitude_pitch,
+        attitude_roll,
+        gimbal_pitch,
+        gimbal_roll,
+        gimbal_yaw,
+        zoom_factor,
+      } = data;
+
+      systemStore.setDroneCurrentState({
+        attitude_head,
+        attitude_pitch,
+        attitude_roll,
+        gimbal_pitch,
+        gimbal_roll,
+        gimbal_yaw,
+        zoom_factor,
+      });
+
+      // 更新无人机姿态
+      droneState.attitude_head = attitude_head;
+      droneState.attitude_pitch = attitude_pitch;
+      droneState.attitude_roll = attitude_roll;
+      droneState.gimbal_pitch = gimbal_pitch;
+      droneState.gimbal_roll = gimbal_roll;
+      droneState.gimbal_yaw = gimbal_yaw;
+      droneState.zoom_factor = zoom_factor;
+
+      // // 校验不是 null/undefined，且不是 NaN
+      const isValid = (val) => typeof val === "number" && !isNaN(val);
+      if (
+        isValid(attitude_head) &&
+        isValid(attitude_pitch) &&
+        isValid(attitude_roll)
+      ) {
+        isAttitudeValid = true; // 标记数据有效
+      } else {
+        isAttitudeValid = false;
+        console.warn("收到无效姿态数据，隐藏视场锥");
+      }
+
+      const nowMs = Date.now();
+      // runningToPointWithTimeForDrone(current_longitude, current_latitude, 30, current_height);
+      // if (nowMs - lastDronePushTime > DRONE_MIN_INTERVAL) {}
+
+      updateDroneRealtime(current_longitude, current_latitude, current_height);
+      lastDronePushTime = nowMs;
+
+      // 获取变焦倍数
+      // const zoom = zoom_factor || 1.0;
+      // // 更新 manager 里的变焦参数
+      // zoomManager.updateZoom(zoom);
+    }
+    // msgList.value.push(data);
+    systemStore.addDroneMessage(data);
+    // isConnected.value = true;
+  });
+};
+
+const handleSend = () => {
+  const payload = {
+    time: new Date().toLocaleTimeString(),
+    text: "Hello from Vue 3!",
+  };
+  mqttService.publish(targetTopic, payload);
+};
+
+/**
+ * @description: 初始化右下角子窗口
+ * @return {*}
+ */
+const initSubViewer = () => {
+  subViewer = new Cesium.Viewer("subViewerContainer", {
+    sceneMode: Cesium.SceneMode.SCENE3D,
+    shouldAnimate: true,
+    sceneModePicker: false,
+    navigationHelpButton: false,
+    geocoder: false,
+    homeButton: false,
+    baseLayerPicker: false,
+    animation: false,
+    timeline: false,
+    fullscreenButton: false,
+    // animation: false,
+    // timeline: false,
+    infoBox: false,
+    selectionIndicator: false,
+    // geocoder: false,
+    // sceneModePicker: false,
+    // baseLayerPicker: false,
+    // navigationHelpButton: false,
+    // homeButton: false,
+    // fullscreenButton: false,
+    creditContainer: document.createElement("div"), // 隐藏logo
+  });
+
+  viewerLoadCount.value++;
+
+  // 设置摄像头底图（与主图一致）
+  subViewer.scene.skyAtmosphere.show = false;
+  subViewer.scene.fog.enabled = false;
+  if (subViewer.scene.skyBox) {
+    subViewer.scene.skyBox.show = false;
+  }
+  subViewer.scene.backgroundColor =
+    Cesium.Color.fromCssColorString(MAP_BASE_COLOR_HEX);
+  subViewer.scene.globe.baseColor =
+    Cesium.Color.fromCssColorString(MAP_BASE_COLOR_HEX);
+  subViewer.imageryLayers.removeAll();
+  const ImgWLayer = getTdtLayerProvider("img_w", { blueTint: true });
+  satelliteLayer = subViewer.imageryLayers.addImageryProvider(ImgWLayer);
+  const CiaWLayer = getTdtLayerProvider("cia_w");
+  satelMarkLayer = subViewer.imageryLayers.addImageryProvider(CiaWLayer);
+  applyLabelImageryTone(satelMarkLayer);
+  const VecWLayer = getTdtLayerProvider("vec_w");
+  vectorLayer = subViewer.imageryLayers.addImageryProvider(VecWLayer);
+  vectorLayer.show = false;
+  const CvaWLayer = getTdtLayerProvider("cva_w");
+  vectorMarkLayer = subViewer.imageryLayers.addImageryProvider(CvaWLayer);
+  applyLabelImageryTone(vectorMarkLayer);
+  vectorMarkLayer.show = false;
+
+  // 将相机固定在某个坐标
+  subViewer.camera.setView({
+    destination: CAMERA_POS,
+    // orientation: { heading: 0, pitch: Cesium.Math.toRadians(-20), roll: 0 },
+    orientation: {
+      heading: Cesium.Math.toRadians(0), // 正北
+      pitch: Cesium.Math.toRadians(-90),
+      roll: 0,
+    },
+  });
+
+  // 锁定位置：禁止用户通过洗盘/拖拽改变位置，只能右键旋转视角
+  subViewer.scene.screenSpaceCameraController.enableTranslate = true; // 允许平移
+  subViewer.scene.screenSpaceCameraController.enableZoom = true; // 允许缩放(FOV)
+  subViewer.scene.screenSpaceCameraController.enableTilt = true; // 允许倾斜
+  subViewer.scene.screenSpaceCameraController.enableRotate = true; // 允许旋转
+
+  // 调小近裁切面 ---
+  subViewer.scene.camera.frustum.near = 0.1;
+
+  setTimeout(() => {
+    addCameraHUD(subViewer);
+  }, 200);
+};
+
+/**
+ * 在小窗中添加相机取景框（边角 HUD）
+ * @param {Cesium.Viewer} subViewer 小窗实例
+ */
+const addCameraHUD = (subViewer) => {
+  const NEAR_DIST = 40.0;
+  const LINE_LEN_RATIO = 0.2; // 边角线长度比例
+  const CROSS_LEN_RATIO = 0.15; // 中心十字线长度比例
+  const THEME_COLOR = Cesium.Color.fromCssColorString("#ff0000"); // 科技感青色
+
+  // 基础坐标计算函数
+  const getExactCorner = (camera, hSign, vSign) => {
+    const frustum = camera.frustum;
+    if (!frustum || !frustum.fovy) return null;
+
+    const aspect =
+      frustum.aspect ||
+      subViewer.canvas.clientWidth / subViewer.canvas.clientHeight ||
+      1.0;
+    const fovy = frustum.fovy;
+
+    const halfV = Math.tan(fovy / 2) * NEAR_DIST;
+    const halfH = halfV * aspect;
+
+    const scaledH = halfH * SCOPE_RATIO;
+    const scaledV = halfV * SCOPE_RATIO;
+
+    const pos = camera.positionWC;
+    const direction = camera.directionWC;
+    const up = camera.upWC;
+    const right = camera.rightWC;
+
+    const center = Cesium.Cartesian3.add(
+      pos,
+      Cesium.Cartesian3.multiplyByScalar(
+        direction,
+        NEAR_DIST,
+        new Cesium.Cartesian3(),
+      ),
+      new Cesium.Cartesian3(),
+    );
+
+    const hVec = Cesium.Cartesian3.multiplyByScalar(
+      right,
+      hSign * scaledH,
+      new Cesium.Cartesian3(),
+    );
+    const vVec = Cesium.Cartesian3.multiplyByScalar(
+      up,
+      vSign * scaledV,
+      new Cesium.Cartesian3(),
+    );
+
+    const corner = Cesium.Cartesian3.add(center, hVec, new Cesium.Cartesian3());
+    return Cesium.Cartesian3.add(corner, vVec, new Cesium.Cartesian3());
+  };
+
+  // 通用线段绘制函数
+  const createPolyline = (positionCallback) => {
+    subViewer.entities.add({
+      polyline: {
+        positions: new Cesium.CallbackProperty(positionCallback, false),
+        width: 2,
+        material: THEME_COLOR,
+        depthFailMaterial: THEME_COLOR,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        arcType: Cesium.ArcType.NONE,
+      },
+    });
+  };
+
+  // ---  绘制 4 个 L 形边角 ---
+
+  // 左上角 (TL): 往右(+), 往下(-)
+  createPolyline(() => {
+    const cam = subViewer.camera;
+    const corner = getExactCorner(cam, -1, 1);
+    const p1 = getExactCorner(cam, -1 + LINE_LEN_RATIO, 1);
+    const p2 = getExactCorner(cam, -1, 1 - LINE_LEN_RATIO);
+    return corner && p1 && p2 ? [p1, corner, p2] : [];
+  });
+
+  // 右上角 (TR): 往左(-), 往下(-)
+  createPolyline(() => {
+    const cam = subViewer.camera;
+    const corner = getExactCorner(cam, 1, 1);
+    const p1 = getExactCorner(cam, 1 - LINE_LEN_RATIO, 1);
+    const p2 = getExactCorner(cam, 1, 1 - LINE_LEN_RATIO);
+    return corner && p1 && p2 ? [p1, corner, p2] : [];
+  });
+
+  // 左下角 (BL): 往右(+), 往上(+)
+  createPolyline(() => {
+    const cam = subViewer.camera;
+    const corner = getExactCorner(cam, -1, -1);
+    const p1 = getExactCorner(cam, -1 + LINE_LEN_RATIO, -1);
+    const p2 = getExactCorner(cam, -1, -1 + LINE_LEN_RATIO);
+    return corner && p1 && p2 ? [p1, corner, p2] : [];
+  });
+
+  // 右下角 (BR): 往左(-), 往上(+)
+  createPolyline(() => {
+    const cam = subViewer.camera;
+    const corner = getExactCorner(cam, 1, -1);
+    const p1 = getExactCorner(cam, 1 - LINE_LEN_RATIO, -1);
+    const p2 = getExactCorner(cam, 1, -1 + LINE_LEN_RATIO);
+    return corner && p1 && p2 ? [p1, corner, p2] : [];
+  });
+
+  // --- 绘制中心十字准星 ---
+
+  // 水平线
+  createPolyline(() => {
+    const cam = subViewer.camera;
+    const p1 = getExactCorner(cam, -CROSS_LEN_RATIO, 0);
+    const p2 = getExactCorner(cam, CROSS_LEN_RATIO, 0);
+    return p1 && p2 ? [p1, p2] : [];
+  });
+
+  // 垂直线
+  createPolyline(() => {
+    const cam = subViewer.camera;
+    const p1 = getExactCorner(cam, 0, -CROSS_LEN_RATIO);
+    const p2 = getExactCorner(cam, 0, CROSS_LEN_RATIO);
+    return p1 && p2 ? [p1, p2] : [];
+  });
+};
+
+/**
+ * @description: 创建主窗口的视锥体，用于显示子窗口的可见区域（四棱台）
+ * @param {*} mainViewer
+ * @param {*} subViewer
+ * @return {*}
+ */
+const createVisualFrustum = (mainViewer, subViewer, cameraPos) => {
+  const FOV_H = 60; // 水平视场角
+  const FOV_V = 40; // 垂直视场角
+  const NEAR_DIST = 40; // 近平面距离（顶面）
+  const FAR_DIST = 500.0; // 远平面距离（底面）
+
+  const getRectCorners = (distance) => {
+    const camera = subViewer.camera;
+    const direction = camera.direction;
+    const up = camera.up;
+    const right = camera.right;
+
+    // const halfH = Math.tan(Cesium.Math.toRadians(FOV_H) / 2) * distance;
+    // const halfV = Math.tan(Cesium.Math.toRadians(FOV_V) / 2) * distance;
+
+    const halfH =
+      Math.tan(Cesium.Math.toRadians(FOV_H) / 2) * distance * SCOPE_RATIO; // 和小窗必须一致
+    const halfV =
+      Math.tan(Cesium.Math.toRadians(FOV_V) / 2) * distance * SCOPE_RATIO;
+
+    const center = Cesium.Cartesian3.add(
+      cameraPos,
+      Cesium.Cartesian3.multiplyByScalar(
+        direction,
+        distance,
+        new Cesium.Cartesian3(),
+      ),
+      new Cesium.Cartesian3(),
+    );
+
+    return [
+      calculateCorner(center, right, up, -halfH, halfV),
+      calculateCorner(center, right, up, halfH, halfV),
+      calculateCorner(center, right, up, halfH, -halfV),
+      calculateCorner(center, right, up, -halfH, -halfV),
+    ];
+  };
+
+  // 创建 4 个侧面 (确保连接的是 nearCorners 和 farCorners)
+  for (let i = 0; i < 4; i++) {
+    mainViewer.entities.add({
+      polygon: {
+        hierarchy: new Cesium.CallbackProperty(() => {
+          const near = getRectCorners(NEAR_DIST);
+          const far = getRectCorners(FAR_DIST);
+          const next = (i + 1) % 4;
+          // 顺时针连线：近点i -> 近点next -> 远点next -> 远点i
+          return new Cesium.PolygonHierarchy([
+            near[i],
+            near[next],
+            far[next],
+            far[i],
+          ]);
+        }, false),
+        material: Cesium.Color.CYAN.withAlpha(0.2),
+        perPositionHeight: true,
+        outline: true,
+        outlineColor: Cesium.Color.WHITE.withAlpha(0.5),
+      },
+    });
+  }
+
+  // 顶部矩形 (近平面 - 此时会显得很宽)
+  mainViewer.entities.add({
+    polygon: {
+      hierarchy: new Cesium.CallbackProperty(() => {
+        return new Cesium.PolygonHierarchy(getRectCorners(NEAR_DIST));
+      }, false),
+      material: Cesium.Color.CYAN.withAlpha(0.4),
+      perPositionHeight: true,
+      outline: true,
+      outlineColor: Cesium.Color.WHITE,
+    },
+  });
+
+  // 底部矩形 (远平面)
+  mainViewer.entities.add({
+    polygon: {
+      hierarchy: new Cesium.CallbackProperty(() => {
+        return new Cesium.PolygonHierarchy(getRectCorners(FAR_DIST));
+      }, false),
+      material: Cesium.Color.CYAN.withAlpha(0.3),
+      perPositionHeight: true,
+      outline: true,
+      outlineColor: Cesium.Color.WHITE,
+    },
+  });
+};
+
+/**
+ * @description: 计算视锥体的四个角点
+ * @param {*} center
+ * @param {*} right
+ * @param {*} up
+ * @param {*} hOffset
+ * @param {*} vOffset
+ * @return {*}
+ */
+function calculateCorner(center, right, up, hOffset, vOffset) {
+  const hVec = Cesium.Cartesian3.multiplyByScalar(
+    right,
+    hOffset,
+    new Cesium.Cartesian3(),
+  );
+  const vVec = Cesium.Cartesian3.multiplyByScalar(
+    up,
+    vOffset,
+    new Cesium.Cartesian3(),
+  );
+  const result = Cesium.Cartesian3.add(center, hVec, new Cesium.Cartesian3());
+  return Cesium.Cartesian3.add(result, vVec, result);
+}
+
+/**
+ * 使用 CallbackProperty 实现动态同步直角四棱台
+ * @param {Cesium.Viewer} mainViewer 主图
+ * @param {Cesium.Viewer} subViewer 小窗
+ * @param {Object} config 基础配置
+ */
+const addDynamicHorizontalFrustum = (mainViewer, subViewer, config) => {
+  // 核心计算函数
+  const getPoints = () => {
+    if (!mainViewer || !subViewer || !subViewer.camera) return null;
+
+    const camera = subViewer.camera;
+    // 获取摄像头安装点的地面基础坐标系 (ENU)
+    const center = Cesium.Cartesian3.fromDegrees(
+      config.position[0],
+      config.position[1],
+    );
+    const enuMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(center);
+
+    // 只取 Heading，不取 Pitch
+    // 这样确保了生成的坐标系中，Z轴永远是指向天空的（垂直于地面）
+    const heading = camera.heading;
+    const rotation = Cesium.Matrix3.fromRotationZ(
+      Cesium.Math.PI_OVER_TWO - heading,
+    );
+    const modelMatrix = Cesium.Matrix4.multiplyByMatrix3(
+      enuMatrix,
+      rotation,
+      new Cesium.Matrix4(),
+    );
+
+    const { nearSize, farSize, distance } = config;
+    const nW = nearSize.w * SCOPE_RATIO;
+    const nH = nearSize.h * SCOPE_RATIO;
+    const fW = farSize.w * SCOPE_RATIO;
+    const fH = farSize.h * SCOPE_RATIO;
+
+    // 局部坐标转世界坐标
+    const compute = (x, y, z) => {
+      return Cesium.Matrix4.multiplyByPoint(
+        modelMatrix,
+        new Cesium.Cartesian3(x, y, z),
+        new Cesium.Cartesian3(),
+      );
+    };
+
+    // 定义顶点坐标
+    // n1-n2, f1-f2 的 Z 坐标为 0，确保它们在地面
+    // n3-n4, f3-f4 的 Z 坐标为高度值，且由于矩阵没旋转 Pitch，它们在垂直上方
+    return {
+      n1: compute(0, -nW / 2, 0.1), // 近左下 (贴地)
+      n2: compute(0, nW / 2, 0.1), // 近右下 (贴地)
+      n3: compute(0, nW / 2, nH), // 近右上 (垂直向上)
+      n4: compute(0, -nW / 2, nH), // 近左上 (垂直向上)
+      f1: compute(distance, -fW / 2, 0.1), // 远左下 (贴地)
+      f2: compute(distance, fW / 2, 0.1), // 远右下 (贴地)
+      f3: compute(distance, fW / 2, fH), // 远右上 (垂直向上)
+      f4: compute(distance, -fW / 2, fH), // 远左上 (垂直向上)
+    };
+  };
+
+  const faces = [
+    { name: "底", i: ["n1", "n2", "f2", "f1"], a: 0.4 }, // 贴地的面
+    { name: "顶", i: ["n4", "n3", "f3", "f4"], a: 0.2 }, // 天空的斜面
+    { name: "左", i: ["n1", "n4", "f4", "f1"], a: 0.3 }, // 垂直的墙面
+    { name: "右", i: ["n2", "n3", "f3", "f2"], a: 0.3 }, // 垂直的墙面
+    { name: "近", i: ["n1", "n2", "n3", "n4"], a: 0.5 }, // 垂直的镜头面
+    { name: "远", i: ["f1", "f2", "f3", "f4"], a: 0.1 }, // 垂直的末端面
+  ];
+
+  faces.forEach((f) => {
+    mainViewer.entities.add({
+      name: `FRUSTUM_${f.name}`,
+      polygon: {
+        hierarchy: new Cesium.CallbackProperty(() => {
+          const pts = getPoints();
+          if (!pts || !pts.n1) return null;
+          return new Cesium.PolygonHierarchy(f.i.map((key) => pts[key]));
+        }, false),
+        perPositionHeight: true,
+        material: Cesium.Color.CYAN.withAlpha(f.a),
+        outline: true,
+        outlineColor: Cesium.Color.WHITE.withAlpha(0.6),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
+  });
+
+  // 辅助标记点
+  // mainViewer.entities.add({
+  //   position: Cesium.Cartesian3.fromDegrees(config.position[0], config.position[1], 2),
+  //   point: { pixelSize: 15, color: Cesium.Color.YELLOW },
+  // });
+};
+
+/**
+ * @description: 聚焦到视锥体中心
+ * @param {*} viewer
+ * @param {*} config
+ * @return {*}
+ */
+const focusOnFrustum = (viewer, config) => {
+  const center = Cesium.Cartesian3.fromDegrees(
+    config.position[0],
+    config.position[1],
+    0,
+  );
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(
+      config.position[0],
+      config.position[1],
+      1500.0,
+    ), // 飞到 1500 米高度
+    orientation: {
+      heading: Cesium.Math.toRadians(120), // 稍微偏转一点
+      pitch: Cesium.Math.toRadians(-35), // 3D 俯视角度
+      roll: 0,
+    },
+  });
+};
+
+/**
+ * 同步相机视角：小窗 -> 主图
+ */
+const syncCamera = (subViewer, mainViewer) => {
+  const subCamera = subViewer.camera;
+  const mainCamera = mainViewer.camera;
+
+  // 设置灵敏度：数值越小越灵敏，0.01 表示变化 1% 时触发
+  subCamera.percentageChanged = 0.01;
+
+  subCamera.changed.addEventListener(() => {
+    // 获取小窗当前的相机状态
+    const camera = subViewer.camera;
+
+    // 更新主图视角
+    mainCamera.setView({
+      destination: camera.position.clone(),
+      orientation: {
+        heading: camera.heading,
+        pitch: camera.pitch,
+        roll: camera.roll,
+      },
+    });
+  });
+};
+
+// 鼠标点击地图时就取消视图锁定，恢复平移操作
+const initManualUnlock = (viewer) => {
+  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+
+  // 监听左键按下（开始平移）
+  handler.setInputAction(() => {
+    if (viewer.trackedEntity) {
+      console.log("检测到手动操作，自动解除跟随");
+      viewer.trackedEntity = undefined;
+      isLockMode.value = false;
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+};
+
+// 监听鼠标移动，实时更新坐标
+const initCoordinateTracker = (viewer) => {
+  handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+
+  // 监听鼠标移动
+  handler.setInputAction((movement) => {
+    // 获取鼠标在屏幕上的像素位置
+    const windowPosition = movement.endPosition;
+
+    // 将像素位置转换为三维世界坐标
+    // 如果有 3D 地形或模型，使用 pickPosition。如果是纯平面，可以使用 pickEllipsoid
+    let cartesian;
+    if (viewer.scene.mode === Cesium.SceneMode.SCENE3D) {
+      // 3D 模式下捕捉地形和模型表面
+      const ray = viewer.camera.getPickRay(windowPosition);
+      cartesian = viewer.scene.globe.pick(ray, viewer.scene);
+    } else {
+      // 2D 模式或非地形模式
+      cartesian = viewer.camera.pickEllipsoid(windowPosition);
+    }
+
+    if (Cesium.defined(cartesian)) {
+      // 笛卡尔(Cartesian3) -> 弧度(Cartographic)
+      const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+
+      // 弧度 -> 角度 (Degrees)
+      const lng = Cesium.Math.toDegrees(cartographic.longitude).toFixed(6);
+      const lat = Cesium.Math.toDegrees(cartographic.latitude).toFixed(6);
+      const alt = cartographic.height.toFixed(1);
+
+      // 更新响应式变量
+      coords.lng = lng;
+      coords.lat = lat;
+      coords.alt = alt;
+    }
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+};
+
+// 绘制动态车辆点位
+let dynamicCarEntities = [];
+const drawDynamicCar = (viewer, dynamicCarList) => {
+  // 先清除已有的动态车辆点位
+  dynamicCarEntities.forEach((entity) => {
+    viewer.entities.remove(entity);
+  });
+  // const sphereRadius = new Cesium.CallbackProperty(() => {
+  //   // 获取相机高度
+  //   const height = viewer.camera.positionCartographic.height;
+  //   // 动态计算半径：高度越高半径越大，保证始终可见
+  //   // 这里的系数 0.005
+  //   const r = Math.max(1.0, height * 0.02);
+  //   return new Cesium.Cartesian3(r, r, r);
+  // }, false);
+  // 绘制点位
+  dynamicCarEntities = [];
+  dynamicCarList.forEach((car) => {
+    const { current_longitude, current_latitude } = car;
+    const position = Cesium.Cartesian3.fromDegrees(
+      current_longitude,
+      current_latitude,
+      0,
+    );
+
+    const entity = viewer.entities.add({
+      position,
+      ellipsoid: {
+        radii: new Cesium.Cartesian3(1.0, 1.0, 1.0),
+        material: Cesium.Color.RED,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      },
+    });
+
+    // const entity = viewer.entities.add({
+    //   position,
+    //   cylinder: {
+    //     length: 1.0, // 高度（厚度）1米
+    //     topRadius: 1.0, // 半径 2米
+    //     bottomRadius: 1.0,
+    //     material: Cesium.Color.fromCssColorString("#ff0000").withAlpha(0.8),
+    //     outline: false,
+    //     outlineColor: Cesium.Color.RED,
+    //     heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+    //   },
+    // });
+    dynamicCarEntities.push(entity);
+  });
+};
+const { triggerLockdown, clearLockdownMarkers, lockdownEntities } = useLockdown(
+  {
+    getViewer: () => mainViewer,
+    getDronePositionProp: () => dronePositionProp,
+    defaultCenter: DEFAULT_CENTER,
+    droneHeight: DRONE_HEIGHT,
+    getDroneCandidates: () =>
+      Array.from(droneTestManager.drones.entries()).map(([id, drone]) => ({
+        id,
+        lastPosition: drone.lastPosition,
+      })),
+    dispatchDroneToPoint: (lng, lat, speed, height, droneId) => {
+      if (droneId) {
+        const escortTimer = escortTimers.get(droneId);
+        if (escortTimer) {
+          clearInterval(escortTimer);
+          escortTimers.delete(droneId);
+        }
+        droneTestManager.flyToPoint(droneId, lng, lat, speed, height);
+        return;
+      }
+
+      runningToPointWithTimeForDrone(lng, lat, speed, height);
+    },
+  },
+);
+
+const toggleLayerVisibility = ({ key, active }) => {
+  if (!mainViewer) return;
+
+  const setEntitiesShow = (entities, show) => {
+    entities.forEach((e) => {
+      if (e && e.show !== undefined) e.show = show;
+    });
+  };
+
+  switch (key) {
+    case "drone":
+      droneTestManager.drones.forEach((drone) => {
+        if (drone.entity) drone.entity.show = active;
+      });
+      if (droneEntity) droneEntity.show = active;
+      break;
+    case "policeCar":
+      vehicleManager.vehicles.forEach((vehicle) => {
+        if (vehicle.entity) vehicle.entity.show = active;
+      });
+      if (carEntity) carEntity.show = active;
+      break;
+    case "checkpoint":
+      setEntitiesShow(lockdownEntities, active);
+      break;
+    case "route":
+      setEntitiesShow(routeMarkers, active);
+      setEntitiesShow(verticalLines, active);
+      break;
+    case "officer":
+      break;
+  }
+};
+
+const recallDrone = (device) => {
+  if (!device?.id) return;
+  const timer = escortTimers.get(device.id);
+  if (timer) {
+    clearInterval(timer);
+    escortTimers.delete(device.id);
+  }
+  deviceStore.setDroneStandby(device.id);
+  ElMessage.success(`无人机 ${device.name || device.id} 已召回`);
+};
+
+const resizeMapView = () => {
+  try {
+    if (mainViewer && !mainViewer.isDestroyed?.()) mainViewer.resize();
+    if (subViewer && !subViewer.isDestroyed?.()) subViewer.resize();
+  } catch (_) {
+    /* ignore */
+  }
+};
+
+function trySyncDronesAfterApiLoad() {
+  if (!mainViewer || mainViewer.isDestroyed?.()) return;
+  if (viewerLoadCount.value < 1) return;
+  if (!deviceStore.dronesLoadedFromApi) return;
+  syncDronesFromDeviceStore();
+  requestAnimationFrame(() => resizeMapView());
+}
+
+function trySyncTargetsAfterApiLoad() {
+  if (!mainViewer || mainViewer.isDestroyed?.()) return;
+  if (viewerLoadCount.value < 1) return;
+  if (!deviceStore.targetsLoadedFromApi) return;
+  syncTargetsFromDeviceStore();
+  requestAnimationFrame(() => resizeMapView());
+}
+
+defineExpose({
+  triggerLockdown,
+  recallDrone,
+  toggleLayerVisibility,
+  resizeMapView,
+});
+watch(
+  () => viewerLoadCount.value,
+  (newVal) => {
+    if (newVal >= 1 && mainViewer && !mainViewer.isDestroyed?.()) {
+      syncFlightPlanPolygon();
+      trySyncDronesAfterApiLoad();
+      trySyncTargetsAfterApiLoad();
+    }
+    if (newVal === 2) {
+      // 创建主窗口的视锥体，用于显示子窗口的可见区域
+      // createVisualFrustum(mainViewer, subViewer, CAMERA_POS);
+
+      // 绘制贴地直角四棱台（监控照射范围）
+      // const config = {
+      //   position: [DEFAULT_CENTER.lng, DEFAULT_CENTER.lat],
+      //   nearSize: { w: 200, h: 200 },
+      //   farSize: { w: 800, h: 400 },
+      //   distance: 1000,
+      // };
+      // addDynamicHorizontalFrustum(mainViewer, subViewer, config);
+      // focusOnFrustum(mainViewer, config);
+
+      // 同步相机视角：小窗 -> 主图
+      syncCamera(subViewer, mainViewer);
+    }
+  },
+);
+
+watch(
+  () => [deviceStore.dronesLoadedFromApi, deviceStore.drones.length],
+  () => {
+    trySyncDronesAfterApiLoad();
+  },
+  { flush: "post" },
+);
+
+watch(
+  () => [deviceStore.targetsLoadedFromApi, deviceStore.targets.length],
+  () => {
+    trySyncTargetsAfterApiLoad();
+  },
+  { flush: "post" },
+);
+
+onMounted(() => {
+  try {
+    initViewer();
+  } finally {
+    isLoading.value = false;
+  }
+
+  // 地图首屏优先，MQTT 连接放到 Viewer 初始化之后再启动。
+  setTimeout(() => {
+    initialMqttConnect();
+  }, 0);
+});
+
+onUnmounted(() => {
+  mqttService.destroy();
+  clearLockdownMarkers();
+  closePoliceVehiclePopup();
+  vehicleManager.selectedDeviceId = null;
+  if (mainViewer) {
+    mainViewer.destroy();
+    mainViewer = null;
+  }
+  if (subViewer) {
+    subViewer.destroy();
+    subViewer = null;
+  }
+  if (handler) {
+    handler.destroy();
+    handler = null;
+  }
+  // 清理车辆点击事件处理器
+  cleanupVehicleClickHandler();
+  systemStore.clearCarMessageList();
+  systemStore.clearDroneMessageList();
+  // 清理测试消息定时器
+  clearPublishMessageTimers();
+});
+</script>
+
+<style lang="scss" scoped>
+.map-container,
+#cesiumContainer {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.map-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: #292E38;
+  z-index: 1000;
+}
+
+.map-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #409eff;
+  border-radius: 50%;
+  animation: map-spin 0.8s linear infinite;
+}
+
+@keyframes map-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.map-loading-text {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+}
+
+:deep(.cesium-viewer-bottom) {
+  display: none;
+}
+
+.custom-controls {
+  position: absolute;
+  bottom: 40px;
+  right: 20px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+
+  button {
+    width: 30px;
+    height: 30px;
+    background-color: #ffffff;
+    color: #4e4e4e;
+    line-height: 30px;
+    font-size: 14px;
+    font-weight: bold;
+    border-radius: 2px;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+    text-align: center;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    box-sizing: border-box;
+  }
+
+  .test-data-btn {
+    width: auto !important;
+    padding: 0 8px;
+    min-width: 30px;
+    font-size: 12px !important;
+    background-color: #409eff !important;
+    color: #fff !important;
+  }
+
+  .test-alarm-btn {
+    width: auto !important;
+    padding: 0 8px;
+    min-width: 30px;
+    font-size: 12px !important;
+    background-color: #e6a23c !important;
+    color: #fff !important;
+  }
+
+  .group-controls {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    border-radius: 2px;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+    box-sizing: border-box;
+    width: 30px;
+
+    button {
+      &:not(:last-child) {
+        border-bottom: 1px solid #dcdee2;
+      }
+
+      border-radius: 0;
+      box-shadow: unset !important;
+    }
+  }
+
+  .round-control {
+    cursor: pointer;
+    background: var(--switch-background);
+    border-radius: 50%;
+    justify-content: center;
+    align-items: center;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+  }
+}
+
+.mode-list {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  gap: 10px;
+
+  &_img {
+    position: relative;
+    width: 120px;
+    height: 80px;
+    cursor: pointer;
+
+    &:hover {
+      outline: 2px solid #1890ff;
+    }
+
+    .el-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .description {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      background-color: rgba(0, 0, 0, 0.4);
+      color: #ffffff;
+      height: 24px;
+      line-height: 24px;
+      text-align: center;
+      font-size: 12px;
+    }
+
+    .check-button {
+      position: absolute;
+      top: 3px;
+      right: 3px;
+      width: 18px;
+      height: 18px;
+      background-color: #1890ff;
+    }
+  }
+}
+
+.police-vehicle-popup {
+  position: absolute;
+  z-index: 200;
+  width: 280px;
+  padding: 12px 14px;
+  border-radius: 6px;
+  border: 1px solid #30363b;
+  background: rgba(3, 6, 10, 0.65);
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1.5;
+  pointer-events: auto;
+  box-sizing: border-box;
+  backdrop-filter: blur(6px);
+
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    // border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  &__icon {
+    font-size: 20px;
+    color: #558efc;
+    flex-shrink: 0;
+  }
+
+  &__title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #ffffff;
+  }
+
+  &__row {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 8px;
+
+    &--alert .police-vehicle-popup__value {
+      color: #ffcc66;
+    }
+  }
+
+  &__field {
+    display: flex;
+    // flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  &__label {
+    color: #FFF;
+font-family: "HarmonyOS Sans SC";
+font-size: 14px;
+font-style: normal;
+font-weight: 400;
+line-height: normal;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  &__value {
+    color: #ffffff;
+    flex: 1;
+    min-width: 0;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+  }
+
+  &__select {
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 2px;
+    border: 1px solid #30363b;
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    font-size: 12px;
+    outline: none;
+    cursor: pointer;
+
+    option {
+      background: #1a1f24;
+      color: #ffffff;
+    }
+  }
+
+  &__empty {
+    margin: 0 0 12px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  &__escort {
+    display: block;
+    width: 100%;
+    padding: 8px 0;
+    border: none;
+    border-radius: 2px;
+    background: #558efc;
+    color: #ffffff;
+    font-size: 14px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+
+    &:hover:not(:disabled) {
+      opacity: 0.9;
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.sub-view-window {
+  position: fixed;
+  bottom: 20px;
+  right: 60px;
+  width: 320px;
+  height: 180px;
+  border: 2px solid #00eeee;
+  background: #000;
+  z-index: 1000;
+  box-shadow: 0 0 8px #000000;
+  #subViewerContainer {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.bottom-controls {
+  position: absolute;
+  width: calc(100% - 40px);
+  padding: 0 20px;
+  height: 30px;
+  bottom: 0;
+  left: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background-color: rgba(0, 0, 0, 0.4);
+  .icon-button {
+    color: #ffffff;
+    font-size: 18px;
+    &:hover {
+      color: #1890ff;
+    }
+  }
+  .location-text {
+    color: #ffffff;
+    font-size: 14px;
+  }
+}
+.mouse-operation {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-start;
+  .mouse-operation-list {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    .mouse-operation-item {
+      position: relative;
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
+      font-size: 14px;
+      color: #ffffff;
+      line-height: 30px;
+    }
+    &:last-child {
+      flex: auto;
+      width: 0;
+    }
+  }
+}
+</style>
+<style lang="scss">
+.mouse-operation-popover {
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  background: rgba(0, 0, 0, 0.8) !important;
+}
+</style>

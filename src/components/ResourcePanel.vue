@@ -229,8 +229,10 @@ const handleDeviceCardClick = (panel, device) => {
   emit("open-drone-stream", device);
 };
 
-/** 列表里 ID 展示为简短数字，如 DRONE-001 → 1 */
+/** 列表里 ID：优先展示 SN，否则从 id 里取可读片段 */
 function formatDeviceListId(device) {
+  const sn = device?.sn?.trim?.();
+  if (sn) return sn;
   const raw = device?.id;
   if (raw == null || raw === "") return "—";
   const id = String(raw);
@@ -255,18 +257,19 @@ function formatDeviceEndurance(device) {
   return String(e);
 }
 
-/** 右侧状态配色：escorting | ready | offline */
+/** 右侧状态配色：escorting | returning | ready | offline */
 function deviceCardTone(device) {
   if (!device?.commOk) return "offline";
   if (device.isEscorting) return "escorting";
+  if (device.status === "returning") return "returning";
   return "ready";
 }
 
 function deviceCardStatusLabel(device) {
   if (!device?.commOk) return "离线";
   if (device.isEscorting) return "伴飞中";
-  if (device.status === "flying") return device.statusText || "飞行中";
-  return "就绪";
+  if (device.status === "returning") return device.statusText || "返航中";
+  return device.statusText || "就绪";
 }
 </script>
 
@@ -699,6 +702,10 @@ function deviceCardStatusLabel(device) {
 
     &--offline {
       color: #EA375F;
+    }
+
+    &--returning {
+      color: #e6c35c;
     }
   }
 

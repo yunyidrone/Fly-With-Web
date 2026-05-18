@@ -28,8 +28,40 @@
     </div>
   </Teleport>
 
-  <div class="map-legend-wrapper">
-    <div class="legend-layout">
+  <div class="map-legend-wrapper" @click.stop>
+    <div class="legend-toolbar">
+      <div class="legend-actions" aria-label="图例快捷操作">
+        <button
+          type="button"
+          class="legend-action-btn"
+          @click.stop="restoreDefault"
+        >
+          <img
+            :src="hfmrPng"
+            alt=""
+            class="legend-action-icon-img"
+            width="16"
+            height="16"
+          />
+          <span>恢复默认</span>
+        </button>
+        <button
+          type="button"
+          class="legend-action-btn"
+          @click.stop="clearAllSelection"
+        >
+          <img
+            :src="qkxzPng"
+            alt=""
+            class="legend-action-icon-img"
+            width="16"
+            height="16"
+          />
+          <span>清空选中</span>
+        </button>
+      </div>
+
+      <div class="legend-layout">
       <div class="legend-panel legend-panel--main">
         <div class="legend-items">
           <template v-for="(item, index) in legendItems" :key="item.key">
@@ -60,6 +92,7 @@
           <span class="legend-label">{{ lockdownItem.label }}</span>
         </button>
       </div>
+      </div>
     </div>
   </div>
 </template>
@@ -74,6 +107,19 @@ import dbJcPng from "@/assets/images/db_jc.png";
 import dbKdPng from "@/assets/images/db_kd.png";
 import dbBflxPng from "@/assets/images/db_bflx.png";
 import dbYjfcPng from "@/assets/images/db_yjfc.png";
+import hfmrPng from "@/assets/images/hfmr.png";
+import qkxzPng from "@/assets/images/qkxz.png";
+
+/** 与初次进入页一致的图例开关（恢复默认用） */
+const DEFAULT_LEGEND_ACTIVE = {
+  drone: true,
+  robotDog: false,
+  unmannedBoat: false,
+  officer: false,
+  policeCar: true,
+  checkpoint: false,
+  route: false,
+};
 
 const legendItems = reactive([
   { key: "drone", iconSrc: dbWrjPng, label: "无人机", active: true },
@@ -106,15 +152,104 @@ const confirmLockdown = () => {
   showLockdownConfirm.value = false;
   emit("lockdown");
 };
+
+/** 恢复默认：图例开关回到初始状态并同步地图图层显隐 */
+function restoreDefault() {
+  legendItems.forEach((item) => {
+    const next = DEFAULT_LEGEND_ACTIVE[item.key];
+    if (next === undefined) return;
+    if (item.active !== next) {
+      item.active = next;
+      emit("toggle", { key: item.key, active: item.active });
+    }
+  });
+}
+
+/** 清空选中：关闭全部图例对应地图图层（始终向地图同步一遍，避免图例状态与地图已脱节时第一次无效） */
+function clearAllSelection() {
+  legendItems.forEach((item) => {
+    item.active = false;
+    emit("toggle", { key: item.key, active: false });
+  });
+}
 </script>
 
 <style lang="scss" scoped>
 .map-legend-wrapper {
   position: absolute;
   bottom: 40px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
   z-index: 100;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.legend-toolbar {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.legend-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.legend-action-btn {
+  display: inline-flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0 14px;
+  min-width: 92px;
+  border-radius: 6px;
+  border: 1px solid #30363b;
+  background: rgba(3, 6, 10, 0.65);
+  color: #fff;
+  font-family: "HarmonyOS Sans SC", "Segoe UI", sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  box-sizing: border-box;
+  user-select: none;
+  backdrop-filter: blur(10px);
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease;
+
+  &:hover {
+    border-color: rgba(73, 101, 201, 0.55);
+    background: rgba(12, 18, 28, 0.82);
+  }
+
+  &:active {
+    opacity: 0.92;
+  }
+}
+
+.legend-action-icon-img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+  display: block;
+}
+
+.legend-action-btn > span:last-of-type {
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
 }
 
 .lockdown-confirm {
