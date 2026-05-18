@@ -121,7 +121,7 @@
         </div>
       </el-popover>
     </div>
-    <div class="bottom-controls">
+    <!-- <div class="bottom-controls">
       <el-popover
         popper-class="mouse-operation-popover"
         placement="top"
@@ -160,7 +160,7 @@
       <div class="location-text" v-if="coords.lng && coords.lat">
         {{ "经度:" + coords.lng }}，{{ "纬度:" + coords.lat }}
       </div>
-    </div>
+    </div> -->
     <!-- 右下角小窗 -->
     <div class="sub-view-window" style="opacity: 0; display: none">
       <div id="subViewerContainer"></div>
@@ -435,6 +435,23 @@ watch(
 );
 const TK_LIST = TIANDITU_CONFIG.keyList;
 const DEFAULT_CENTER = MAP_CONFIG.defaultCenter;
+const MAP_BASE_COLOR_HEX = "#292E38";
+/** 影像主题色映射（与原 blueTint 同思路）：灰度按此 RGB 比例染色，对齐设计底色的色相 */
+const MAP_TINT_RGB = { r: 0x29, g: 0x2e, b: 0x38 };
+
+/**
+ * 标注层（cia / cva）：略压暗，减轻过亮刺眼
+ * brightness 可在 0.7–0.9 区间微调
+ */
+function applyLabelImageryTone(layer) {
+  if (!layer) return;
+  layer.alpha = 0.9;
+  layer.brightness = 0.6;
+  layer.saturation = 0.85;
+  layer.contrast = 0.94;
+  layer.gamma = 1.0;
+  layer.hue = 0.0;
+}
 // map mode type list
 const MAP_MODE_LIST = [
   { src: DefaultMapImg2, label: "标准地图", value: "normal" },
@@ -965,12 +982,19 @@ const handleMapRoadNetVisible = (e) => {
 const applyDarkMapTone = (layer, layerCode) => {
   if (!layer) return;
 
+  const isBaseLayer = layerCode === "img_w" || layerCode === "vec_w";
   const isLabelLayer = layerCode === "cia_w" || layerCode === "cva_w";
+  if (isBaseLayer) {
+    // 底图颜色走瓦片内 mapTint（原 blueTint 路径）；此处不再叠加重滤镜，以免发灰发紫。
+    layer.alpha = 1.0;
+    layer.brightness = 1.0;
+    layer.contrast = 1.0;
+    layer.saturation = 1.0;
+    layer.gamma = 1.0;
+    layer.hue = 0.0;
+  }
   if (isLabelLayer) {
-    layer.alpha = 0.65; // 整体透明度，越小越淡/暗
-    layer.saturation = 0.0;
-    layer.brightness = 0.65; // 影像亮度，小于 1 变暗
-    layer.contrast = 1.0; // 对比度
+    applyLabelImageryTone(layer);
   }
 };
 
@@ -1001,7 +1025,7 @@ const ensureVectorLayer = () => {
   if (!vectorLayer) {
     vectorLayer = createMainImageryLayer(
       "vec_w",
-      { blueTint: false },
+      { blueTint: true },
       currentMode.value === "normal",
     );
   }
@@ -1117,6 +1141,14 @@ const initViewer = () => {
   });
 
   mainViewer.scene.logarithmicDepthBuffer = true;
+  // 关闭大气/雾效，避免整体偏色（发紫/发蓝）。
+  mainViewer.scene.skyAtmosphere.show = false;
+  mainViewer.scene.fog.enabled = false;
+  if (mainViewer.scene.skyBox) {
+    mainViewer.scene.skyBox.show = false;
+  }
+  mainViewer.scene.backgroundColor =
+    Cesium.Color.fromCssColorString(MAP_BASE_COLOR_HEX);
 
   mainViewer.clock.shouldAnimate = true; // 开启时间轴
   mainViewer.clock.clockRange = Cesium.ClockRange.CLAMPED; // 运行到终点后停下，而不是循环或停止动画
@@ -1124,7 +1156,8 @@ const initViewer = () => {
   viewerLoadCount.value++;
 
   // When you zoom in on the map or the tiles haven't loaded yet, change the background color.
-  mainViewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#2B2D39");
+  mainViewer.scene.globe.baseColor =
+    Cesium.Color.fromCssColorString(MAP_BASE_COLOR_HEX);
 
   // hide default map
   mainViewer.imageryLayers.removeAll();
@@ -1302,12 +1335,15 @@ const getTdtLayerProvider = (layerCode, options = {}) => {
     maximumLevel: MAX_LEVEL,
   });
 
-  // ===== 瓦片蓝染包装：灰度→蓝色映射，仅影响瓦片图片，不碰模型 =====
+  // ===== 瓦片主题色映射（沿用原 blueTint 管道）：灰度按 MAP_TINT_RGB 比例着色，对齐 #292E38 色相 =====
   if (options.blueTint) {
     const bright = options.bright ?? 1.0;
+    const { r: tintR, g: tintG, b: tintB } = MAP_TINT_RGB;
+    const tintAnchor = Math.max(tintR, tintG, tintB) || 1;
+    /** 与原实现同量级亮度系数，色相由 RGB 比例决定 */
     const bGain = 0.55 * bright;
-    const rGain = bGain * (43 / 57);
-    const gGain = bGain * (45 / 57);
+    const rGain = bGain * (tintR / tintAnchor);
+    const gGain = bGain * (tintG / tintAnchor);
 
     const origRequestImage = provider.requestImage.bind(provider);
     provider.requestImage = (x, y, level, request) => {
@@ -1348,19 +1384,19 @@ const getTdtLayerProvider = (layerCode, options = {}) => {
             return canvas;
           } catch (e) {
             console.warn(
-              "blueTint tile processing failed, fallback to original:",
+              "mapTint tile processing failed, fallback to original:",
               e,
             );
             return image;
           }
         })
         .catch((err) => {
-          console.warn("blueTint tile request failed:", err);
+          console.warn("mapTint tile request failed:", err);
           return undefined;
         });
     };
   }
-  // ===== 瓦片蓝染包装 END =====
+  // ===== 瓦片主题色映射 END =====
 
   return provider;
 };
@@ -3686,7 +3722,15 @@ const initSubViewer = () => {
   viewerLoadCount.value++;
 
   // 设置摄像头底图（与主图一致）
-  subViewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#2B2D39");
+  subViewer.scene.skyAtmosphere.show = false;
+  subViewer.scene.fog.enabled = false;
+  if (subViewer.scene.skyBox) {
+    subViewer.scene.skyBox.show = false;
+  }
+  subViewer.scene.backgroundColor =
+    Cesium.Color.fromCssColorString(MAP_BASE_COLOR_HEX);
+  subViewer.scene.globe.baseColor =
+    Cesium.Color.fromCssColorString(MAP_BASE_COLOR_HEX);
   subViewer.imageryLayers.removeAll();
   const ImgWLayer = getTdtLayerProvider("img_w", { blueTint: true });
   satelliteLayer = subViewer.imageryLayers.addImageryProvider(ImgWLayer);
@@ -3694,6 +3738,7 @@ const initSubViewer = () => {
   const CiaWLayer = getTdtLayerProvider("cia_w");
   satelMarkLayer = subViewer.imageryLayers.addImageryProvider(CiaWLayer);
   satelMarkLayer.maximumTerrainLevel = MAX_LEVEL;
+  applyLabelImageryTone(satelMarkLayer);
   const VecWLayer = getTdtLayerProvider("vec_w");
   vectorLayer = subViewer.imageryLayers.addImageryProvider(VecWLayer);
   vectorLayer.maximumTerrainLevel = MAX_LEVEL;
@@ -3701,6 +3746,7 @@ const initSubViewer = () => {
   const CvaWLayer = getTdtLayerProvider("cva_w");
   vectorMarkLayer = subViewer.imageryLayers.addImageryProvider(CvaWLayer);
   vectorMarkLayer.maximumTerrainLevel = MAX_LEVEL;
+  applyLabelImageryTone(vectorMarkLayer);
   vectorMarkLayer.show = false;
 
   // 将相机固定在某个坐标
@@ -4382,7 +4428,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   gap: 16px;
-  background: #2b2d39;
+  background: #292E38;
   z-index: 1000;
 }
 

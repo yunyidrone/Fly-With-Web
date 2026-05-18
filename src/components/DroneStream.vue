@@ -203,6 +203,8 @@ const props = defineProps({
   companionTaskTitle: { type: String, default: "" },
   /** 由父页控制：沉浸伴飞时仅显示地图 + 本视频 */
   immersiveFlight: { type: Boolean, default: false },
+  /** 设备级拉流地址（接口 streamUrl），为空时用环境变量 VIDEO_CONFIG */
+  streamUrl: { type: String, default: "" },
 });
 
 const emit = defineEmits(["toggle-immersive", "recall"]);
@@ -211,7 +213,10 @@ let pc;
 const systemStore = useSystemStore();
 const videoPlayerRef = ref(null);
 const videoWrapRef = ref(null);
-const currentPlayUrl = ref(VIDEO_CONFIG.streamUrl);
+const resolvedStreamUrl = computed(() => {
+  const u = props.streamUrl?.trim?.() ? props.streamUrl.trim() : "";
+  return u || VIDEO_CONFIG.streamUrl;
+});
 const isLoading = ref(false);
 const viewMode = ref("drone");
 
@@ -294,7 +299,7 @@ const rollText = computed(() =>
 );
 
 const initPlayVideo = async () => {
-  if (!currentPlayUrl.value || !videoPlayerRef.value) return;
+  if (!resolvedStreamUrl.value || !videoPlayerRef.value) return;
   pc = new RTCPeerConnection({
     iceServers: [{ urls: "stun:stun.aliyungf.com:3478" }],
     bundlePolicy: "max-bundle",
@@ -312,7 +317,7 @@ const initPlayVideo = async () => {
     sdp = sdp.replace("m=video", "a=group:BUNDLE 0\nm=video");
   }
   try {
-    const res = await fetch(currentPlayUrl.value, {
+    const res = await fetch(resolvedStreamUrl.value, {
       method: "POST",
       headers: { "Content-Type": "application/sdp" },
       body: sdp,

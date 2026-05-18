@@ -197,6 +197,16 @@
                 </button>
                 <div v-show="sectionOpen.location" class="plan-sec__body plan-sec__body--tree">
                   <el-tree
+                    v-if="isViewMode"
+                    class="plan-loc-tree plan-loc-tree--readonly"
+                    :data="readonlyLocationTreeData"
+                    node-key="id"
+                    default-expand-all
+                    :props="locationTreeProps"
+                    :expand-on-click-node="false"
+                  />
+                  <el-tree
+                    v-else
                     ref="locationTreeRef"
                     class="plan-loc-tree"
                     :data="locationTreeData"
@@ -205,7 +215,6 @@
                     default-expand-all
                     :check-strictly="false"
                     :props="locationTreeProps"
-                    :disabled="isViewMode"
                     @check="onLocationTreeCheck"
                   />
                 </div>
@@ -220,34 +229,39 @@
                   />
                 </button>
                 <div v-show="sectionOpen.time" class="plan-sec__body plan-sec__body--pickers">
-                  <div class="plan-picker-field">
-                    <el-time-picker
-                      v-model="addForm.timeStart"
-                      class="plan-el-picker"
-                      format="HH:mm"
-                      value-format="HH:mm"
-                      placeholder="请选择开始时间"
-                      teleported
-                      :disabled="isViewMode"
-                      :clearable="!isViewMode"
-                      popper-class="plan-editor-picker-popper"
-                      :popper-options="planPickerPopperOptions"
-                    />
+                  <div v-if="isViewMode" class="plan-readonly-field">
+                    {{ viewTimeText }}
                   </div>
-                  <div class="plan-picker-field">
-                    <el-time-picker
-                      v-model="addForm.timeEnd"
-                      class="plan-el-picker"
-                      format="HH:mm"
-                      value-format="HH:mm"
-                      placeholder="请选择结束时间"
-                      teleported
-                      :disabled="isViewMode"
-                      :clearable="!isViewMode"
-                      popper-class="plan-editor-picker-popper"
-                      :popper-options="planPickerPopperOptions"
-                    />
-                  </div>
+                  <template v-else>
+                    <div class="plan-picker-field">
+                      <el-time-picker
+                        v-model="addForm.timeStart"
+                        class="plan-el-picker"
+                        format="HH:mm"
+                        value-format="HH:mm"
+                        placeholder="请选择开始时间"
+                        teleported
+                        :disabled="isViewMode"
+                        :clearable="!isViewMode"
+                        popper-class="plan-editor-picker-popper"
+                        :popper-options="planPickerPopperOptions"
+                      />
+                    </div>
+                    <div class="plan-picker-field">
+                      <el-time-picker
+                        v-model="addForm.timeEnd"
+                        class="plan-el-picker"
+                        format="HH:mm"
+                        value-format="HH:mm"
+                        placeholder="请选择结束时间"
+                        teleported
+                        :disabled="isViewMode"
+                        :clearable="!isViewMode"
+                        popper-class="plan-editor-picker-popper"
+                        :popper-options="planPickerPopperOptions"
+                      />
+                    </div>
+                  </template>
                 </div>
               </section>
 
@@ -260,7 +274,10 @@
                   />
                 </button>
                 <div v-show="sectionOpen.date" class="plan-sec__body plan-sec__body--pickers">
-                  <div class="plan-picker-field">
+                  <div v-if="isViewMode" class="plan-readonly-field">
+                    {{ viewDateText }}
+                  </div>
+                  <div v-else class="plan-picker-field">
                     <el-date-picker
                       v-model="addForm.flightDateRange"
                       class="plan-el-picker"
@@ -289,28 +306,32 @@
                   />
                 </button>
                 <div v-show="sectionOpen.resources" class="plan-sec__body plan-sec__body--resources">
-                  <div v-for="r in resourceRows" :key="r.key" class="plan-res-row">
+                  <div v-for="r in filteredResourceRows" :key="r.key" class="plan-res-row">
                     <span class="plan-res-row__label">{{ r.label }}</span>
                     <div class="plan-res-counter">
-                      <button
-                        type="button"
-                        class="plan-res-counter__btn"
-                        :disabled="isViewMode || addForm[r.field] <= 0"
-                        aria-label="减少"
-                        @click="bumpResource(r.field, -1)"
-                      >
-                        <i class="ri-subtract-line" />
-                      </button>
-                      <span class="plan-res-counter__num">{{ addForm[r.field] }}</span>
-                      <button
-                        type="button"
-                        class="plan-res-counter__btn"
-                        :disabled="isViewMode"
-                        aria-label="增加"
-                        @click="bumpResource(r.field, 1)"
-                      >
-                        <i class="ri-add-line" />
-                      </button>
+                      <template v-if="isViewMode">
+                        <span class="plan-res-counter__num">{{ addForm[r.field] }}</span>
+                      </template>
+                      <template v-else>
+                        <button
+                          type="button"
+                          class="plan-res-counter__btn"
+                          :disabled="addForm[r.field] <= 0"
+                          aria-label="减少"
+                          @click="bumpResource(r.field, -1)"
+                        >
+                          <i class="ri-subtract-line" />
+                        </button>
+                        <span class="plan-res-counter__num">{{ addForm[r.field] }}</span>
+                        <button
+                          type="button"
+                          class="plan-res-counter__btn"
+                          aria-label="增加"
+                          @click="bumpResource(r.field, 1)"
+                        >
+                          <i class="ri-add-line" />
+                        </button>
+                      </template>
                     </div>
                   </div>
                 </div>
@@ -494,6 +515,69 @@ const resourceRows = [
   { key: "dog", label: "无人犬", field: "resourceDogCount" },
   { key: "boat", label: "无人艇", field: "resourceBoatCount" },
 ];
+const filteredResourceRows = computed(() => {
+  // 场景差异化资源展示：
+  // 山林救援不展示无人艇；水上观察不展示无人犬。
+  if (addForm.scenarioKey === "mountain") {
+    return resourceRows.filter((r) => r.key !== "boat");
+  }
+  if (addForm.scenarioKey === "water") {
+    return resourceRows.filter((r) => r.key !== "dog");
+  }
+  return resourceRows;
+});
+const locationNodeLabelMap = computed(() => {
+  const map = new Map();
+  const queue = [...locationTreeData];
+  while (queue.length) {
+    const node = queue.shift();
+    if (!node?.id) continue;
+    map.set(node.id, node.label || String(node.id));
+    if (Array.isArray(node.children) && node.children.length) {
+      queue.push(...node.children);
+    }
+  }
+  return map;
+});
+const readonlyLocationTreeData = computed(() => {
+  const selectedPaths = (addForm.locationCheckedKeys || [])
+    .map((k) => locationNodeKeyToPath(k))
+    .filter((p) => p?.length);
+
+  /** @type {{ id: string, label: string, children: any[] }[]} */
+  const tree = [];
+  selectedPaths.forEach((path) => {
+    let cursor = tree;
+    for (let i = 0; i < path.length; i += 1) {
+      const pathSlice = path.slice(0, i + 1);
+      const id = pathToLocationNodeKey(pathSlice);
+      if (!id) break;
+      const label = locationNodeLabelMap.value.get(id) || String(path[i]);
+      let node = cursor.find((item) => item.id === id);
+      if (!node) {
+        node = { id, label, children: [] };
+        cursor.push(node);
+      }
+      cursor = node.children;
+    }
+  });
+  return tree;
+});
+const viewTimeText = computed(() => {
+  const start = addForm.timeStart || "";
+  const end = addForm.timeEnd || "";
+  if (!start && !end) return "暂无时间设置";
+  if (start && end) return `${start} 至 ${end}`;
+  if (start) return `开始时间：${start}`;
+  return `结束时间：${end}`;
+});
+const viewDateText = computed(() => {
+  const range = addForm.flightDateRange || [];
+  if (!Array.isArray(range) || range.length === 0) return "暂无日期设置";
+  const [start, end] = range;
+  if (!start) return "暂无日期设置";
+  return formatPlanDateRange(start, end || start);
+});
 
 const addForm = reactive({
   scenarioKey: "mountain",
@@ -652,29 +736,30 @@ function onDetailDelete() {
 }
 
 function confirmAddPlan() {
-  if (!addForm.flightDateRange || addForm.flightDateRange.length !== 2) {
-    ElMessage.warning("请选择实行日期范围");
-    return;
-  }
+  // 临时改动：时间/日期先改为非必填，保留原校验逻辑以便后续恢复。
+  // if (!addForm.flightDateRange || addForm.flightDateRange.length !== 2) {
+  //   ElMessage.warning("请选择实行日期范围");
+  //   return;
+  // }
   const [flightDate, flightDateEnd] = addForm.flightDateRange;
-  if (flightDateEnd < flightDate) {
-    ElMessage.warning("结束日期不能早于开始日期");
-    return;
-  }
-  if (!addForm.timeStart) {
-    ElMessage.warning("请选择开始时间");
-    return;
-  }
-  if (!addForm.timeEnd) {
-    ElMessage.warning("请选择结束时间");
-    return;
-  }
+  // if (flightDateEnd < flightDate) {
+  //   ElMessage.warning("结束日期不能早于开始日期");
+  //   return;
+  // }
+  // if (!addForm.timeStart) {
+  //   ElMessage.warning("请选择开始时间");
+  //   return;
+  // }
+  // if (!addForm.timeEnd) {
+  //   ElMessage.warning("请选择结束时间");
+  //   return;
+  // }
   const t0 = timeToMinutes(addForm.timeStart);
   const t1 = timeToMinutes(addForm.timeEnd);
-  if (Number.isFinite(t0) && Number.isFinite(t1) && t1 <= t0) {
-    ElMessage.warning("结束时间须晚于开始时间");
-    return;
-  }
+  // if (Number.isFinite(t0) && Number.isFinite(t1) && t1 <= t0) {
+  //   ElMessage.warning("结束时间须晚于开始时间");
+  //   return;
+  // }
   const locationPaths = getSelectedLocationPaths();
   if (!locationPaths.length) {
     ElMessage.warning("请至少选择一个地点");
@@ -1332,8 +1417,9 @@ background: #1C222A;
 
 .plan-sec__body--resources {
   gap: 12px;
-  padding: 5px 12px;
+  padding: 10px 12px;
   background: #03060A;
+  margin-top: 5px;
 }
 
 .plan-el-picker {
@@ -1434,6 +1520,19 @@ background: #1C222A;
   font-family: inherit;
 }
 
+.plan-readonly-field {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 10px 12px;
+  border-radius: 4px;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
 .plan-sec__body--tree {
   padding: 8px 10px 10px;
   overflow: visible;
@@ -1445,6 +1544,10 @@ background: #1C222A;
   --el-tree-node-hover-bg-color: rgba(255, 255, 255, 0.06);
   --el-tree-text-color: rgba(255, 255, 255, 0.88);
   --el-tree-expand-icon-color: rgba(255, 255, 255, 0.45);
+}
+
+.plan-loc-tree--readonly {
+  padding: 4px 0;
 }
 
 .plan-res-row {

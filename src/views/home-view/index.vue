@@ -53,6 +53,7 @@
               :key="streamDroneKey"
               :drone-id="streamDrone?.id"
               :drone-name="streamDrone?.name"
+              :stream-url="streamDrone?.streamUrl"
               :target-device-label="streamTargetLabel"
               :battery="streamDrone?.battery"
               :status-label="streamStatusLabel"
@@ -67,7 +68,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import TiandituMap from "@/components/TiandituMap.vue";
 import HomeHeader from "@/components/HomeHeader.vue";
 import DroneStream from "@/components/DroneStream.vue";
@@ -75,11 +76,18 @@ import ResourcePanel from "@/components/ResourcePanel.vue";
 import MapLegend from "@/components/MapLegend.vue";
 import PlanPanel from "@/components/PlanPanel.vue";
 import LeftSidebarTabs from "@/components/LeftSidebarTabs.vue";
+import { useDeviceStore } from "@/stores/device.js";
 
 const mapRef = ref(null);
 const droneStreamVisible = ref(false);
 const streamDrone = ref(null);
 const immersiveFlight = ref(false);
+
+const deviceStore = useDeviceStore();
+
+onMounted(() => {
+  // deviceStore.fetchDroneList();
+});
 
 const streamDroneKey = computed(() => streamDrone.value?.id || "none");
 
