@@ -121,7 +121,7 @@
                 class="action-btn recall-btn"
                 @click.stop="handleRecall(device)"
               >
-                一键召回
+                结束伴飞
               </button>
             </div>
           </div>

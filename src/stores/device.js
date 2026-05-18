@@ -65,11 +65,11 @@ export function normalizeDroneRecord(raw) {
     lng:
       typeof raw.longitude === "number" && Number.isFinite(raw.longitude)
         ? raw.longitude
-        : null,
+        : 121.427,
     lat:
       typeof raw.latitude === "number" && Number.isFinite(raw.latitude)
         ? raw.latitude
-        : null,
+        : 28.653,
     description: raw.description,
     createTime: raw.createTime,
     rawStatus: Number.isFinite(statusNum) ? statusNum : undefined,
@@ -105,6 +105,13 @@ export function normalizeDroneRecord(raw) {
 export function normalizeTargetRecord(raw) {
   const id = raw?.id ?? raw?.targetId ?? raw?.vehicleId ?? "";
   const nameSrc = raw?.name ?? raw?.plateNo ?? raw?.label ?? "";
+  const snSrc =
+    raw?.sn ??
+    raw?.targetSn ??
+    raw?.vehicleSn ??
+    raw?.terminalPhone ??
+    raw?.deviceSn ??
+    "";
   const pickCoord = (v) => {
     if (typeof v === "number" && Number.isFinite(v)) return v;
     if (typeof v === "string" && v.trim() !== "") {
@@ -119,8 +126,9 @@ export function normalizeTargetRecord(raw) {
       typeof nameSrc === "string" && nameSrc.trim()
         ? nameSrc.trim()
         : String(id || "目标"),
-    lng: pickCoord(raw.longitude) ?? pickCoord(raw.lng),
-    lat: pickCoord(raw.latitude) ?? pickCoord(raw.lat),
+    sn: typeof snSrc === "string" ? snSrc.trim() : String(snSrc || ""),
+    lng: pickCoord(raw.longitude) ?? pickCoord(raw.lng) ?? 121.428,
+    lat: pickCoord(raw.latitude) ?? pickCoord(raw.lat) ?? 28.653,
     raw,
   };
 }
@@ -277,6 +285,36 @@ export const useDeviceStore = defineStore("device", () => {
     if (drone) drone.battery = battery;
   }
 
+  /**
+   * 按 SN 同步无人机遥测（电量/续航/位置）
+   * @param {string} sn
+   * @param {{battery?: number|string, endurance?: number|string, lng?: number, lat?: number, height?: number}} payload
+   */
+  function updateDroneTelemetryBySn(sn, payload = {}) {
+    const key = String(sn || "").trim();
+    if (!key) return;
+    const drone = drones.value.find((d) => String(d?.sn || "").trim() === key);
+    if (!drone) return;
+    if (payload.battery != null && payload.battery !== "") {
+      const b = Number(payload.battery);
+      drone.battery = Number.isFinite(b) ? b : payload.battery;
+    }
+    if (payload.endurance != null && payload.endurance !== "") {
+      drone.endurance = payload.endurance;
+    }
+    if (typeof payload.lng === "number" && Number.isFinite(payload.lng)) {
+      drone.lng = payload.lng;
+      drone.longitude = payload.lng;
+    }
+    if (typeof payload.lat === "number" && Number.isFinite(payload.lat)) {
+      drone.lat = payload.lat;
+      drone.latitude = payload.lat;
+    }
+    if (typeof payload.height === "number" && Number.isFinite(payload.height)) {
+      drone.height = payload.height;
+    }
+  }
+
   return {
     testActive,
     dronesLoadedFromApi,
@@ -297,5 +335,6 @@ export const useDeviceStore = defineStore("device", () => {
     setDroneEscorting,
     setDroneStandby,
     updateDroneBattery,
+    updateDroneTelemetryBySn,
   };
 });

@@ -186,7 +186,14 @@
         <span class="police-vehicle-popup__value">{{ policeVehiclePopup.alertInfo }}</span>
       </div>
       <div
-        v-if="policeVehiclePopup.drones.length"
+        v-if="policeVehiclePopup.loadingDrones"
+        class="police-vehicle-popup__field"
+      >
+        <span class="police-vehicle-popup__label">临近无人机：</span>
+        <span class="police-vehicle-popup__value">加载中...</span>
+      </div>
+      <div
+        v-else-if="policeVehiclePopup.drones.length"
         class="police-vehicle-popup__field"
       >
         <span class="police-vehicle-popup__label">临近无人机：</span>
@@ -203,11 +210,11 @@
           </option>
         </select>
       </div>
-      <p v-else class="police-vehicle-popup__empty">暂无可用无人机</p>
+      <p v-else class="police-vehicle-popup__empty">暂无可用无人机（仅展示就绪状态）</p>
       <button
         type="button"
         class="police-vehicle-popup__escort"
-        :disabled="!policeVehiclePopup.drones.length"
+        :disabled="policeVehiclePopup.loadingDrones || !policeVehiclePopup.drones.length"
         @click="handlePolicePopupEscort"
       >
         一键伴飞
@@ -291,6 +298,7 @@ const policeVehiclePopup = reactive({
   coordText: "",
   drones: [],
   selectedDroneId: "",
+  loadingDrones: false,
   left: 0,
   top: 0,
 });
@@ -356,14 +364,218 @@ const closePoliceVehiclePopup = () => {
   detachPolicePopupTracker();
 };
 
-const handlePolicePopupEscort = () => {
-  const droneId = policeVehiclePopup.selectedDroneId;
-  if (!droneId) {
-    ElMessage.warning("没有可用的无人机");
-    return;
+async function submitStartFollow(targetId, droneSn) {
+  if (!targetId) {
+    ElMessage.warning("未找到目标设备");
+    return false;
   }
-  startEscortSimulation(policeVehiclePopup.deviceId, droneId);
+  if (!droneSn) {
+    ElMessage.warning("未找到无人机SN");
+    return false;
+  }
+  try {
+    const res = await AccompanyingFlyService.startFollow({
+      id: targetId,
+      sn: droneSn,
+    });
+    if (res?.code === 2000) {
+      subscribeEscortDroneOsd(droneSn);
+      await deviceStore.fetchDroneList();
+      ElMessage.success(`已下发伴飞指令：${targetId}`);
+      return true;
+    }
+    ElMessage.warning(res?.message || "下发伴飞指令失败");
+    return false;
+  } catch (_) {
+    ElMessage.error("下发伴飞指令失败");
+    return false;
+  }
+}
+
+function subscribeEscortDroneOsd(droneSn) {
+  const sn = String(droneSn || "").trim();
+  if (!sn) return;
+  if (escortDroneOsdTopics.has(sn)) return;
+  const topic = `thing/product/${sn}/osd`;
+  escortDroneOsdTopics.set(sn, topic);
+
+  mqttService.subscribe(topic, (msg) => {
+    const payload = msg?.data ?? msg;
+    if (!payload || typeof payload !== "object") return;
+    const lng = toFiniteNumber(payload.longitude);
+    const lat = toFiniteNumber(payload.latitude);
+    const height = toFiniteNumber(payload.height);
+    const batteryPercent = toFiniteNumber(
+      payload?.battery?.batteries?.[0]?.capacity_percent,
+    );
+    const distanceLimit = toFiniteNumber(
+      payload?.distance_limit_status?.distance_limit,
+    );
+    deviceStore.updateDroneTelemetryBySn(sn, {
+      battery: batteryPercent,
+      endurance: distanceLimit,
+      lng: Number.isFinite(lng) ? lng : undefined,
+      lat: Number.isFinite(lat) ? lat : undefined,
+      height: Number.isFinite(height) ? height : undefined,
+    });
+    if (
+      Number.isFinite(lng) &&
+      Number.isFinite(lat) &&
+      Number.isFinite(height)
+    ) {
+      updateDroneRealtime(lng, lat, height);
+    }
+  });
+}
+
+function unsubscribeEscortDroneOsd(droneSn) {
+  const sn = String(droneSn || "").trim();
+  if (!sn) return;
+  const topic = escortDroneOsdTopics.get(sn);
+  if (!topic) return;
+  mqttService.unsubscribe(topic);
+  escortDroneOsdTopics.delete(sn);
+}
+
+async function submitStopFollow(targetId, droneSn) {
+  const id = String(targetId || "").trim();
+  const sn = String(droneSn || "").trim();
+  if (!id) {
+    ElMessage.warning("未找到目标设备");
+    return false;
+  }
+  if (!sn) {
+    ElMessage.warning("未找到无人机SN");
+    return false;
+  }
+  try {
+    const res = await AccompanyingFlyService.stopFollow({ id, sn });
+    if (res?.code === 2000) {
+      unsubscribeEscortDroneOsd(sn);
+      await deviceStore.fetchDroneList();
+      ElMessage.success(`已结束伴飞：${id}`);
+      return true;
+    }
+    ElMessage.warning(res?.message || "结束伴飞失败");
+    return false;
+  } catch (_) {
+    ElMessage.error("结束伴飞失败");
+    return false;
+  }
+}
+
+const handlePolicePopupEscort = async () => {
+  const targetId = policeVehiclePopup.deviceId;
+  const selected = (policeVehiclePopup.drones || []).find(
+    (d) => String(d.id) === String(policeVehiclePopup.selectedDroneId),
+  );
+  const droneSn = selected?.sn || selected?.raw?.sn || "";
+  await submitStartFollow(targetId, droneSn);
 };
+
+function toFiniteNumber(v) {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+const SUGGEST_DRONES_CACHE_TTL = 15 * 1000;
+let suggestDronesCache = {
+  /** @type {any[]} */
+  list: [],
+  fetchedAt: 0,
+  pending: null,
+};
+
+function extractReadySuggestedDronesFromResponse(res) {
+  const data = res?.data;
+  const list = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.records)
+      ? data.records
+      : Array.isArray(data?.list)
+        ? data.list
+        : [];
+  return list.filter((d) => Number(d?.status) === 1);
+}
+
+async function getReadySuggestedDrones(forceRefresh = false) {
+  const now = Date.now();
+  if (
+    !forceRefresh &&
+    suggestDronesCache.list.length &&
+    now - suggestDronesCache.fetchedAt < SUGGEST_DRONES_CACHE_TTL
+  ) {
+    return suggestDronesCache.list;
+  }
+  if (suggestDronesCache.pending) {
+    return suggestDronesCache.pending;
+  }
+  suggestDronesCache.pending = AccompanyingFlyService.droneSuggestList()
+    .then((res) => {
+      const ready = extractReadySuggestedDronesFromResponse(res);
+      suggestDronesCache.list = ready;
+      suggestDronesCache.fetchedAt = Date.now();
+      return ready;
+    })
+    .catch(() => {
+      return [];
+    })
+    .finally(() => {
+      suggestDronesCache.pending = null;
+    });
+  return suggestDronesCache.pending;
+}
+
+async function loadSuggestedDronesForPopup(devicePosition) {
+  policeVehiclePopup.loadingDrones = true;
+  policeVehiclePopup.drones = [];
+  policeVehiclePopup.selectedDroneId = "";
+  try {
+    const readyDrones = await getReadySuggestedDrones();
+    const dronesWithDistance = readyDrones
+      .map((d) => {
+        const lng = toFiniteNumber(d?.longitude);
+        const lat = toFiniteNumber(d?.latitude);
+        const droneId = String(d?.id ?? d?.sn ?? "");
+        if (!droneId) return null;
+        const droneName = String(d?.name || d?.sn || droneId);
+        const hasCoord = Number.isFinite(lng) && Number.isFinite(lat);
+        const dist = hasCoord
+          ? Cesium.Cartesian3.distance(
+              Cesium.Cartesian3.fromDegrees(
+                devicePosition.longitude,
+                devicePosition.latitude,
+                0,
+              ),
+              Cesium.Cartesian3.fromDegrees(lng, lat, 0),
+            )
+          : Number.POSITIVE_INFINITY;
+        return {
+          id: droneId,
+          name: droneName,
+          sn: d?.sn || "",
+          raw: d,
+          distance: dist,
+          label: hasCoord
+            ? `${droneName}（距离 ${(dist / 1000).toFixed(2)} km）`
+            : `${droneName}（坐标缺失）`,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.distance - b.distance);
+    policeVehiclePopup.drones = dronesWithDistance;
+    policeVehiclePopup.selectedDroneId = dronesWithDistance[0]?.id || "";
+  } catch (e) {
+    policeVehiclePopup.drones = [];
+    policeVehiclePopup.selectedDroneId = "";
+  } finally {
+    policeVehiclePopup.loadingDrones = false;
+  }
+}
 
 // 车辆点击事件处理器
 let vehicleClickHandler = null;
@@ -488,8 +700,19 @@ let dronePositionProp = new Cesium.SampledPositionProperty();
 const VEHICLE_HIGHLIGHT_COLOR = Cesium.Color.fromCssColorString("#ffcc00");
 const VEHICLE_NORMAL_PATH_COLOR =
   Cesium.Color.fromCssColorString("#00eeee");
+const VEHICLE_LABEL_COLOR = Cesium.Color.fromCssColorString("#5794DF");
+const DRONE_LABEL_COLOR = Cesium.Color.fromCssColorString("#0EF2F2");
 
 const getVehicleDeviceIdFromEntity = (entity) => {
+  const propDeviceId = entity?.properties?.deviceId;
+  if (propDeviceId) {
+    if (typeof propDeviceId.getValue === "function") {
+      const val = propDeviceId.getValue(mainViewer?.clock?.currentTime);
+      if (val != null && val !== "") return String(val);
+    } else if (propDeviceId != null && propDeviceId !== "") {
+      return String(propDeviceId);
+    }
+  }
   const labelText = entity?.label?.text;
   if (typeof labelText === "string") return labelText;
   if (labelText && typeof labelText.getValue === "function") {
@@ -538,7 +761,7 @@ const vehicleManager = {
     } else {
       entity.model.silhouetteSize = 0;
       entity.model.silhouetteColor = undefined;
-      entity.label.fillColor = Cesium.Color.WHITE;
+      entity.label.fillColor = VEHICLE_LABEL_COLOR;
       entity.label.outlineColor = Cesium.Color.BLACK;
       entity.label.outlineWidth = 2;
       entity.label.font = "14px sans-serif";
@@ -549,7 +772,7 @@ const vehicleManager = {
   },
 
   // 为指定设备创建车辆实体
-  createVehicle(viewer, deviceId) {
+  createVehicle(viewer, deviceId, labelText = deviceId) {
     if (this.vehicles.has(deviceId)) {
       return this.vehicles.get(deviceId);
     }
@@ -623,10 +846,14 @@ const vehicleManager = {
         leadTime: 0,
         trailTime: 999999,
       },
+      properties: {
+        deviceId,
+        deviceName: labelText || deviceId,
+      },
       label: {
-        text: deviceId,
+        text: labelText || deviceId,
         font: "14px sans-serif",
-        fillColor: Cesium.Color.WHITE,
+        fillColor: VEHICLE_LABEL_COLOR,
         outlineColor: Cesium.Color.BLACK,
         outlineWidth: 2,
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,
@@ -671,6 +898,16 @@ const vehicleManager = {
     vehicle.lastPosition = { longitude, latitude, height };
   },
 
+  updateVehicleLabel(deviceId, labelText) {
+    const vehicle = this.vehicles.get(deviceId);
+    if (!vehicle?.entity?.label) return;
+    vehicle.entity.label.text = labelText || deviceId;
+    vehicle.entity.label.fillColor = VEHICLE_LABEL_COLOR;
+    if (vehicle.entity.properties?.deviceName) {
+      vehicle.entity.properties.deviceName = labelText || deviceId;
+    }
+  },
+
   // 获取所有车辆
   getAllVehicles() {
     return Array.from(this.vehicles.keys());
@@ -692,7 +929,7 @@ const vehicleManager = {
 const droneTestManager = {
   drones: new Map(),
 
-  createDrone(viewer, droneId, lng, lat, height = 80) {
+  createDrone(viewer, droneId, lng, lat, height = 80, labelText = droneId) {
     if (this.drones.has(droneId)) return this.drones.get(droneId);
 
     const positionProp = new Cesium.SampledPositionProperty();
@@ -736,9 +973,9 @@ const droneTestManager = {
         resolution: 1,
       },
       label: {
-        text: droneId,
+        text: labelText || droneId,
         font: "14px sans-serif",
-        fillColor: Cesium.Color.GOLD,
+        fillColor: DRONE_LABEL_COLOR,
         outlineColor: Cesium.Color.BLACK,
         outlineWidth: 2,
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,
@@ -778,6 +1015,13 @@ const droneTestManager = {
     const position = Cesium.Cartesian3.fromDegrees(lng, lat, height);
     drone.positionProp.addSample(now, position);
     drone.lastPosition = { lng, lat, height };
+  },
+
+  updateDroneLabel(droneId, labelText) {
+    const drone = this.drones.get(droneId);
+    if (!drone?.entity?.label) return;
+    drone.entity.label.text = labelText || droneId;
+    drone.entity.label.fillColor = DRONE_LABEL_COLOR;
   },
 
   flyToPoint(droneId, lng, lat, speed = 30, height = 80) {
@@ -915,6 +1159,10 @@ const target_id = DEVICE_CONFIG.targetId;
 const drone_id = DEVICE_CONFIG.droneId;
 const targetTopic = `flywith/target/${target_id}`;
 const droneTopic = `flywith/uav/${drone_id}`;
+/** 多无人机 OSD 订阅：key=sn, value=topic */
+const escortDroneOsdTopics = new Map();
+/** 车辆位置订阅：key=vehicleId, value=topic */
+const vehicleLocationTopics = new Map();
 
 // 无人机姿态
 const droneState = reactive({
@@ -2609,7 +2857,7 @@ const initVehicleClickHandler = (viewer) => {
             if (TEST_POLICE_VEHICLES.some((v) => v.id === deviceId)) {
               showTestVehicleDialog(deviceId, lastPos);
             } else {
-              showVehicleDialog(deviceId, lastPos);
+              showApiVehiclePopup(deviceId, lastPos);
             }
             return;
           }
@@ -2733,38 +2981,59 @@ const showTestVehicleDialog = (deviceId, position) => {
 
   const policeData = TEST_POLICE_VEHICLES.find((v) => v.id === deviceId);
 
-  const droneList = droneTestManager.getAllDrones();
-  const dronesWithDistance = droneList
-    .map((droneId) => {
-      const drone = droneTestManager.drones.get(droneId);
-      if (!drone || !drone.lastPosition) return null;
-      const dist = Cesium.Cartesian3.distance(
-        Cesium.Cartesian3.fromDegrees(position.longitude, position.latitude, 0),
-        Cesium.Cartesian3.fromDegrees(
-          drone.lastPosition.lng,
-          drone.lastPosition.lat,
-          0,
-        ),
-      );
-      return {
-        id: droneId,
-        distance: dist,
-        label: `${droneId}（距离 ${(dist / 1000).toFixed(2)} km）`,
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.distance - b.distance);
-
   policeVehiclePopup.deviceId = deviceId;
   policeVehiclePopup.vehicleName = policeData?.name || deviceId;
-  policeVehiclePopup.alertInfo = policeData?.alert || "暂无警情信息";
+  policeVehiclePopup.alertInfo = policeData?.alert || "暂无描述";
   policeVehiclePopup.coordText = `${position.longitude.toFixed(6)}, ${position.latitude.toFixed(6)}`;
-  policeVehiclePopup.drones = dronesWithDistance;
-  policeVehiclePopup.selectedDroneId = dronesWithDistance[0]?.id || "";
+  policeVehiclePopup.drones = suggestDronesCache.list
+    .map((d) => ({
+      id: String(d?.id ?? d?.sn ?? ""),
+      name: String(d?.name || d?.sn || d?.id || ""),
+      sn: d?.sn || "",
+      raw: d,
+      distance: Number.POSITIVE_INFINITY,
+      label: String(d?.name || d?.sn || d?.id || "无人机"),
+    }))
+    .filter((d) => d.id);
+  policeVehiclePopup.selectedDroneId = "";
   policeVehiclePopup.visible = true;
 
   updatePolicePopupScreenPosition();
   attachPolicePopupTracker();
+  loadSuggestedDronesForPopup(position);
+};
+
+/**
+ * @description: 接口车辆详情浮层（同警车样式，锚定在车辆旁）
+ */
+const showApiVehiclePopup = (deviceId, position) => {
+  if (!position) return;
+
+  const vehicleData = (Array.isArray(deviceStore.targets) ? deviceStore.targets : []).find(
+    (v) => String(v.id) === String(deviceId),
+  );
+
+  policeVehiclePopup.deviceId = deviceId;
+  policeVehiclePopup.vehicleName = vehicleData?.name || deviceId;
+  policeVehiclePopup.alertInfo =
+    String(vehicleData?.raw?.description || "").trim() || "暂无描述";
+  policeVehiclePopup.coordText = `${position.longitude.toFixed(6)}, ${position.latitude.toFixed(6)}`;
+  policeVehiclePopup.drones = suggestDronesCache.list
+    .map((d) => ({
+      id: String(d?.id ?? d?.sn ?? ""),
+      name: String(d?.name || d?.sn || d?.id || ""),
+      sn: d?.sn || "",
+      raw: d,
+      distance: Number.POSITIVE_INFINITY,
+      label: String(d?.name || d?.sn || d?.id || "无人机"),
+    }))
+    .filter((d) => d.id);
+  policeVehiclePopup.selectedDroneId = "";
+  policeVehiclePopup.visible = true;
+
+  updatePolicePopupScreenPosition();
+  attachPolicePopupTracker();
+  loadSuggestedDronesForPopup(position);
 };
 
 /**
@@ -2854,6 +3123,8 @@ const requestReturnHome = async (mode, deviceId, droneSn) => {
     console.log("一键返航响应:", res);
     const { code } = res;
     if (code === 200 || code === 404) {
+      unsubscribeEscortDroneOsd(droneSn);
+      await deviceStore.fetchDroneList();
       systemStore.setDroneStatus(0);
       ElMessage.success(`无人机 ${droneSn} 已开始返航`);
     }
@@ -3475,13 +3746,36 @@ const lockToVehicle = (deviceId) => {
 /**
  * @description: 显示告警伴飞请求对话框
  */
-const showAlarmDialog = (deviceId, alarmFlag) => {
+const showAlarmDialog = async (deviceId, alarmFlag) => {
+  const vehicleData = (Array.isArray(deviceStore.targets) ? deviceStore.targets : []).find(
+    (v) => String(v.id) === String(deviceId),
+  );
+  const vehicleName = vehicleData?.name || deviceId;
+  const suggestedList = await getReadySuggestedDrones();
+
+  const optionsHtml = suggestedList.length
+    ? suggestedList
+        .map((d, idx) => {
+          const id = String(d?.id ?? d?.sn ?? "");
+          const name = String(d?.name || d?.sn || id);
+          const sn = String(d?.sn || "");
+          return `<option value="${id}" data-sn="${sn}" ${idx === 0 ? "selected" : ""}>${name}${sn ? `（${sn}）` : ""}</option>`;
+        })
+        .join("")
+    : '<option value="">暂无可用无人机</option>';
+
   ElMessageBox.confirm(
     `<div style="padding: 10px;">
       <h4 style="margin: 0 0 10px 0;">接收到伴飞请求</h4>
-      <p>车辆 ${deviceId} 发送了伴飞请求</p>
-      <p>告警标志: ${alarmFlag}</p>
-      <p>是否开始伴飞？</p>
+      <p>车辆名称：${vehicleName}</p>
+      <p>设备ID：${deviceId}</p>
+      <p>告警标志：${alarmFlag}</p>
+      <div style="margin-top:10px;">
+        <label for="alarm-drone-select" style="display:block;margin-bottom:6px;">推荐无人机：</label>
+        <select id="alarm-drone-select" style="width:100%;padding:8px;border:1px solid #dcdfe6;border-radius:4px;">
+          ${optionsHtml}
+        </select>
+      </div>
     </div>`,
     "伴飞请求",
     {
@@ -3492,21 +3786,16 @@ const showAlarmDialog = (deviceId, alarmFlag) => {
       customClass: "alarm-dialog",
     },
   )
-    .then(() => {
-      ElMessageBox.prompt("请输入mode,1或5", "Tip", {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
-        inputPattern: /^[0-9]+$/,
-        inputErrorMessage: "Invalid Number",
-      })
-        .then(({ value }) => {
-          requestTakeOff(value, deviceId, DEVICE_CONFIG.droneId);
-        })
-        .catch(() => {});
+    .then(async () => {
+      const selectEl = document.getElementById("alarm-drone-select");
+      const selectedId = selectEl?.value || "";
+      const selected = suggestedList.find(
+        (d) => String(d?.id ?? d?.sn ?? "") === String(selectedId),
+      );
+      const droneSn = String(selected?.sn || "");
+      await submitStartFollow(deviceId, droneSn);
     })
-    .catch(() => {
-      console.log("用户取消伴飞请求");
-    });
+    .catch(() => {});
 };
 
 /**
@@ -3532,7 +3821,7 @@ const handleCarBoxMessage = (topic, data) => {
   const { latitude, longitude, alarmFlag } = data;
 
   if (latitude && longitude) {
-    const vehicle = vehicleManager.createVehicle(mainViewer, deviceId);
+    const vehicle = vehicleManager.createVehicle(mainViewer, deviceId, deviceId);
     vehicleManager.updateVehiclePosition(deviceId, longitude, latitude, 0);
 
     if (isFirstPoint) {
@@ -3558,6 +3847,76 @@ const handleCarBoxMessage = (topic, data) => {
 
   systemStore.addCarMessage({ ...data, deviceId });
 };
+
+/**
+ * 将 store 中接口设备（targets / drones）同步到地图实体
+ */
+function syncStoreDevicesToMap() {
+  if (!mainViewer || mainViewer.isDestroyed?.()) return;
+
+  const targetList = Array.isArray(deviceStore.targets)
+    ? deviceStore.targets
+    : [];
+  targetList.forEach((target) => {
+    if (!target?.id) return;
+    const lng = Number(target.lng);
+    const lat = Number(target.lat);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+    const id = String(target.id);
+    const label = String(target.name || target.id || "车辆");
+    vehicleManager.createVehicle(mainViewer, id, label);
+    vehicleManager.updateVehicleLabel(id, label);
+    vehicleManager.updateVehiclePosition(id, lng, lat, 0);
+  });
+
+  const droneList = Array.isArray(deviceStore.drones) ? deviceStore.drones : [];
+  droneList.forEach((drone) => {
+    if (!drone?.id) return;
+    const lng = Number(drone.lng);
+    const lat = Number(drone.lat);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+    const id = String(drone.id);
+    const label = String(drone.name || drone.id || "无人机");
+    droneTestManager.createDrone(mainViewer, id, lng, lat, DRONE_HEIGHT, label);
+    droneTestManager.updateDroneLabel(id, label);
+    droneTestManager.updateDronePosition(id, lng, lat, DRONE_HEIGHT);
+  });
+}
+
+function subscribeVehicleLocationTopics() {
+  const targets = Array.isArray(deviceStore.targets) ? deviceStore.targets : [];
+  const activeKeys = new Set();
+
+  targets.forEach((t) => {
+    const vehicleId = String(t?.id || "").trim();
+    const sn = String(t?.sn || "").trim();
+    if (!vehicleId || !sn) return;
+    const topic = `carBox/${sn}/location`;
+    activeKeys.add(vehicleId);
+    if (vehicleLocationTopics.get(vehicleId) === topic) return;
+
+    const prev = vehicleLocationTopics.get(vehicleId);
+    if (prev && prev !== topic) {
+      mqttService.unsubscribe(prev);
+    }
+    vehicleLocationTopics.set(vehicleId, topic);
+
+    mqttService.subscribe(topic, (data) => {
+      handleCarBoxMessage(topic, {
+        ...(data || {}),
+        deviceId: vehicleId,
+      });
+    });
+  });
+
+  Array.from(vehicleLocationTopics.keys()).forEach((vehicleId) => {
+    if (!activeKeys.has(vehicleId)) {
+      const topic = vehicleLocationTopics.get(vehicleId);
+      if (topic) mqttService.unsubscribe(topic);
+      vehicleLocationTopics.delete(vehicleId);
+    }
+  });
+}
 
 /**
  * @description: 模拟实体车辆上报告警（本地测试，不依赖 MQTT Broker）
@@ -3611,76 +3970,25 @@ const simulateVehicleAlarmMessage = () => {
 const initialMqttConnect = () => {
   mqttService.connect();
 
-  mqttService.subscribe("carBox/#", (topic, data) => {
-    handleCarBoxMessage(topic, data);
-  });
+  // 原始全量订阅（先保留，不删除）
+  // mqttService.subscribe("carBox/#", (topic, data) => {
+  //   handleCarBoxMessage(topic, data);
+  // });
 
-  // Subscribe and handle messages for drone
-  mqttService.subscribe(droneTopic, (data) => {
-    console.log("drone - 组件接收到消息:", data);
-    if (!isEmpty(data)) {
-      const {
-        current_latitude,
-        current_longitude,
-        current_height,
-        attitude_head,
-        attitude_pitch,
-        attitude_roll,
-        gimbal_pitch,
-        gimbal_roll,
-        gimbal_yaw,
-        zoom_factor,
-      } = data;
+  // 新逻辑：按每辆车逐条订阅 carBox/{SN}/location
+  subscribeVehicleLocationTopics();
 
-      systemStore.setDroneCurrentState({
-        attitude_head,
-        attitude_pitch,
-        attitude_roll,
-        gimbal_pitch,
-        gimbal_roll,
-        gimbal_yaw,
-        zoom_factor,
-      });
-
-      // 更新无人机姿态
-      droneState.attitude_head = attitude_head;
-      droneState.attitude_pitch = attitude_pitch;
-      droneState.attitude_roll = attitude_roll;
-      droneState.gimbal_pitch = gimbal_pitch;
-      droneState.gimbal_roll = gimbal_roll;
-      droneState.gimbal_yaw = gimbal_yaw;
-      droneState.zoom_factor = zoom_factor;
-
-      // // 校验不是 null/undefined，且不是 NaN
-      const isValid = (val) => typeof val === "number" && !isNaN(val);
-      if (
-        isValid(attitude_head) &&
-        isValid(attitude_pitch) &&
-        isValid(attitude_roll)
-      ) {
-        isAttitudeValid = true; // 标记数据有效
-      } else {
-        isAttitudeValid = false;
-        console.warn("收到无效姿态数据，隐藏视场锥");
-      }
-
-      const nowMs = Date.now();
-      // runningToPointWithTimeForDrone(current_longitude, current_latitude, 30, current_height);
-      // if (nowMs - lastDronePushTime > DRONE_MIN_INTERVAL) {}
-
-      updateDroneRealtime(current_longitude, current_latitude, current_height);
-      lastDronePushTime = nowMs;
-
-      // 获取变焦倍数
-      // const zoom = zoom_factor || 1.0;
-      // // 更新 manager 里的变焦参数
-      // zoomManager.updateZoom(zoom);
-    }
-    // msgList.value.push(data);
-    systemStore.addDroneMessage(data);
-    // isConnected.value = true;
-  });
+  // 临时注掉初始化无人机订阅，改为伴飞成功后按 SN 动态订阅：
+  // thing/product/{SN}/osd（仅使用 data.height/data.latitude/data.longitude）
 };
+
+watch(
+  () => deviceStore.targets,
+  () => {
+    subscribeVehicleLocationTopics();
+  },
+  { deep: true },
+);
 
 const handleSend = () => {
   const payload = {
@@ -4331,14 +4639,20 @@ const toggleLayerVisibility = ({ key, active }) => {
 };
 
 const recallDrone = (device) => {
-  if (!device?.id) return;
+  if (!device?.id) return Promise.resolve(false);
   const timer = escortTimers.get(device.id);
   if (timer) {
     clearInterval(timer);
     escortTimers.delete(device.id);
   }
-  deviceStore.setDroneStandby(device.id);
-  ElMessage.success(`无人机 ${device.name || device.id} 已召回`);
+  const targetId = device?.escortTarget || policeVehiclePopup.deviceId || "";
+  const sn = device?.sn || "";
+  return submitStopFollow(targetId, sn).then((ok) => {
+    if (ok) {
+      deviceStore.setDroneStandby(device.id);
+    }
+    return ok;
+  });
 };
 
 defineExpose({
@@ -4372,12 +4686,24 @@ watch(
   },
 );
 
+watch(
+  [() => viewerLoadCount.value, () => deviceStore.targets, () => deviceStore.drones],
+  ([loadCount]) => {
+    if (loadCount >= 1) {
+      syncStoreDevicesToMap();
+    }
+  },
+  { deep: true, immediate: true },
+);
+
 onMounted(() => {
   try {
     initViewer();
   } finally {
     isLoading.value = false;
   }
+  // 预热推荐无人机列表，减少首次点车弹窗等待
+  getReadySuggestedDrones().catch(() => {});
 
   // 地图首屏优先，MQTT 连接放到 Viewer 初始化之后再启动。
   setTimeout(() => {
@@ -4386,6 +4712,10 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  vehicleLocationTopics.forEach((topic) => mqttService.unsubscribe(topic));
+  vehicleLocationTopics.clear();
+  escortDroneOsdTopics.forEach((topic) => mqttService.unsubscribe(topic));
+  escortDroneOsdTopics.clear();
   mqttService.destroy();
   clearLockdownMarkers();
   closePoliceVehiclePopup();

@@ -52,8 +52,24 @@
               </button>
             </div>
 
+            <div class="plan-list-toolbar">
+              <input
+                v-model.trim="planNameQuery"
+                type="search"
+                class="plan-input plan-input--single plan-name-search"
+                placeholder="计划名称（回车查询）"
+                enterkeyhint="search"
+                @keyup.enter="loadPlansForActiveTab"
+              />
+            </div>
+
             <div class="plan-list-scroll">
-              <template v-if="displayRows.length">
+              <template v-if="listLoading">
+                <div class="plan-empty-state plan-empty-state--loading">
+                  <div class="plan-empty-state__title">加载中…</div>
+                </div>
+              </template>
+              <template v-else-if="displayRows.length">
                 <div
                   v-for="row in displayRows"
                   :key="row.key"
@@ -95,12 +111,28 @@
                     >
                       紧急启动
                     </button>
+                    <button
+                      v-else-if="row.showStop"
+                      type="button"
+                      class="btn-emergency-start"
+                      @click.stop="onStopTask(row)"
+                    >
+                      停止任务
+                    </button>
                   </div>
                 </div>
               </template>
               <div v-else class="plan-empty-state">
-                <div class="plan-empty-state__title">空空如也</div>
-                <div class="plan-empty-state__desc">暂无{{ activeScenarioTitle }}计划展示</div>
+                <template v-if="flightPlanStore.plansFetchError">
+                  <div class="plan-empty-state__title plan-empty-state__title--error">
+                    {{ flightPlanStore.plansFetchError }}
+                  </div>
+                  <div class="plan-empty-state__desc">请稍后重试或检查网络</div>
+                </template>
+                <template v-else>
+                  <div class="plan-empty-state__title">空空如也</div>
+                  <div class="plan-empty-state__desc">暂无{{ activeScenarioTitle }}计划展示</div>
+                </template>
               </div>
             </div>
 
@@ -306,7 +338,7 @@
                   />
                 </button>
                 <div v-show="sectionOpen.resources" class="plan-sec__body plan-sec__body--resources">
-                  <div v-for="r in filteredResourceRows" :key="r.key" class="plan-res-row">
+                  <div v-for="r in filteredResourceRows" :key="r.sourceId ?? r.field" class="plan-res-row">
                     <span class="plan-res-row__label">{{ r.label }}</span>
                     <div class="plan-res-counter">
                       <template v-if="isViewMode">
@@ -343,11 +375,27 @@
                 <button
                   type="button"
                   class="plan-editor-btn plan-editor-btn--emergency"
+                  v-if="isCurrentPlanStopped"
+                  :disabled="detailActionSubmitting"
                   @click="onDetailEmergencyStart"
                 >
                   紧急启动
                 </button>
-                <button type="button" class="plan-editor-btn plan-editor-btn--danger" @click="onDetailDelete">
+                <button
+                  type="button"
+                  v-else
+                  class="plan-editor-btn plan-editor-btn--emergency"
+                  :disabled="detailActionSubmitting"
+                  @click="onDetailStop"
+                >
+                  停止任务
+                </button>
+                <button
+                  type="button"
+                  class="plan-editor-btn plan-editor-btn--danger"
+                  :disabled="detailActionSubmitting"
+                  @click="onDetailDelete"
+                >
                   删除
                 </button>
               </template>
@@ -355,8 +403,13 @@
                 <button type="button" class="plan-editor-btn plan-editor-btn--primary" @click="resetPlanForm">
                   重置
                 </button>
-                <button type="button" class="plan-editor-btn plan-editor-btn--outline" @click="confirmAddPlan">
-                  确认
+                <button
+                  type="button"
+                  class="plan-editor-btn plan-editor-btn--outline"
+                  :disabled="planSubmitting"
+                  @click="confirmAddPlan"
+                >
+                  {{ planSubmitting ? "提交中…" : "确认" }}
                 </button>
               </template>
             </footer>
@@ -368,20 +421,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, nextTick } from "vue";
+import { ref, reactive, computed, nextTick, onMounted, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
+import { AccompanyingFlyService } from "@/api";
 import { useFlightPlanStore } from "@/stores/flightPlan.js";
 import arrowRightPng from "@/assets/images/arrow_right.png";
 import MountainRescueIcon from "@/components/icons/MountainRescueIcon.vue";
 import WaterObservationIcon from "@/components/icons/WaterObservationIcon.vue";
 import SecurityProtectionIcon from "@/components/icons/SecurityProtectionIcon.vue";
-
-defineProps({
-  embedded: {
-    type: Boolean,
-    default: false,
-  },
-});
 import {
   buildFlightLocationTreeData,
   pathToLocationNodeKey,
@@ -392,10 +439,209 @@ import {
   resolvePolygonRingByPath,
 } from "@/config/flight-plan-locations.js";
 
+const props = defineProps({
+  embedded: {
+    type: Boolean,
+    default: false,
+  },
+});
+
+/** 侧栏嵌入式时：仅在用户点开「飞行计划」Tab 后再请求列表，避免首页初始化就打 /plan/pageQuery */
+const planListFetchEnabled = ref(!props.embedded);
+
 const expanded = ref(false);
 const flightPlanStore = useFlightPlanStore();
 const activeScenarioKey = ref("mountain");
 const selectedRowKey = ref("");
+
+/** 场景 Tab → 接口 type：1山林救援 2水上观察 3重点安保 */
+const TAB_TO_API_TYPE = { mountain: 1, water: 2, security: 3 };
+const listLoading = ref(false);
+const planNameQuery = ref("");
+const planSubmitting = ref(false);
+
+async function loadPlansForActiveTab() {
+  const type = TAB_TO_API_TYPE[activeScenarioKey.value];
+  if (!type) return;
+  listLoading.value = true;
+  try {
+    const q = { type, current: 1, pageSize: 100 };
+    const name = planNameQuery.value.trim();
+    if (name) q.name = name;
+    await flightPlanStore.fetchPlanList(q);
+  } finally {
+    listLoading.value = false;
+  }
+}
+
+/** 后端未就绪或解析失败时使用 */
+const DEFAULT_RESOURCE_ROWS = [
+  { key: "drone", label: "无人机", field: "resourceDroneCount", defaultCount: undefined },
+  { key: "dog", label: "无人犬", field: "resourceDogCount", defaultCount: undefined },
+  { key: "boat", label: "无人艇", field: "resourceBoatCount", defaultCount: undefined },
+];
+
+/** @type {import('vue').Ref<({ key: string, label: string, field: string, defaultCount?: number, sort?: number, sourceId?: string }) [] | null>} */
+const resourceRowsFromApi = ref(null);
+
+/** value 若为非负整数字符串，表示该项默认数量；否则视作展示文案 */
+function parseApiSourceDefaultCount(rawValue) {
+  if (rawValue === undefined || rawValue === null || rawValue === "") return null;
+  const s = String(rawValue).trim();
+  if (!/^-?\d+$/.test(s)) return null;
+  return Math.max(0, Number(s));
+}
+
+/**
+ * GET /config/getSource · data[] 条目（id,type,key,value,sort）。
+ * label：value 为纯数字时使用 key（或 id）作展示名；否则用 value 文案。
+ */
+function pickLabelFromSourceItem(raw) {
+  const k = String(raw?.key ?? "").trim();
+  const def = parseApiSourceDefaultCount(raw?.value);
+  if (def !== null)
+    return k || String(raw?.id ?? "").trim() || `资源`;
+
+  const fromValue = raw?.value != null ? String(raw.value).trim() : "";
+  const s =
+    fromValue ||
+    (raw?.dictLabel ??
+      raw?.label ??
+      raw?.name ??
+      raw?.title ??
+      raw?.sourceName ??
+      raw?.desc ??
+      "");
+  return String(s).trim() || k || String(raw?.id ?? "").trim();
+}
+
+function normalizeResourceRowsPayload(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (payload && typeof payload === "object") {
+    const d = payload.data;
+    if (Array.isArray(d)) return d;
+    if (Array.isArray(d?.list)) return d.list;
+    if (Array.isArray(d?.records)) return d.records;
+    if (Array.isArray(payload.list)) return payload.list;
+    if (Array.isArray(payload.records)) return payload.records;
+  }
+  return [];
+}
+
+/**
+ * type：1伴随资源 2目标资源 — 与本页「所需资源」无关的项跳过（若后端同包返回）。
+ */
+function isAccompanyResourceSourceRow(raw) {
+  const t = raw?.type;
+  if (t === undefined || t === null || t === "") return true;
+  return Number(t) === 1;
+}
+
+/**
+ * 将 /config/getSource 单项映射到与计划存储一致的表单字段；
+ * 仅识别无人机 / 无人犬 / 无人艇三类，超出部分忽略以保持与现有计划字段兼容。
+ * 匹配用 key + 文案，不把「纯数字的 value」（默认值）误当作类型编码干扰分类。
+ */
+function resolveLegacyPlanResourceField(raw) {
+  const label = pickLabelFromSourceItem(raw);
+  const codeKey = String(raw?.key ?? "").trim();
+
+  /** 语义匹配用拼接串（默认值数字仅附在末尾供 1/2/3 编码兜底） */
+  const defCnt = parseApiSourceDefaultCount(raw?.value);
+  const valSemantic =
+    raw?.dictValue ??
+    raw?.code ??
+    (defCnt !== null ? "" : raw?.value != null ? String(raw.value).trim() : "");
+
+  const blob = `${codeKey.toLowerCase()} ${valSemantic.toLowerCase()} ${label.toLowerCase()}`;
+
+  if (label.includes("无人艇") || /艇|boat|ship|vessel/.test(blob))
+    return { field: "resourceBoatCount", key: "boat" };
+  if (label.includes("无人犬") || /(^|[^无])犬|dog\b|resource.?dog/.test(blob))
+    return { field: "resourceDogCount", key: "dog" };
+  if (label.includes("无人机") || /uav|drone|wrj/.test(blob) || /\b(resource)?drone/i.test(blob))
+    return { field: "resourceDroneCount", key: "drone" };
+
+  /** 后端若用语义 value 编码 无人机/犬/艇 */
+  const v = String(valSemantic).trim();
+  if (v === "1") return { field: "resourceDroneCount", key: "drone" };
+  if (v === "2") return { field: "resourceDogCount", key: "dog" };
+  if (v === "3") return { field: "resourceBoatCount", key: "boat" };
+
+  return null;
+}
+
+function buildResourceRowsFromSourceList(list) {
+  const sorted = [...list].sort((a, b) => (Number(a?.sort) || 0) - (Number(b?.sort) || 0));
+
+  /** field -> row（多条映射同一 field 时保留 sort 更小的一条） */
+  /** @type {Map<string, { key: string, label: string, field: string, defaultCount?: number, sort: number, sourceId?: string }>} */
+  const byField = new Map();
+
+  for (const raw of sorted) {
+    if (!isAccompanyResourceSourceRow(raw)) continue;
+    const meta = resolveLegacyPlanResourceField(raw);
+    if (!meta?.field) continue;
+    const label = pickLabelFromSourceItem(raw) || meta.key;
+    const def = parseApiSourceDefaultCount(raw?.value);
+    const sortN = Number(raw?.sort) || 0;
+    const sourceId = raw?.id != null && raw?.id !== "" ? String(raw.id) : "";
+
+    const existing = byField.get(meta.field);
+    if (!existing || sortN < existing.sort) {
+      byField.set(meta.field, {
+        key: meta.key,
+        label,
+        field: meta.field,
+        ...(def !== null ? { defaultCount: def } : {}),
+        sort: sortN,
+        ...(sourceId ? { sourceId } : {}),
+      });
+    }
+  }
+
+  /** 列表展示顺序遵循后端 sort */
+  return [...byField.values()]
+    .sort((a, b) => a.sort - b.sort)
+    .map(({ sort: _, ...rest }) => rest);
+}
+
+async function loadResourceSourceDefs() {
+  try {
+    const res = await AccompanyingFlyService.getConfigSource({ type: 1 });
+    if (res?.code !== 2000) {
+      resourceRowsFromApi.value = null;
+      return;
+    }
+    const list = normalizeResourceRowsPayload(res);
+    const rows = buildResourceRowsFromSourceList(list);
+    resourceRowsFromApi.value = rows.length ? rows : null;
+  } catch {
+    resourceRowsFromApi.value = null;
+  }
+}
+
+const resourceRowsBaseline = computed(() => {
+  return resourceRowsFromApi.value?.length ? resourceRowsFromApi.value : DEFAULT_RESOURCE_ROWS;
+});
+
+onMounted(() => {
+  loadResourceSourceDefs();
+  if (!props.embedded) loadPlansForActiveTab();
+});
+
+watch(activeScenarioKey, () => {
+  if (props.embedded && !planListFetchEnabled.value) return;
+  loadPlansForActiveTab();
+});
+
+/** 由父组件在左侧「飞行计划」Tab 被选中时调用 */
+function notifyPlanSidebarOpened() {
+  planListFetchEnabled.value = true;
+  loadPlansForActiveTab();
+}
+
+defineExpose({ notifyPlanSidebarOpened });
 
 const planDialogVisible = ref(false);
 /** @type {import('vue').Ref<'add' | 'view'>} */
@@ -429,6 +675,13 @@ const scenarios = [
 ];
 
 const isViewMode = computed(() => planDialogMode.value === "view");
+const detailActionSubmitting = ref(false);
+const currentViewingPlan = computed(() =>
+  flightPlanStore.getPlanById(viewingPlanId.value),
+);
+const isCurrentPlanStopped = computed(
+  () => Number(currentViewingPlan.value?.status) === 0,
+);
 
 const themeSectionTitle = computed(() => {
   const k = addForm.scenarioKey;
@@ -482,6 +735,7 @@ const displayRows = computed(() => {
     key: p.id,
     isPlaceholder: false,
     planId: p.id,
+    status: Number(p?.status),
     title:
       p.subject ||
       p.locationLabel ||
@@ -490,7 +744,8 @@ const displayRows = computed(() => {
     subtitle:
       p.detailRemark ||
       `${formatPlanDateRange(p.flightDate, p.flightDateEnd)} ${p.timeStart}–${p.timeEnd} · ${p.droneLabel}`,
-    showEmergency: i < 4,
+    showEmergency: Number(p?.status) === 0 && i < 4,
+    showStop: Number(p?.status) !== 0 && i < 4,
   }));
 });
 
@@ -510,21 +765,17 @@ function toggleSection(key) {
   sectionOpen[key] = !sectionOpen[key];
 }
 
-const resourceRows = [
-  { key: "drone", label: "无人机", field: "resourceDroneCount" },
-  { key: "dog", label: "无人犬", field: "resourceDogCount" },
-  { key: "boat", label: "无人艇", field: "resourceBoatCount" },
-];
 const filteredResourceRows = computed(() => {
+  const rows = resourceRowsBaseline.value;
   // 场景差异化资源展示：
   // 山林救援不展示无人艇；水上观察不展示无人犬。
   if (addForm.scenarioKey === "mountain") {
-    return resourceRows.filter((r) => r.key !== "boat");
+    return rows.filter((r) => r.key !== "boat");
   }
   if (addForm.scenarioKey === "water") {
-    return resourceRows.filter((r) => r.key !== "dog");
+    return rows.filter((r) => r.key !== "dog");
   }
-  return resourceRows;
+  return rows;
 });
 const locationNodeLabelMap = computed(() => {
   const map = new Map();
@@ -639,10 +890,70 @@ function timeToMinutes(t) {
   return Number(parts[0]) * 60 + Number(parts[1]);
 }
 
-function droneLabelFromForm() {
-  const n = addForm.resourceDroneCount;
-  if (n > 0) return `无人机 ×${n}`;
-  return "无人机";
+/** 围栏环 [lng,lat,...] 的几何中心，供接口 longitude / latitude */
+function ringCentroidLngLat(ringFlat) {
+  if (!ringFlat?.length || ringFlat.length < 6) return null;
+  let sx = 0;
+  let sy = 0;
+  const n = ringFlat.length / 2;
+  for (let i = 0; i < ringFlat.length; i += 2) {
+    sx += ringFlat[i];
+    sy += ringFlat[i + 1];
+  }
+  return { longitude: sx / n, latitude: sy / n };
+}
+
+/** 接口实行时间，补全为 HH:mm:ss */
+function formatExecuteTimeForApi(hm) {
+  const s = String(hm || "").trim();
+  if (!s) return "";
+  const parts = s.split(":").map((p) => p.trim());
+  if (parts.length === 2) {
+    const h = parts[0].padStart(2, "0");
+    const m = parts[1].padStart(2, "0");
+    return `${h}:${m}:00`;
+  }
+  if (parts.length >= 3) {
+    return `${parts[0].padStart(2, "0")}:${parts[1].padStart(2, "0")}:${parts[2].padStart(2, "0")}`;
+  }
+  return s;
+}
+
+/** @returns {{ description?: string }[]} */
+function buildResourceConfigForApi() {
+  const out = [];
+  for (const r of filteredResourceRows.value) {
+    const count = Number(addForm[r.field]) || 0;
+    if (count > 0) {
+      out.push({ description: `${r.label}×${count}` });
+    }
+  }
+  const remark = addForm.detailRemark?.trim?.();
+  if (remark) {
+    out.push({ description: remark });
+  }
+  if (!out.length) {
+    out.push({ description: "暂无资源分项说明" });
+  }
+  return out;
+}
+
+function resetResourceCountersFromBaseline() {
+  addForm.resourceDroneCount = 0;
+  addForm.resourceDogCount = 0;
+  addForm.resourceBoatCount = 0;
+  for (const r of resourceRowsBaseline.value) {
+    if (
+      r.field === "resourceDroneCount" ||
+      r.field === "resourceDogCount" ||
+      r.field === "resourceBoatCount"
+    ) {
+      if (r.defaultCount != null) {
+        const n = Number(r.defaultCount);
+        if (!Number.isNaN(n)) addForm[r.field] = Math.max(0, n);
+      }
+    }
+  }
 }
 
 function resetPlanForm() {
@@ -653,9 +964,7 @@ function resetPlanForm() {
   addForm.timeStart = "";
   addForm.timeEnd = "";
   addForm.flightDateRange = [];
-  addForm.resourceDroneCount = 0;
-  addForm.resourceDogCount = 0;
-  addForm.resourceBoatCount = 0;
+  resetResourceCountersFromBaseline();
 }
 
 function loadPlanIntoForm(p) {
@@ -701,65 +1010,113 @@ function closePlanDialog() {
   viewingPlanId.value = null;
 }
 
-function onDetailEmergencyStart() {
-  const p = flightPlanStore.getPlanById(viewingPlanId.value);
+function reloadDetailFormIfViewing(planId) {
+  if (!planDialogVisible.value || viewingPlanId.value !== planId) return;
+  const latest = flightPlanStore.getPlanById(planId);
+  if (latest) loadPlanIntoForm(latest);
+}
+
+function requestPlanStartFollow(plan) {
+  if (!plan?.id) return;
+  const title = plan.subject || plan.locationLabel || "飞行计划";
+  if (detailActionSubmitting.value) return;
+  ElMessageBox.confirm(`确定紧急启动「${title}」任务？`, "紧急启动确认", {
+    confirmButtonText: "紧急启动",
+    cancelButtonText: "取消",
+    type: "warning",
+  })
+    .then(async () => {
+      detailActionSubmitting.value = true;
+      try {
+        const res = await AccompanyingFlyService.planStartFollow({ id: plan.id });
+        if (res?.code === 2000) {
+          await loadPlansForActiveTab();
+          reloadDetailFormIfViewing(plan.id);
+          ElMessage.success("任务已开启");
+        }
+      } finally {
+        detailActionSubmitting.value = false;
+      }
+    })
+    .catch(() => {});
+}
+
+function requestPlanStopFollow(plan) {
+  if (!plan?.id) return;
+  if (detailActionSubmitting.value) return;
+  const title = plan.subject || plan.locationLabel || "该飞行计划";
+  ElMessageBox.confirm(`确定停止「${title}」任务？`, "停止任务确认", {
+    confirmButtonText: "停止",
+    cancelButtonText: "取消",
+    type: "warning",
+  })
+    .then(async () => {
+      detailActionSubmitting.value = true;
+      try {
+        const res = await AccompanyingFlyService.planStopFollow({ id: plan.id });
+        if (res?.code === 2000) {
+          await loadPlansForActiveTab();
+          reloadDetailFormIfViewing(plan.id);
+          ElMessage.success("任务已停止");
+        }
+      } finally {
+        detailActionSubmitting.value = false;
+      }
+    })
+    .catch(() => {});
+}
+
+async function onDetailEmergencyStart() {
+  const p = currentViewingPlan.value;
   if (!p) {
     ElMessage.warning("未找到该计划");
     return;
   }
-  const title = p.subject || p.locationLabel || "飞行计划";
-  ElMessage.success(`已触发紧急启动流程：${title}`);
+  requestPlanStartFollow(p);
+}
+
+async function onDetailStop() {
+  const p = currentViewingPlan.value;
+  if (!p) {
+    ElMessage.warning("未找到该计划");
+    return;
+  }
+  requestPlanStopFollow(p);
 }
 
 function onDetailDelete() {
   const planId = viewingPlanId.value;
-  const p = flightPlanStore.getPlanById(planId);
+  const p = currentViewingPlan.value;
   if (!p) {
     ElMessage.warning("未找到该计划");
     return;
   }
+  if (detailActionSubmitting.value) return;
   const title = p.subject || p.locationLabel || "该飞行计划";
   ElMessageBox.confirm(`确定删除「${title}」？删除后不可恢复。`, "删除飞行计划", {
     confirmButtonText: "删除",
     cancelButtonText: "取消",
     type: "warning",
   })
-    .then(() => {
-      if (flightPlanStore.deletePlan(planId)) {
-        closePlanDialog();
-        ElMessage.success("已删除飞行计划");
-      } else {
-        ElMessage.error("删除失败");
+    .then(async () => {
+      detailActionSubmitting.value = true;
+      try {
+        const res = await AccompanyingFlyService.planDelete({ id: planId });
+        if (res?.code === 2000) {
+          closePlanDialog();
+          await loadPlansForActiveTab();
+          ElMessage.success("已删除飞行计划");
+        }
+      } finally {
+        detailActionSubmitting.value = false;
       }
     })
     .catch(() => {});
 }
 
-function confirmAddPlan() {
-  // 临时改动：时间/日期先改为非必填，保留原校验逻辑以便后续恢复。
-  // if (!addForm.flightDateRange || addForm.flightDateRange.length !== 2) {
-  //   ElMessage.warning("请选择实行日期范围");
-  //   return;
-  // }
-  const [flightDate, flightDateEnd] = addForm.flightDateRange;
-  // if (flightDateEnd < flightDate) {
-  //   ElMessage.warning("结束日期不能早于开始日期");
-  //   return;
-  // }
-  // if (!addForm.timeStart) {
-  //   ElMessage.warning("请选择开始时间");
-  //   return;
-  // }
-  // if (!addForm.timeEnd) {
-  //   ElMessage.warning("请选择结束时间");
-  //   return;
-  // }
-  const t0 = timeToMinutes(addForm.timeStart);
-  const t1 = timeToMinutes(addForm.timeEnd);
-  // if (Number.isFinite(t0) && Number.isFinite(t1) && t1 <= t0) {
-  //   ElMessage.warning("结束时间须晚于开始时间");
-  //   return;
-  // }
+async function confirmAddPlan() {
+  if (planSubmitting.value) return;
+
   const locationPaths = getSelectedLocationPaths();
   if (!locationPaths.length) {
     ElMessage.warning("请至少选择一个地点");
@@ -770,27 +1127,84 @@ function confirmAddPlan() {
     ElMessage.error("部分地点缺少围栏数据，无法上图");
     return;
   }
-  flightPlanStore.addPlan({
-    scenarioKey: addForm.scenarioKey,
-    flightDate,
-    flightDateEnd,
-    timeStart: addForm.timeStart,
-    timeEnd: addForm.timeEnd,
-    droneLabel: droneLabelFromForm(),
-    locationPaths,
-    locationPath: [...locationPaths[0]],
-    locationLabel: resolveLocationLabelsFromPaths(locationPaths),
-    polygonLngLat: polygonLngLatList[0],
-    polygonLngLatList,
-    subject: addForm.subject.trim(),
-    detailRemark: addForm.detailRemark.trim(),
-    resourceDroneCount: addForm.resourceDroneCount,
-    resourceDogCount: addForm.resourceDogCount,
-    resourceBoatCount: addForm.resourceBoatCount,
-  });
-  activeScenarioKey.value = addForm.scenarioKey;
-  closePlanDialog();
-  ElMessage.success("已添加飞行计划，点击该卡片可查看详情或在地图查看圈选区域");
+
+  const range = addForm.flightDateRange || [];
+  const flightDate = range[0];
+  const flightDateEnd = range[1];
+  if (!flightDate) {
+    ElMessage.warning("请选择实行日期");
+    return;
+  }
+  if (flightDateEnd && flightDateEnd < flightDate) {
+    ElMessage.warning("结束日期不能早于开始日期");
+    return;
+  }
+
+  if (!addForm.timeStart || !addForm.timeEnd) {
+    ElMessage.warning("请填写实行开始时间与结束时间");
+    return;
+  }
+  const t0 = timeToMinutes(addForm.timeStart);
+  const t1 = timeToMinutes(addForm.timeEnd);
+  if (!Number.isFinite(t0) || !Number.isFinite(t1)) {
+    ElMessage.warning("时间格式无效");
+    return;
+  }
+  if (t1 <= t0) {
+    ElMessage.warning("结束时间须晚于开始时间");
+    return;
+  }
+
+  const placeLabel = resolveLocationLabelsFromPaths(locationPaths) || "—";
+  const name =
+    addForm.subject.trim() ||
+    placeLabel ||
+    (scenarios.find((s) => s.key === addForm.scenarioKey)?.title ?? "飞行计划");
+
+  const center = ringCentroidLngLat(polygonLngLatList[0]);
+  if (
+    !center ||
+    !Number.isFinite(center.longitude) ||
+    !Number.isFinite(center.latitude)
+  ) {
+    ElMessage.error("无法解析地点坐标，请重新选择地点");
+    return;
+  }
+
+  const type = TAB_TO_API_TYPE[addForm.scenarioKey];
+  if (!type) {
+    ElMessage.error("未知计划场景类型");
+    return;
+  }
+
+  const body = {
+    type,
+    name,
+    place: placeLabel,
+    longitude: Number(center.longitude.toFixed(6)),
+    latitude: Number(center.latitude.toFixed(6)),
+    executeDate: String(flightDate).slice(0, 10),
+    executeStartTime: formatExecuteTimeForApi(addForm.timeStart),
+    executeEndTime: formatExecuteTimeForApi(addForm.timeEnd),
+    resourceConfig: buildResourceConfigForApi(),
+  };
+
+  planSubmitting.value = true;
+  try {
+    const res = await AccompanyingFlyService.planAdd(body);
+    if (res?.code !== 2000) {
+      return;
+    }
+    activeScenarioKey.value = addForm.scenarioKey;
+    const q = { type, current: 1, pageSize: 100 };
+    const nq = planNameQuery.value.trim();
+    if (nq) q.name = nq;
+    await flightPlanStore.fetchPlanList(q);
+    closePlanDialog();
+    ElMessage.success("已提交飞行计划");
+  } finally {
+    planSubmitting.value = false;
+  }
 }
 
 function onRowClick(row) {
@@ -805,7 +1219,22 @@ function onEmergencyStart(row) {
     ElMessage.info(`紧急启动（示意）：${name} · ${row.title}`);
     return;
   }
-  ElMessage.success(`已触发紧急启动流程：${row.title}`);
+  const p = flightPlanStore.getPlanById(row.planId);
+  if (!p) {
+    ElMessage.warning("未找到该计划");
+    return;
+  }
+  requestPlanStartFollow(p);
+}
+
+function onStopTask(row) {
+  if (row.isPlaceholder) return;
+  const p = flightPlanStore.getPlanById(row.planId);
+  if (!p) {
+    ElMessage.warning("未找到该计划");
+    return;
+  }
+  requestPlanStopFollow(p);
 }
 </script>
 
@@ -1000,6 +1429,17 @@ background: #15191E;
   line-height: 1.2;
 }
 
+.plan-list-toolbar {
+  flex-shrink: 0;
+  margin-bottom: 6px;
+}
+
+.plan-name-search {
+  width: 100%;
+  min-height: 36px;
+  font-size: 13px;
+}
+
 .plan-list-scroll {
   display: flex;
   flex-direction: column;
@@ -1042,6 +1482,12 @@ background: #15191E;
     font-size: 16px;
     font-weight: 500;
     line-height: 1.25;
+
+    &--error {
+      color: rgba(255, 138, 128, 0.95);
+      text-align: center;
+      padding: 0 12px;
+    }
   }
 
   &__desc {

@@ -19,7 +19,11 @@
     <HomeHeader v-show="!immersiveFlight" />
 
     <!-- 左侧 Tab：无人设备 / 飞行计划 -->
-    <LeftSidebarTabs v-show="!immersiveFlight" ref="leftSidebarRef">
+    <LeftSidebarTabs
+      v-show="!immersiveFlight"
+      ref="leftSidebarRef"
+      @select-tab="onLeftSidebarSelect"
+    >
       <template #device>
         <ResourcePanel
           embedded
@@ -31,7 +35,7 @@
         />
       </template>
       <template #plan>
-        <PlanPanel embedded />
+        <PlanPanel ref="planPanelRef" embedded />
       </template>
     </LeftSidebarTabs>
 
@@ -74,9 +78,17 @@ import MapLegend from "@/components/MapLegend.vue";
 import PlanPanel from "@/components/PlanPanel.vue";
 import LeftSidebarTabs from "@/components/LeftSidebarTabs.vue";
 import { useDeviceStore } from "@/stores/device.js";
+import { AccompanyingFlyService } from "@/api";
 
 const mapRef = ref(null);
 const leftSidebarRef = ref(null);
+const planPanelRef = ref(null);
+
+function onLeftSidebarSelect(tab) {
+  if (tab === "plan") {
+    planPanelRef.value?.notifyPlanSidebarOpened?.();
+  }
+}
 const droneStreamVisible = ref(false);
 const streamDrone = ref(null);
 const immersiveFlight = ref(false);
@@ -126,8 +138,25 @@ const streamCompanionTaskTitle = computed(() => {
   return d.name || d.id || "任务一号";
 });
 
-const openDroneStream = (device) => {
-  streamDrone.value = device;
+const openDroneStream = async (device) => {
+  if (!device?.id) return;
+  const id = String(device.id);
+  try {
+    const res = await AccompanyingFlyService.droneDetail({ id });
+    if (res?.code === 2000 && res?.data) {
+      const d = res.data;
+      streamDrone.value = {
+        ...device,
+        ...(typeof d === "object" ? d : {}),
+        id,
+        streamUrl: d?.streamUrl || device?.streamUrl || "",
+      };
+    } else {
+      streamDrone.value = device;
+    }
+  } catch (_) {
+    streamDrone.value = device;
+  }
   droneStreamVisible.value = true;
 };
 

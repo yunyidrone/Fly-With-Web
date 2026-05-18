@@ -68,11 +68,14 @@
 <script setup>
 import { ref } from "vue";
 
+const emit = defineEmits(["select-tab"]);
+
 /** @type {import('vue').Ref<'device' | 'plan' | null>} */
 const activeTab = ref(null);
 
 function selectTab(tab) {
   activeTab.value = tab;
+  emit("select-tab", tab);
 }
 
 /** 取消选中并收起下方内容（如点击地图空白区域时由父组件调用） */
