@@ -52,7 +52,7 @@
               </button>
             </div>
 
-            <div class="plan-list-toolbar">
+            <!-- <div class="plan-list-toolbar">
               <input
                 v-model.trim="planNameQuery"
                 type="search"
@@ -61,7 +61,7 @@
                 enterkeyhint="search"
                 @keyup.enter="loadPlansForActiveTab"
               />
-            </div>
+            </div> -->
 
             <div class="plan-list-scroll">
               <template v-if="listLoading">
@@ -1658,7 +1658,7 @@ background: #15191E;
 }
 
 .plan-editor-modal {
-  width: 381px;
+  width: 450px;
   max-height: min(92vh, 80vh);
   display: flex;
   flex-direction: column;

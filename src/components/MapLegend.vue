@@ -98,7 +98,8 @@
 </template>
 
 <script setup>
-import { reactive, ref } from "vue";
+import { ref, onMounted } from "vue";
+import { AccompanyingFlyService } from "@/api";
 import dbWrjPng from "@/assets/images/db_wrj.png";
 import dbWrgPng from "@/assets/images/db_wrg.png";
 import dbWrtPng from "@/assets/images/db_wrt.png";
@@ -121,7 +122,7 @@ const DEFAULT_LEGEND_ACTIVE = {
   route: false,
 };
 
-const legendItems = reactive([
+const STATIC_LEGEND_ITEMS = [
   { key: "drone", iconSrc: dbWrjPng, label: "无人机", active: true },
   { key: "robotDog", iconSrc: dbWrgPng, label: "无人犬", active: false },
   { key: "unmannedBoat", iconSrc: dbWrtPng, label: "无人艇", active: false },
@@ -129,11 +130,116 @@ const legendItems = reactive([
   { key: "policeCar", iconSrc: dbJcPng, label: "警车", active: true },
   { key: "checkpoint", iconSrc: dbKdPng, label: "卡点", active: false },
   { key: "route", iconSrc: dbBflxPng, label: "伴飞路线", active: false },
-]);
+];
+
+const STATIC_LEGEND_EXTRA_ITEMS = [
+  { key: "checkpoint", iconSrc: dbKdPng, label: "卡点", active: false },
+  { key: "route", iconSrc: dbBflxPng, label: "伴飞路线", active: false },
+];
+
+const legendItems = ref(STATIC_LEGEND_ITEMS.map((item) => ({ ...item })));
 const lockdownItem = { iconSrc: dbYjfcPng, label: "一键封城" };
 const showLockdownConfirm = ref(false);
 
 const emit = defineEmits(["lockdown", "toggle"]);
+
+const legendIconModules = import.meta.glob("../assets/images/db_*.png", {
+  eager: true,
+  import: "default",
+});
+
+function normalizeLegendPayload(res) {
+  const data = res?.data;
+  const list = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.records)
+      ? data.records
+      : Array.isArray(data?.list)
+        ? data.list
+        : [];
+  return list
+    .filter((item) => item?.key)
+    .sort((a, b) => (Number(a?.sort) || 0) - (Number(b?.sort) || 0));
+}
+
+function resolveLegendKey(item, expectedType) {
+  const rawKey = String(item?.key ?? "").trim();
+  const label = String(item?.value ?? item?.key ?? "").trim();
+  const text = `${rawKey} ${label}`.toLowerCase();
+
+  if (expectedType === 1) {
+    if (rawKey === "drone" || /无人机|drone|plane|uav|wrj/.test(text)) return "drone";
+    if (rawKey === "robotDog" || /无人犬|无人狗|dog|robotdog|wrg/.test(text)) return "robotDog";
+    if (rawKey === "unmannedBoat" || /无人艇|boat|ship|vessel|wrt/.test(text))
+      return "unmannedBoat";
+  }
+
+  if (expectedType === 2) {
+    if (rawKey === "police" || rawKey === "officer" || /警员|人员|officer|police.?man|jy/.test(text)) return "officer";
+    if (rawKey === "car" || rawKey === "policeCar" || /警车|车辆|car|vehicle|police.?car|jc/.test(text))
+      return "policeCar";
+  }
+
+  return "";
+}
+
+function resolveLegendIcon(item, legendKey) {
+  const rawKey = String(item?.key ?? "").trim();
+  return (
+    legendIconModules[`../assets/images/db_${rawKey}.png`] ||
+    {
+      drone: dbWrjPng,
+      robotDog: dbWrgPng,
+      unmannedBoat: dbWrtPng,
+      officer: dbJyPng,
+      policeCar: dbJcPng,
+    }[legendKey]
+  );
+}
+
+function buildLegendItemsFromSource(list, expectedType) {
+  const out = [];
+  const seen = new Set();
+  for (const item of list) {
+    if (item?.type != null && item.type !== "" && Number(item.type) !== expectedType) continue;
+    const key = resolveLegendKey(item, expectedType);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      key,
+      iconSrc: resolveLegendIcon(item, key),
+      label: String(item?.value || item?.key || "").trim(),
+      active: DEFAULT_LEGEND_ACTIVE[key] ?? false,
+    });
+  }
+  return out;
+}
+
+async function loadLegendItems() {
+  try {
+    const [resourceRes, targetRes] = await Promise.all([
+      AccompanyingFlyService.getConfigSource({ type: 1 }),
+      AccompanyingFlyService.getConfigSource({ type: 2 }),
+    ]);
+    if (resourceRes?.code !== 2000 || targetRes?.code !== 2000) return;
+
+    const resourceItems = buildLegendItemsFromSource(
+      normalizeLegendPayload(resourceRes),
+      1,
+    );
+    const targetItems = buildLegendItemsFromSource(normalizeLegendPayload(targetRes), 2);
+    const nextItems = [...resourceItems, ...targetItems, ...STATIC_LEGEND_EXTRA_ITEMS];
+    if (resourceItems.length || targetItems.length) {
+      legendItems.value = nextItems.map((item) => ({ ...item }));
+    }
+  } catch (_) {
+    legendItems.value = STATIC_LEGEND_ITEMS.map((item) => ({ ...item }));
+  }
+}
+
+onMounted(() => {
+  loadLegendItems();
+});
 
 const toggleItem = (item) => {
   item.active = !item.active;
@@ -150,12 +256,16 @@ const cancelLockdown = () => {
 
 const confirmLockdown = () => {
   showLockdownConfirm.value = false;
+  const checkpointItem = legendItems.value.find((item) => item.key === "checkpoint");
+  if (checkpointItem && !checkpointItem.active) {
+    checkpointItem.active = true;
+  }
   emit("lockdown");
 };
 
 /** 恢复默认：图例开关回到初始状态并同步地图图层显隐 */
 function restoreDefault() {
-  legendItems.forEach((item) => {
+  legendItems.value.forEach((item) => {
     const next = DEFAULT_LEGEND_ACTIVE[item.key];
     if (next === undefined) return;
     if (item.active !== next) {
@@ -167,7 +277,7 @@ function restoreDefault() {
 
 /** 清空选中：关闭全部图例对应地图图层（始终向地图同步一遍，避免图例状态与地图已脱节时第一次无效） */
 function clearAllSelection() {
-  legendItems.forEach((item) => {
+  legendItems.value.forEach((item) => {
     item.active = false;
     emit("toggle", { key: item.key, active: false });
   });

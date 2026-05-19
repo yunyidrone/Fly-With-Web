@@ -268,6 +268,7 @@ import {
   DEVICE_CONFIG,
   MAP_CONFIG,
 } from "@/config/app-config.js";
+import dtJyPng from "@/assets/images/dt_jy.png";
 import { TEST_POLICE_VEHICLES, TEST_DRONES } from "@/config/test-devices.js";
 import { useDeviceStore } from "@/stores/device.js";
 import { useFlightPlanStore } from "@/stores/flightPlan.js";
@@ -364,19 +365,19 @@ const closePoliceVehiclePopup = () => {
   detachPolicePopupTracker();
 };
 
-async function submitStartFollow(targetId, droneSn) {
+async function submitStartFollow(targetId, droneSn, droneId) {
   if (!targetId) {
     ElMessage.warning("未找到目标设备");
     return false;
   }
   if (!droneSn) {
-    ElMessage.warning("未找到无人机SN");
+    ElMessage.warning("未找到无人机");
     return false;
   }
   try {
     const res = await AccompanyingFlyService.startFollow({
       id: targetId,
-      sn: droneSn,
+      droneId: droneId,
     });
     if (res?.code === 2000) {
       subscribeEscortDroneOsd(droneSn);
@@ -437,21 +438,28 @@ function unsubscribeEscortDroneOsd(droneSn) {
   escortDroneOsdTopics.delete(sn);
 }
 
-async function submitStopFollow(targetId, droneSn) {
+async function submitStopFollow(targetId, droneId) {
+  targetId = '25919cbc3d4811f1aded0242ac120005'
   const id = String(targetId || "").trim();
-  const sn = String(droneSn || "").trim();
+  const targetDroneId = String(droneId || "").trim();
   if (!id) {
     ElMessage.warning("未找到目标设备");
     return false;
   }
-  if (!sn) {
-    ElMessage.warning("未找到无人机SN");
+  if (!targetDroneId) {
+    ElMessage.warning("未找到无人机ID");
     return false;
   }
   try {
-    const res = await AccompanyingFlyService.stopFollow({ id, sn });
+    const res = await AccompanyingFlyService.stopFollow({
+      id,
+      droneId: targetDroneId,
+    });
     if (res?.code === 2000) {
-      unsubscribeEscortDroneOsd(sn);
+      const drone = deviceStore.drones.find(
+        (d) => String(d?.id) === targetDroneId,
+      );
+      unsubscribeEscortDroneOsd(drone?.sn);
       await deviceStore.fetchDroneList();
       ElMessage.success(`已结束伴飞：${id}`);
       return true;
@@ -464,13 +472,25 @@ async function submitStopFollow(targetId, droneSn) {
   }
 }
 
+function resolveEscortTargetId(device) {
+  return String(
+    device?.escortTarget ??
+      device?.targetId ??
+      device?.target_id ??
+      device?.raw?.targetId ??
+      device?.raw?.target_id ??
+      device?.raw?.target?.id ??
+      "",
+  ).trim();
+}
+
 const handlePolicePopupEscort = async () => {
   const targetId = policeVehiclePopup.deviceId;
   const selected = (policeVehiclePopup.drones || []).find(
     (d) => String(d.id) === String(policeVehiclePopup.selectedDroneId),
   );
   const droneSn = selected?.sn || selected?.raw?.sn || "";
-  await submitStartFollow(targetId, droneSn);
+  await submitStartFollow(targetId, droneSn, policeVehiclePopup.selectedDroneId);
 };
 
 function toFiniteNumber(v) {
@@ -483,12 +503,7 @@ function toFiniteNumber(v) {
 }
 
 const SUGGEST_DRONES_CACHE_TTL = 15 * 1000;
-let suggestDronesCache = {
-  /** @type {any[]} */
-  list: [],
-  fetchedAt: 0,
-  pending: null,
-};
+const suggestDronesCache = new Map();
 
 function extractReadySuggestedDronesFromResponse(res) {
   const data = res?.data;
@@ -502,71 +517,114 @@ function extractReadySuggestedDronesFromResponse(res) {
   return list.filter((d) => Number(d?.status) === 1);
 }
 
-async function getReadySuggestedDrones(forceRefresh = false) {
+function buildSuggestDronesQuery(targetId, devicePosition) {
+  const longitude = toFiniteNumber(devicePosition?.longitude);
+  const latitude = toFiniteNumber(devicePosition?.latitude);
+  if (!targetId || !Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+    return null;
+  }
+  return {
+    targetId,
+    longitude,
+    latitude,
+  };
+}
+
+function getSuggestDronesCacheKey(query) {
+  return `${query.targetId}|${query.longitude}|${query.latitude}`;
+}
+
+async function getReadySuggestedDrones(query, forceRefresh = false) {
+  if (!query) return [];
+  const cacheKey = getSuggestDronesCacheKey(query);
+  const cached = suggestDronesCache.get(cacheKey);
   const now = Date.now();
   if (
     !forceRefresh &&
-    suggestDronesCache.list.length &&
-    now - suggestDronesCache.fetchedAt < SUGGEST_DRONES_CACHE_TTL
+    cached?.list?.length &&
+    now - cached.fetchedAt < SUGGEST_DRONES_CACHE_TTL
   ) {
-    return suggestDronesCache.list;
+    return cached.list;
   }
-  if (suggestDronesCache.pending) {
-    return suggestDronesCache.pending;
+  if (cached?.pending) {
+    return cached.pending;
   }
-  suggestDronesCache.pending = AccompanyingFlyService.droneSuggestList()
+  const pending = AccompanyingFlyService.droneSuggestList(query)
     .then((res) => {
       const ready = extractReadySuggestedDronesFromResponse(res);
-      suggestDronesCache.list = ready;
-      suggestDronesCache.fetchedAt = Date.now();
+      suggestDronesCache.set(cacheKey, {
+        list: ready,
+        fetchedAt: Date.now(),
+        pending: null,
+      });
       return ready;
     })
     .catch(() => {
       return [];
     })
     .finally(() => {
-      suggestDronesCache.pending = null;
+      const latest = suggestDronesCache.get(cacheKey);
+      if (latest?.pending === pending) {
+        suggestDronesCache.set(cacheKey, {
+          list: latest.list || [],
+          fetchedAt: latest.fetchedAt || 0,
+          pending: null,
+        });
+      }
     });
-  return suggestDronesCache.pending;
+  suggestDronesCache.set(cacheKey, {
+    list: cached?.list || [],
+    fetchedAt: cached?.fetchedAt || 0,
+    pending,
+  });
+  return pending;
 }
 
-async function loadSuggestedDronesForPopup(devicePosition) {
+function mapSuggestedDronesWithDistance(readyDrones, devicePosition) {
+  return readyDrones
+    .map((d) => {
+      const lng = toFiniteNumber(d?.longitude);
+      const lat = toFiniteNumber(d?.latitude);
+      const droneId = String(d?.id ?? d?.sn ?? "");
+      if (!droneId) return null;
+      const droneName = String(d?.name || d?.sn || droneId);
+      const hasCoord = Number.isFinite(lng) && Number.isFinite(lat);
+      const dist = hasCoord
+        ? Cesium.Cartesian3.distance(
+            Cesium.Cartesian3.fromDegrees(
+              devicePosition.longitude,
+              devicePosition.latitude,
+              0,
+            ),
+            Cesium.Cartesian3.fromDegrees(lng, lat, 0),
+          )
+        : Number.POSITIVE_INFINITY;
+      return {
+        id: droneId,
+        name: droneName,
+        sn: d?.sn || "",
+        raw: d,
+        distance: dist,
+        label: hasCoord
+          ? `${droneName}（距离 ${(dist / 1000).toFixed(2)} km）`
+          : `${droneName}（坐标缺失）`,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.distance - b.distance);
+}
+
+async function loadSuggestedDronesForPopup(targetId, devicePosition) {
   policeVehiclePopup.loadingDrones = true;
   policeVehiclePopup.drones = [];
   policeVehiclePopup.selectedDroneId = "";
   try {
-    const readyDrones = await getReadySuggestedDrones();
-    const dronesWithDistance = readyDrones
-      .map((d) => {
-        const lng = toFiniteNumber(d?.longitude);
-        const lat = toFiniteNumber(d?.latitude);
-        const droneId = String(d?.id ?? d?.sn ?? "");
-        if (!droneId) return null;
-        const droneName = String(d?.name || d?.sn || droneId);
-        const hasCoord = Number.isFinite(lng) && Number.isFinite(lat);
-        const dist = hasCoord
-          ? Cesium.Cartesian3.distance(
-              Cesium.Cartesian3.fromDegrees(
-                devicePosition.longitude,
-                devicePosition.latitude,
-                0,
-              ),
-              Cesium.Cartesian3.fromDegrees(lng, lat, 0),
-            )
-          : Number.POSITIVE_INFINITY;
-        return {
-          id: droneId,
-          name: droneName,
-          sn: d?.sn || "",
-          raw: d,
-          distance: dist,
-          label: hasCoord
-            ? `${droneName}（距离 ${(dist / 1000).toFixed(2)} km）`
-            : `${droneName}（坐标缺失）`,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.distance - b.distance);
+    const query = buildSuggestDronesQuery(targetId, devicePosition);
+    const readyDrones = await getReadySuggestedDrones(query, true);
+    const dronesWithDistance = mapSuggestedDronesWithDistance(
+      readyDrones,
+      devicePosition,
+    );
     policeVehiclePopup.drones = dronesWithDistance;
     policeVehiclePopup.selectedDroneId = dronesWithDistance[0]?.id || "";
   } catch (e) {
@@ -1144,6 +1202,11 @@ const viewerLoadCount = ref(0);
 
 // 定义展示模式：'model' 代表车，'point' 代表立体圆点
 const vehicleDisplayMode = ref("model");
+const targetOfficerEntities = new Map();
+const targetLayerVisibility = reactive({
+  policeCar: true,
+  officer: false,
+});
 
 // refs
 const isPitch2D = ref(true);
@@ -2983,24 +3046,15 @@ const showTestVehicleDialog = (deviceId, position) => {
 
   policeVehiclePopup.deviceId = deviceId;
   policeVehiclePopup.vehicleName = policeData?.name || deviceId;
-  policeVehiclePopup.alertInfo = policeData?.alert || "暂无描述";
+  policeVehiclePopup.alertInfo = policeData?.description || "暂无描述";
   policeVehiclePopup.coordText = `${position.longitude.toFixed(6)}, ${position.latitude.toFixed(6)}`;
-  policeVehiclePopup.drones = suggestDronesCache.list
-    .map((d) => ({
-      id: String(d?.id ?? d?.sn ?? ""),
-      name: String(d?.name || d?.sn || d?.id || ""),
-      sn: d?.sn || "",
-      raw: d,
-      distance: Number.POSITIVE_INFINITY,
-      label: String(d?.name || d?.sn || d?.id || "无人机"),
-    }))
-    .filter((d) => d.id);
+  policeVehiclePopup.drones = [];
   policeVehiclePopup.selectedDroneId = "";
   policeVehiclePopup.visible = true;
 
   updatePolicePopupScreenPosition();
   attachPolicePopupTracker();
-  loadSuggestedDronesForPopup(position);
+  loadSuggestedDronesForPopup(deviceId, position);
 };
 
 /**
@@ -3018,22 +3072,13 @@ const showApiVehiclePopup = (deviceId, position) => {
   policeVehiclePopup.alertInfo =
     String(vehicleData?.raw?.description || "").trim() || "暂无描述";
   policeVehiclePopup.coordText = `${position.longitude.toFixed(6)}, ${position.latitude.toFixed(6)}`;
-  policeVehiclePopup.drones = suggestDronesCache.list
-    .map((d) => ({
-      id: String(d?.id ?? d?.sn ?? ""),
-      name: String(d?.name || d?.sn || d?.id || ""),
-      sn: d?.sn || "",
-      raw: d,
-      distance: Number.POSITIVE_INFINITY,
-      label: String(d?.name || d?.sn || d?.id || "无人机"),
-    }))
-    .filter((d) => d.id);
+  policeVehiclePopup.drones = [];
   policeVehiclePopup.selectedDroneId = "";
   policeVehiclePopup.visible = true;
 
   updatePolicePopupScreenPosition();
   attachPolicePopupTracker();
-  loadSuggestedDronesForPopup(position);
+  loadSuggestedDronesForPopup(deviceId, position);
 };
 
 /**
@@ -3746,12 +3791,15 @@ const lockToVehicle = (deviceId) => {
 /**
  * @description: 显示告警伴飞请求对话框
  */
-const showAlarmDialog = async (deviceId, alarmFlag) => {
+const showAlarmDialog = async (deviceId, alarmFlag, devicePosition) => {
   const vehicleData = (Array.isArray(deviceStore.targets) ? deviceStore.targets : []).find(
     (v) => String(v.id) === String(deviceId),
   );
   const vehicleName = vehicleData?.name || deviceId;
-  const suggestedList = await getReadySuggestedDrones();
+  const suggestedList = await getReadySuggestedDrones(
+    buildSuggestDronesQuery(deviceId, devicePosition),
+    true,
+  );
 
   const optionsHtml = suggestedList.length
     ? suggestedList
@@ -3768,11 +3816,10 @@ const showAlarmDialog = async (deviceId, alarmFlag) => {
     `<div style="padding: 10px;">
       <h4 style="margin: 0 0 10px 0;">接收到伴飞请求</h4>
       <p>车辆名称：${vehicleName}</p>
-      <p>设备ID：${deviceId}</p>
-      <p>告警标志：${alarmFlag}</p>
-      <div style="margin-top:10px;">
-        <label for="alarm-drone-select" style="display:block;margin-bottom:6px;">推荐无人机：</label>
-        <select id="alarm-drone-select" style="width:100%;padding:8px;border:1px solid #dcdfe6;border-radius:4px;">
+      <p style="margin:10px;">设备ID：${deviceId}</p>
+      <div style="margin-top:10px;display: flex;">
+        <label for="alarm-drone-select" style="margin-left: -18px;">推荐无人机：</label>
+        <select id="alarm-drone-select" style="width:250px;height: 32px;padding:8px;border: 1px solid #30363b;background: rgba(255, 255, 255, 0.08);border-radius:2px;color: #fff;">
           ${optionsHtml}
         </select>
       </div>
@@ -3793,7 +3840,7 @@ const showAlarmDialog = async (deviceId, alarmFlag) => {
         (d) => String(d?.id ?? d?.sn ?? "") === String(selectedId),
       );
       const droneSn = String(selected?.sn || "");
-      await submitStartFollow(deviceId, droneSn);
+      await submitStartFollow(deviceId, droneSn, selectedId);
     })
     .catch(() => {});
 };
@@ -3842,7 +3889,11 @@ const handleCarBoxMessage = (topic, data) => {
       isPitch2D.value = false;
     }
     lockToVehicle(deviceId);
-    showAlarmDialog(deviceId, alarmFlag);
+    const devicePosition = {
+      longitude: toFiniteNumber(longitude),
+      latitude: toFiniteNumber(latitude),
+    };
+    showAlarmDialog(deviceId, alarmFlag, devicePosition);
   }
 
   systemStore.addCarMessage({ ...data, deviceId });
@@ -3857,16 +3908,73 @@ function syncStoreDevicesToMap() {
   const targetList = Array.isArray(deviceStore.targets)
     ? deviceStore.targets
     : [];
+  const activeOfficerIds = new Set();
   targetList.forEach((target) => {
     if (!target?.id) return;
     const lng = Number(target.lng);
     const lat = Number(target.lat);
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
     const id = String(target.id);
-    const label = String(target.name || target.id || "车辆");
-    vehicleManager.createVehicle(mainViewer, id, label);
-    vehicleManager.updateVehicleLabel(id, label);
-    vehicleManager.updateVehiclePosition(id, lng, lat, 0);
+    const label = String(target.name || target.id || "目标");
+    const targetType = Number(target.type);
+    if (targetType === 2) {
+      activeOfficerIds.add(id);
+      let officer = targetOfficerEntities.get(id);
+      const position = Cesium.Cartesian3.fromDegrees(lng, lat, 0);
+      if (!officer) {
+        officer = mainViewer.entities.add({
+          position,
+          properties: {
+            deviceId: id,
+            deviceName: label,
+            targetType: 2,
+          },
+          billboard: {
+            image: dtJyPng,
+            width: 34,
+            height: 34,
+            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+            heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+          label: {
+            text: label,
+            font: "14px sans-serif",
+            fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 2,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+            pixelOffset: new Cesium.Cartesian2(0, -38),
+            heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+          show: targetLayerVisibility.officer,
+        });
+        targetOfficerEntities.set(id, officer);
+      } else {
+        officer.position = position;
+        officer.label.text = label;
+        if (officer.properties?.deviceName) officer.properties.deviceName = label;
+        officer.show = targetLayerVisibility.officer;
+      }
+      return;
+    }
+
+    if (targetType === 1 || !Number.isFinite(targetType)) {
+      vehicleManager.createVehicle(mainViewer, id, label);
+      vehicleManager.updateVehicleLabel(id, label);
+      vehicleManager.updateVehiclePosition(id, lng, lat, 0);
+      const vehicle = vehicleManager.vehicles.get(id);
+      if (vehicle?.entity) vehicle.entity.show = targetLayerVisibility.policeCar;
+    }
+  });
+
+  Array.from(targetOfficerEntities.entries()).forEach(([id, entity]) => {
+    if (!activeOfficerIds.has(id)) {
+      mainViewer.entities.remove(entity);
+      targetOfficerEntities.delete(id);
+    }
   });
 
   const droneList = Array.isArray(deviceStore.drones) ? deviceStore.drones : [];
@@ -4621,6 +4729,7 @@ const toggleLayerVisibility = ({ key, active }) => {
       if (droneEntity) droneEntity.show = active;
       break;
     case "policeCar":
+      targetLayerVisibility.policeCar = active;
       vehicleManager.vehicles.forEach((vehicle) => {
         if (vehicle.entity) vehicle.entity.show = active;
       });
@@ -4634,25 +4743,41 @@ const toggleLayerVisibility = ({ key, active }) => {
       setEntitiesShow(verticalLines, active);
       break;
     case "officer":
+      targetLayerVisibility.officer = active;
+      targetOfficerEntities.forEach((entity) => {
+        if (entity) entity.show = active;
+      });
       break;
   }
 };
 
-const recallDrone = (device) => {
+const recallDrone = async (device) => {
   if (!device?.id) return Promise.resolve(false);
+  try {
+    await ElMessageBox.confirm(
+      `确定结束「${device.name || device.id || "该无人机"}」的伴飞任务？`,
+      "结束伴飞确认",
+      {
+        confirmButtonText: "结束伴飞",
+        cancelButtonText: "取消",
+        type: "warning",
+      },
+    );
+  } catch {
+    return false;
+  }
   const timer = escortTimers.get(device.id);
   if (timer) {
     clearInterval(timer);
     escortTimers.delete(device.id);
   }
-  const targetId = device?.escortTarget || policeVehiclePopup.deviceId || "";
-  const sn = device?.sn || "";
-  return submitStopFollow(targetId, sn).then((ok) => {
-    if (ok) {
-      deviceStore.setDroneStandby(device.id);
-    }
-    return ok;
-  });
+  const targetId = resolveEscortTargetId(device) || policeVehiclePopup.deviceId || "";
+  const droneId = device?.id || "";
+  const ok = await submitStopFollow(targetId, droneId);
+  if (ok) {
+    deviceStore.setDroneStandby(device.id);
+  }
+  return ok;
 };
 
 defineExpose({
@@ -4702,9 +4827,6 @@ onMounted(() => {
   } finally {
     isLoading.value = false;
   }
-  // 预热推荐无人机列表，减少首次点车弹窗等待
-  getReadySuggestedDrones().catch(() => {});
-
   // 地图首屏优先，MQTT 连接放到 Viewer 初始化之后再启动。
   setTimeout(() => {
     initialMqttConnect();
@@ -4716,6 +4838,10 @@ onUnmounted(() => {
   vehicleLocationTopics.clear();
   escortDroneOsdTopics.forEach((topic) => mqttService.unsubscribe(topic));
   escortDroneOsdTopics.clear();
+  targetOfficerEntities.forEach((entity) => {
+    mainViewer?.entities?.remove(entity);
+  });
+  targetOfficerEntities.clear();
   mqttService.destroy();
   clearLockdownMarkers();
   closePoliceVehiclePopup();

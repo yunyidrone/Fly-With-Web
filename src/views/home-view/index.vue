@@ -9,10 +9,12 @@
     <!-- 全屏地图（图例叠在地图区域内，沉浸分屏时随左半屏地图居中） -->
     <div class="map-container" @click="onMapAreaClick">
       <TiandituMap ref="mapRef" />
-      <MapLegend
-        @lockdown="mapRef?.triggerLockdown()"
-        @toggle="(e) => mapRef?.toggleLayerVisibility(e)"
-      />
+      <div v-show="!immersiveFlight" class="map-legend-host">
+        <MapLegend
+          @lockdown="mapRef?.triggerLockdown()"
+          @toggle="(e) => mapRef?.toggleLayerVisibility(e)"
+        />
+      </div>
     </div>
 
     <!-- 顶部覆盖层 -->
@@ -55,12 +57,16 @@
               :drone-id="streamDrone?.id"
               :drone-name="streamDrone?.name"
               :stream-url="streamDrone?.streamUrl"
+              :playUrl="streamDrone?.playUrl"
+              :target-device-id="streamTargetId"
               :target-device-label="streamTargetLabel"
               :battery="streamDrone?.battery"
               :status-label="streamStatusLabel"
+              :escort-start-time="streamEscortStartTime"
               :companion-task-title="streamCompanionTaskTitle"
               :immersive-flight="immersiveFlight"
               @toggle-immersive="immersiveFlight = !immersiveFlight"
+              @recall="handleStreamRecall"
             />
         </div>
       </Transition>
@@ -115,20 +121,47 @@ function onMapAreaClick() {
 
 const streamDroneKey = computed(() => streamDrone.value?.id || "none");
 
+function resolveEscortTargetId(device) {
+  return String(
+    device?.escortTarget ??
+      device?.targetId ??
+      device?.target_id ??
+      device?.raw?.targetId ??
+      device?.raw?.target_id ??
+      device?.raw?.target?.id ??
+      "",
+  ).trim();
+}
+
+const streamTargetId = computed(() => resolveEscortTargetId(streamDrone.value));
+
 const streamTargetLabel = computed(() => {
-  const t = streamDrone.value?.escortTarget;
+  const targetName = String(streamDrone.value?.targetName || "").trim();
+  if (targetName) return targetName;
+  const t = streamTargetId.value;
   if (t) return typeof t === "string" ? t : `目标 ${t}`;
   return "—";
+});
+
+const streamEscortStartTime = computed(() => {
+  const d = streamDrone.value;
+  return String(d?.executeTiem ?? d?.executeTime ?? "").trim();
 });
 
 /** 与左侧资源卡片一致：伴飞中 / 返航中 / 就绪 / 离线 */
 const streamStatusLabel = computed(() => {
   const d = streamDrone.value;
   if (!d) return "就绪";
+  if (d.statusText) return d.statusText === "待命" ? "就绪" : d.statusText;
+  if (d.statusLabel) return d.statusLabel;
   if (d.commOk === false) return "离线";
   if (d.isEscorting) return "伴飞中";
   if (d.status === "returning") return d.statusText || "返航中";
-  return d.statusText === "待命" ? "就绪" : d.statusText || "就绪";
+  if (Number(d.status) === 0) return "离线";
+  if (Number(d.status) === 1) return "就绪";
+  if (Number(d.status) === 2) return "伴飞中";
+  if (Number(d.status) === 3) return "返航中";
+  return "就绪";
 });
 
 /** 伴飞任务标题副文案，示意稿为「任务一号」；无数据时回退设备名或占位 */
@@ -149,6 +182,8 @@ const openDroneStream = async (device) => {
         ...device,
         ...(typeof d === "object" ? d : {}),
         id,
+        escortTarget:
+          resolveEscortTargetId(d) || resolveEscortTargetId(device) || null,
         streamUrl: d?.streamUrl || device?.streamUrl || "",
       };
     } else {
@@ -158,6 +193,14 @@ const openDroneStream = async (device) => {
     streamDrone.value = device;
   }
   droneStreamVisible.value = true;
+};
+
+const handleStreamRecall = async ({ droneId } = {}) => {
+  if (droneId) {
+    deviceStore.setDroneStandby(droneId);
+  }
+  await deviceStore.fetchDroneList();
+  closeDroneStream();
 };
 
 const closeDroneStream = () => {
@@ -224,7 +267,7 @@ const closeDroneStream = () => {
   max-width: none;
   height: 100vh;
   max-height: 100vh;
-  padding: 12px 16px 16px 12px;
+  // padding: 12px 16px 16px 12px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -232,8 +275,9 @@ const closeDroneStream = () => {
 }
 
 .drone-stream-float--immersive .drone-stream-close {
-  top: 10px;
-  right: 12px;
+  display: none;
+  top: 0;
+  right: 0;
 }
 
 .drone-stream-close {

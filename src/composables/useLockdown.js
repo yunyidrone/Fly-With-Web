@@ -1,5 +1,5 @@
 import * as Cesium from "cesium";
-import yjfcPng from "@/assets/images/yjfc.png";
+import yjfcPng from "@/assets/images/dt_kd.png";
 
 // 封城点预设坐标（围绕默认中心点的关键路口/区域）
 const DEFAULT_LOCKDOWN_POINTS = [
@@ -51,8 +51,8 @@ export function useLockdown({
         // },
         billboard: {
           image: yjfcPng,
-          width: 40,
-          height: 48,
+          width: 52,
+          height: 65,
           verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
           // 底部中心锚定到经纬度点位，不做额外上移
           pixelOffset: new Cesium.Cartesian2(0, 0),

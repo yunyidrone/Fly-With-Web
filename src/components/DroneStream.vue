@@ -27,7 +27,7 @@
             statusLabel
           }}</span>
         </div>
-        <span class="card-topline__battery">电量:{{ batteryDisplay }}</span>
+        <span class="card-topline__battery">电量：{{ batteryDisplay }}</span>
       </div>
 
       <div class="telemetry-grid">
@@ -73,7 +73,7 @@
             height="16"
             aria-hidden="true"
           />
-          <span>伴飞任务:{{ companionTitle }}</span>
+          <span>伴飞任务：{{ companionTitle }}</span>
         </div>
         <div class="task-block__lines">
           <div class="task-block__line">
@@ -143,8 +143,10 @@
         <video
           ref="videoPlayerRef"
           :muted="true"
+          autoplay
           controls
           playsinline
+          webkit-playsinline
           class="video-element"
         />
       </div>
@@ -184,8 +186,8 @@
 import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useSystemStore } from "@/stores/index.js";
 import { AccompanyingFlyService } from "@/api";
-import { ElMessageBox, ElMessage } from "element-plus";
-import { VIDEO_CONFIG, DEVICE_CONFIG } from "@/config/app-config.js";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { VIDEO_CONFIG } from "@/config/app-config.js";
 import arrowRightPng from "@/assets/images/arrow_right.png";
 import sjWrjPng from "@/assets/images/sj_wrj.png";
 import sjJcPng from "@/assets/images/sj_jc.png";
@@ -202,12 +204,17 @@ const props = defineProps({
   battery: { type: Number, default: undefined },
   /** 顶行状态：伴飞中 / 就绪 / 离线 */
   statusLabel: { type: String, default: "就绪" },
+  /** 伴飞开始时间，来自无人机详情 executeTiem */
+  escortStartTime: { type: String, default: "" },
   /** 「伴飞任务:xxx」中的 xxx */
   companionTaskTitle: { type: String, default: "" },
   /** 由父页控制：沉浸伴飞时仅显示地图 + 本视频 */
   immersiveFlight: { type: Boolean, default: false },
   /** 设备级拉流地址（接口 streamUrl），为空时用环境变量 VIDEO_CONFIG */
   streamUrl: { type: String, default: "" },
+  playUrl: { type: String, default: "" },
+  /** 伴飞目标 id，用于 stopFollow 的 id 参数 */
+  targetDeviceId: { type: String, default: "" },
 });
 
 const emit = defineEmits(["toggle-immersive", "recall"]);
@@ -217,7 +224,8 @@ const systemStore = useSystemStore();
 const videoPlayerRef = ref(null);
 const videoWrapRef = ref(null);
 const resolvedStreamUrl = computed(() => {
-  const u = props.streamUrl?.trim?.() ? props.streamUrl.trim() : "";
+  console.log('测试数据', props.playUrl)
+  const u = props.playUrl;
   return u || VIDEO_CONFIG.streamUrl;
 });
 const isLoading = ref(false);
@@ -263,11 +271,7 @@ const lat = computed(() => lastPosition.value?.current_latitude);
 const alt = computed(() => lastPosition.value?.current_height);
 
 const escortStartText = computed(() => {
-  if (systemStore.droneStatus === 1) {
-    const first = systemStore.droneMessageList?.[0];
-    if (first?.timestamp) return String(first.timestamp);
-    return "进行中";
-  }
+  if (props.escortStartTime) return props.escortStartTime;
   return "—";
 });
 
@@ -301,6 +305,19 @@ const rollText = computed(() =>
     : "—",
 );
 
+async function tryAutoPlayVideo() {
+  const video = videoPlayerRef.value;
+  if (!video) return;
+  video.muted = true;
+  video.autoplay = true;
+  video.playsInline = true;
+  try {
+    await video.play();
+  } catch (error) {
+    console.warn("视频自动播放被浏览器拦截，可手动点击播放", error);
+  }
+}
+
 const initPlayVideo = async () => {
   if (!resolvedStreamUrl.value || !videoPlayerRef.value) return;
   pc = new RTCPeerConnection({
@@ -311,6 +328,10 @@ const initPlayVideo = async () => {
   pc.ontrack = (event) => {
     if (event.track.kind === "video" && videoPlayerRef.value) {
       videoPlayerRef.value.srcObject = event.streams[0];
+      videoPlayerRef.value.onloadedmetadata = () => {
+        tryAutoPlayVideo();
+      };
+      tryAutoPlayVideo();
     }
   };
   const offer = await pc.createOffer();
@@ -356,27 +377,35 @@ const handleScreenshot = () => {
   }, "image/png");
 };
 
-const promptMode = () =>
-  ElMessageBox.prompt("请输入 mode（1 或 5）", "提示", {
-    confirmButtonText: "确定",
-    cancelButtonText: "取消",
-    inputPattern: /^[15]$/,
-    inputErrorMessage: "请输入 1 或 5",
-  }).then(({ value }) => Number(value));
-
-const requestReturnHome = async (mode) => {
+const requestStopFollow = async () => {
+  const id = String(props.targetDeviceId || "").trim();
+  const droneId = String(props.droneId || "").trim();
+  if (!id) {
+    ElMessage.warning("未找到伴飞目标");
+    return false;
+  }
+  if (!droneId) {
+    ElMessage.warning("未找到无人机ID");
+    return false;
+  }
   isLoading.value = true;
   try {
-    const res = await AccompanyingFlyService.returnHome({
-      target_id: DEVICE_CONFIG.targetId,
-      mode: String(mode),
+    const res = await AccompanyingFlyService.stopFollow({
+      id,
+      droneId,
     });
-    if (res?.code === 200 || res?.code === 404) {
+    if (res?.code === 2000) {
       systemStore.setDroneStatus(0);
-      ElMessage.success("召回指令已下发");
+      ElMessage.success("已结束伴飞");
+      emit("recall", { id, droneId });
+      return true;
     }
+    ElMessage.warning(res?.message || "结束伴飞失败");
+    return false;
   } catch (e) {
     console.warn(e);
+    ElMessage.error("结束伴飞失败");
+    return false;
   } finally {
     isLoading.value = false;
   }
@@ -411,9 +440,16 @@ const handleImmersiveToggle = () => {
 
 const handleRecall = async () => {
   try {
-    const mode = await promptMode();
-    await requestReturnHome(mode);
-    emit("recall", { mode });
+    await ElMessageBox.confirm(
+      `确定召回「${props.droneName || props.droneId || "该无人机"}」并结束伴飞？`,
+      "一键召回确认",
+      {
+        confirmButtonText: "确认召回",
+        cancelButtonText: "取消",
+        type: "warning",
+      },
+    );
+    await requestStopFollow();
   } catch {
     /* cancel */
   }
@@ -842,7 +878,7 @@ onUnmounted(() => {
 
 .footer-btn {
   width: 149px;
-  height: 44px;
+  height: 36px;
   flex: 0 0 149px;
   display: flex;
   align-items: center;
@@ -850,7 +886,7 @@ onUnmounted(() => {
   gap: 8px;
   padding: 0 10px;
   font-family: "HarmonyOS Sans SC";
-  font-size: 20px;
+  font-size: 16px;
   font-style: normal;
   font-weight: 500;
   line-height: normal;
@@ -864,18 +900,14 @@ onUnmounted(() => {
     border-color 0.15s,
     color 0.15s;
 
-  i {
-    font-size: 16px;
-  }
-
   &:disabled {
     opacity: 0.45;
     cursor: not-allowed;
   }
 
   &__icon-img {
-    width: 24px;
-    height: 24px;
+    width: 16px;
+    height: 16px;
     object-fit: contain;
     display: block;
     flex-shrink: 0;

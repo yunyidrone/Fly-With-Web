@@ -139,8 +139,9 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, reactive, onMounted } from "vue";
 import { useDeviceStore } from "@/stores/device.js";
+import { AccompanyingFlyService } from "@/api";
 import planePng from "@/assets/images/plane.png";
 import dogPng from "@/assets/images/dog.png";
 import boatPng from "@/assets/images/boat.png";
@@ -167,55 +168,140 @@ const escortingCount = (devices) => devices.filter((d) => d.isEscorting).length;
 const readyCount = (devices) =>
   devices.filter((d) => d.status === "standby").length;
 
-const droneExpanded = ref(false);
-const dogExpanded = ref(false);
-const boatExpanded = ref(false);
+const expandedState = reactive({
+  drone: false,
+  plane: false,
+  robotDog: false,
+  dog: false,
+  boat: false,
+});
 
 const STATIC_ROBOT_DOGS = [];
 
 const STATIC_BOATS = [];
 
-const panels = computed(() => [
-  {
-    key: "drone",
-    iconSrc: planePng,
-    label: "无人机资源",
-    expanded: droneExpanded.value,
-    devices: deviceStore.drones,
-    emptyResourceName: "无人机",
-    emptyImageSrc: emptyPlanePng,
-  },
-  {
-    key: "robotDog",
-    iconSrc: dogPng,
-    label: "无人狗资源",
-    expanded: dogExpanded.value,
-    devices: STATIC_ROBOT_DOGS,
-    emptyResourceName: "无人狗",
-    emptyImageSrc: emptyDogPng,
-  },
-  {
-    key: "boat",
-    iconSrc: boatPng,
-    label: "无人艇资源",
-    expanded: boatExpanded.value,
-    devices: STATIC_BOATS,
-    emptyResourceName: "无人艇",
-    emptyImageSrc: emptyBoatPng,
-  },
-]);
+const imageModules = import.meta.glob("../assets/images/*.png", {
+  eager: true,
+  import: "default",
+});
 
-const expandedMap = {
-  drone: droneExpanded,
-  robotDog: dogExpanded,
-  boat: boatExpanded,
-};
+const DEFAULT_RESOURCE_SOURCES = [
+  { key: "plane", value: "无人机", sort: 1 },
+  { key: "dog", value: "无人狗", sort: 2 },
+  { key: "boat", value: "无人艇", sort: 3 },
+];
+
+const resourceSources = ref(DEFAULT_RESOURCE_SOURCES);
+
+function getImageByKey(key, fallback) {
+  const imageKey = String(key || "").trim();
+  if (!imageKey) return fallback;
+  return imageModules[`../assets/images/${imageKey}.png`] || fallback;
+}
+
+function getEmptyImageByKey(key, fallback) {
+  const imageKey = String(key || "").trim();
+  if (!imageKey) return fallback;
+  return (
+    imageModules[`../assets/images/empty_${imageKey}.png`] ||
+    imageModules[`../assets/images/${imageKey}.png`] ||
+    fallback
+  );
+}
+
+function isDroneResource(key, name) {
+  const text = `${key || ""} ${name || ""}`.toLowerCase();
+  return /无人机|drone|plane|uav|wrj/.test(text);
+}
+
+function isDogResource(key, name) {
+  const text = `${key || ""} ${name || ""}`.toLowerCase();
+  return /无人狗|无人犬|dog|robotdog|wrg/.test(text);
+}
+
+function resolveIconFallback(key, name) {
+  if (isDroneResource(key, name)) return planePng;
+  if (isDogResource(key, name)) return dogPng;
+  return boatPng;
+}
+
+function resolveEmptyIconFallback(key, name) {
+  if (isDroneResource(key, name)) return emptyPlanePng;
+  if (isDogResource(key, name)) return emptyDogPng;
+  return emptyBoatPng;
+}
+
+function getDevicesForResource(key, name) {
+  if (isDroneResource(key, name)) return deviceStore.drones;
+  if (isDogResource(key, name)) return STATIC_ROBOT_DOGS;
+  return STATIC_BOATS;
+}
+
+function normalizeResourceSourceList(res) {
+  const list = Array.isArray(res?.data)
+    ? res.data
+    : Array.isArray(res?.data?.records)
+      ? res.data.records
+      : Array.isArray(res?.data?.list)
+        ? res.data.list
+        : [];
+
+  return list
+    .filter((item) => item?.key)
+    .filter((item) => item?.type == null || item.type === "" || Number(item.type) === 1)
+    .sort((a, b) => (Number(a?.sort) || 0) - (Number(b?.sort) || 0))
+    .map((item) => ({
+      id: item.id,
+      key: String(item.key).trim(),
+      value: String(item.value || item.key).trim(),
+      sort: Number(item.sort) || 0,
+    }));
+}
+
+async function loadResourceSources() {
+  try {
+    const res = await AccompanyingFlyService.getConfigSource({ type: 1 });
+    if (res?.code !== 2000) return;
+    const list = normalizeResourceSourceList(res);
+    if (list.length) {
+      resourceSources.value = list;
+      list.forEach((item) => {
+        if (!(item.key in expandedState)) expandedState[item.key] = false;
+      });
+    }
+  } catch (_) {
+    resourceSources.value = DEFAULT_RESOURCE_SOURCES;
+  }
+}
+
+onMounted(() => {
+  loadResourceSources();
+});
+
+const panels = computed(() =>
+  resourceSources.value.map((item) => {
+    const key = item.key;
+    const resourceName = item.value || item.key;
+    const iconFallback = resolveIconFallback(key, resourceName);
+    const emptyFallback = resolveEmptyIconFallback(key, resourceName);
+    return {
+      key,
+      iconSrc: getImageByKey(key, iconFallback),
+      label: `${resourceName}资源`,
+      expanded: Boolean(expandedState[key]),
+      devices: getDevicesForResource(key, resourceName),
+      emptyResourceName: resourceName,
+      emptyImageSrc: getEmptyImageByKey(key, emptyFallback),
+    };
+  }),
+);
+
 const togglePanel = (key) => {
-  expandedMap[key].value = !expandedMap[key].value;
+  expandedState[key] = !Boolean(expandedState[key]);
 };
 
 const collapsePanel = (key) => {
-  expandedMap[key].value = false;
+  expandedState[key] = false;
 };
 
 const emit = defineEmits(["recall", "open-drone-stream"]);
@@ -225,7 +311,7 @@ const handleRecall = (device) => {
 };
 
 const handleDeviceCardClick = (panel, device) => {
-  if (panel?.key !== "drone") return;
+  if (!isDroneResource(panel?.key, panel?.emptyResourceName)) return;
   emit("open-drone-stream", device);
 };
 

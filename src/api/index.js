@@ -57,18 +57,18 @@ export class AccompanyingFlyService {
    * @param params
    * @returns {Promise<*>}
    */
-  static async takeOff(params) {
-    return request("/flywith/start", params);
-  }
+  // static async takeOff(params) {
+  //   return request("/flywith/start", params);
+  // }
 
   /**
    * 一键返航
    * @param params
    * @returns {Promise<*>}
    */
-  static async returnHome(params) {
-    return request("/flywith/stop", params);
-  }
+  // static async returnHome(params) {
+  //   return request("/flywith/stop", params);
+  // }
 
   /**
    * 飞行计划分页列表

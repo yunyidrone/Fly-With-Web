@@ -96,6 +96,7 @@ export function normalizeDroneRecord(raw) {
  * @property {number} [latitude]
  * @property {number} [lng]
  * @property {number} [lat]
+ * @property {number|string} [type] 1车 2人 3动物
  */
 
 /**
@@ -127,6 +128,7 @@ export function normalizeTargetRecord(raw) {
         ? nameSrc.trim()
         : String(id || "目标"),
     sn: typeof snSrc === "string" ? snSrc.trim() : String(snSrc || ""),
+    type: Number(raw?.type ?? raw?.targetType ?? raw?.category ?? 1) || 1,
     lng: pickCoord(raw.longitude) ?? pickCoord(raw.lng) ?? 121.428,
     lat: pickCoord(raw.latitude) ?? pickCoord(raw.lat) ?? 28.653,
     raw,
