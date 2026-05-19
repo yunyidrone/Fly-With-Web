@@ -54,13 +54,19 @@
             </button>
             <DroneStream
               :key="streamDroneKey"
-              :drone-id="streamDrone?.id"
-              :drone-name="streamDrone?.name"
-              :stream-url="streamDrone?.streamUrl"
-              :playUrl="streamDrone?.playUrl"
+              :drone-id="streamDroneLive?.id"
+              :drone-name="streamDroneLive?.name"
+              :stream-url="streamDroneLive?.streamUrl"
+              :playUrl="streamDroneLive?.playUrl"
               :target-device-id="streamTargetId"
               :target-device-label="streamTargetLabel"
-              :battery="streamDrone?.battery"
+              :battery="streamDroneLive?.battery"
+              :lng="streamDroneLive?.lng"
+              :lat="streamDroneLive?.lat"
+              :height="streamDroneLive?.height"
+              :head="streamDroneLive?.attitudeHead"
+              :pitch="streamDroneLive?.attitudePitch"
+              :roll="streamDroneLive?.attitudeRoll"
               :status-label="streamStatusLabel"
               :escort-start-time="streamEscortStartTime"
               :companion-task-title="streamCompanionTaskTitle"
@@ -119,7 +125,24 @@ function onMapAreaClick() {
   leftSidebarRef.value?.clearSelection?.();
 }
 
-const streamDroneKey = computed(() => streamDrone.value?.id || "none");
+const streamDroneLive = computed(() => {
+  const base = streamDrone.value;
+  if (!base) return null;
+  const live = deviceStore.drones.find(
+    (d) =>
+      String(d?.id || "") === String(base.id || "") ||
+      (d?.sn && base.sn && String(d.sn) === String(base.sn)),
+  );
+  if (!live) return base;
+  return {
+    ...base,
+    ...live,
+    streamUrl: base.streamUrl || live.streamUrl || "",
+    playUrl: base.playUrl || live.playUrl || "",
+  };
+});
+
+const streamDroneKey = computed(() => streamDroneLive.value?.id || "none");
 
 function resolveEscortTargetId(device) {
   return String(
@@ -136,7 +159,7 @@ function resolveEscortTargetId(device) {
 const streamTargetId = computed(() => resolveEscortTargetId(streamDrone.value));
 
 const streamTargetLabel = computed(() => {
-  const targetName = String(streamDrone.value?.targetName || "").trim();
+  const targetName = String(streamDroneLive.value?.targetName || "").trim();
   if (targetName) return targetName;
   const t = streamTargetId.value;
   if (t) return typeof t === "string" ? t : `目标 ${t}`;
@@ -144,13 +167,13 @@ const streamTargetLabel = computed(() => {
 });
 
 const streamEscortStartTime = computed(() => {
-  const d = streamDrone.value;
+  const d = streamDroneLive.value;
   return String(d?.executeTiem ?? d?.executeTime ?? "").trim();
 });
 
 /** 与左侧资源卡片一致：伴飞中 / 返航中 / 就绪 / 离线 */
 const streamStatusLabel = computed(() => {
-  const d = streamDrone.value;
+  const d = streamDroneLive.value;
   if (!d) return "就绪";
   if (d.statusText) return d.statusText === "待命" ? "就绪" : d.statusText;
   if (d.statusLabel) return d.statusLabel;
@@ -166,7 +189,7 @@ const streamStatusLabel = computed(() => {
 
 /** 伴飞任务标题副文案，示意稿为「任务一号」；无数据时回退设备名或占位 */
 const streamCompanionTaskTitle = computed(() => {
-  const d = streamDrone.value;
+  const d = streamDroneLive.value;
   if (!d) return "任务一号";
   return d.name || d.id || "任务一号";
 });

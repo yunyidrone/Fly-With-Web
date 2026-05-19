@@ -215,6 +215,12 @@ const props = defineProps({
   playUrl: { type: String, default: "" },
   /** 伴飞目标 id，用于 stopFollow 的 id 参数 */
   targetDeviceId: { type: String, default: "" },
+  lng: { type: [Number, String], default: undefined },
+  lat: { type: [Number, String], default: undefined },
+  height: { type: [Number, String], default: undefined },
+  head: { type: [Number, String], default: undefined },
+  pitch: { type: [Number, String], default: undefined },
+  roll: { type: [Number, String], default: undefined },
 });
 
 const emit = defineEmits(["toggle-immersive", "recall"]);
@@ -230,13 +236,6 @@ const resolvedStreamUrl = computed(() => {
 });
 const isLoading = ref(false);
 const viewMode = ref("drone");
-
-const lastPosition = computed(
-  () =>
-    systemStore?.droneMessageList?.[systemStore.droneMessageList.length - 1] ||
-    {},
-);
-const droneCurrentState = computed(() => systemStore?.droneCurrentState || {});
 
 const displayDroneName = computed(() => props.droneName || "无人机名称");
 
@@ -266,9 +265,9 @@ const immersiveBtnLabel = computed(() =>
   props.immersiveFlight ? "退出沉浸" : "沉浸伴飞",
 );
 
-const lng = computed(() => lastPosition.value?.current_longitude);
-const lat = computed(() => lastPosition.value?.current_latitude);
-const alt = computed(() => lastPosition.value?.current_height);
+const lng = computed(() => props.lng);
+const lat = computed(() => props.lat);
+const alt = computed(() => props.height);
 
 const escortStartText = computed(() => {
   if (props.escortStartTime) return props.escortStartTime;
@@ -281,7 +280,7 @@ function isNumber(value) {
 
 function formatCoord(v) {
   if (!isNumber(v)) return "—";
-  return Number(v).toFixed(2);
+  return Number(v).toFixed(6);
 }
 
 const altText = computed(() => {
@@ -290,18 +289,18 @@ const altText = computed(() => {
 });
 
 const headText = computed(() =>
-  isNumber(droneCurrentState.value.attitude_head)
-    ? `${Number(droneCurrentState.value.attitude_head).toFixed(1)}°`
+  isNumber(props.head)
+    ? `${Number(props.head).toFixed(1)}°`
     : "—",
 );
 const pitchText = computed(() =>
-  isNumber(droneCurrentState.value.attitude_pitch)
-    ? `${Number(droneCurrentState.value.attitude_pitch).toFixed(1)}°`
+  isNumber(props.pitch)
+    ? `${Number(props.pitch).toFixed(1)}°`
     : "—",
 );
 const rollText = computed(() =>
-  isNumber(droneCurrentState.value.attitude_roll)
-    ? `${Number(droneCurrentState.value.attitude_roll).toFixed(1)}°`
+  isNumber(props.roll)
+    ? `${Number(props.roll).toFixed(1)}°`
     : "—",
 );
 

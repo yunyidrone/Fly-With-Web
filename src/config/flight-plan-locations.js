@@ -43,21 +43,25 @@ export const FLIGHT_LOCATION_CASCADER_OPTIONS = [
     value: "gov",
     label: "政府区域",
     children: [
-      {
-        value: "huangyan",
-        label: "黄岩区",
-        children: [
-          { value: "gov_huangyan", label: "黄岩区政府", ring: RING_HUANGYAN_GOV },
-        ],
-      },
-      {
-        value: "jiaojiang",
-        label: "椒江区",
-        children: [
-          { value: "gov_jiaojiang", label: "椒江行政中心", ring: RING_JIAOJIANG_GOV },
-        ],
-      },
+      { value: "gov_huangyan", label: "黄岩区政府", ring: RING_HUANGYAN_GOV },
+      { value: "gov_jiaojiang", label: "椒江行政中心", ring: RING_JIAOJIANG_GOV },
     ],
+    // children: [
+    //   {
+    //     value: "huangyan",
+    //     label: "黄岩区",
+    //     children: [
+    //       { value: "gov_huangyan", label: "黄岩区政府", ring: RING_HUANGYAN_GOV },
+    //     ],
+    //   },
+    //   {
+    //     value: "jiaojiang",
+    //     label: "椒江区",
+    //     children: [
+    //       { value: "gov_jiaojiang", label: "椒江行政中心", ring: RING_JIAOJIANG_GOV },
+    //     ],
+    //   },
+    // ],
   },
   {
     value: "culture",

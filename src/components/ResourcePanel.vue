@@ -57,7 +57,7 @@
           <!-- 统计概览 -->
           <div class="stats-row">
             <div class="stat-item">
-              <span class="stat-label">伴飞中</span>
+              <span class="stat-label">任务中</span>
               <span class="stat-num">{{ escortingCount(panel.devices) }}</span>
             </div>
             <div class="stat-item">

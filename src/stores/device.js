@@ -81,6 +81,10 @@ export function normalizeDroneRecord(raw) {
     escortTarget: null,
     battery: undefined,
     endurance: undefined,
+    height: undefined,
+    attitudeHead: undefined,
+    attitudePitch: undefined,
+    attitudeRoll: undefined,
   };
 }
 
@@ -290,7 +294,7 @@ export const useDeviceStore = defineStore("device", () => {
   /**
    * 按 SN 同步无人机遥测（电量/续航/位置）
    * @param {string} sn
-   * @param {{battery?: number|string, endurance?: number|string, lng?: number, lat?: number, height?: number}} payload
+   * @param {{battery?: number|string, endurance?: number|string, lng?: number, lat?: number, height?: number, attitudeHead?: number, attitudePitch?: number, attitudeRoll?: number}} payload
    */
   function updateDroneTelemetryBySn(sn, payload = {}) {
     const key = String(sn || "").trim();
@@ -314,6 +318,24 @@ export const useDeviceStore = defineStore("device", () => {
     }
     if (typeof payload.height === "number" && Number.isFinite(payload.height)) {
       drone.height = payload.height;
+    }
+    if (
+      typeof payload.attitudeHead === "number" &&
+      Number.isFinite(payload.attitudeHead)
+    ) {
+      drone.attitudeHead = payload.attitudeHead;
+    }
+    if (
+      typeof payload.attitudePitch === "number" &&
+      Number.isFinite(payload.attitudePitch)
+    ) {
+      drone.attitudePitch = payload.attitudePitch;
+    }
+    if (
+      typeof payload.attitudeRoll === "number" &&
+      Number.isFinite(payload.attitudeRoll)
+    ) {
+      drone.attitudeRoll = payload.attitudeRoll;
     }
   }
 

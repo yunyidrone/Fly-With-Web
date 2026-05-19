@@ -7,10 +7,12 @@
  */
 import mqtt from "mqtt";
 import { useSystemStore } from "@/stores/index";
-import { MQTT_CONFIG } from "@/config/app-config.js";
+import { MQTT_CONFIG, WRJ_MQTT_CONFIG } from "@/config/app-config.js";
 
 class MqttService {
-  constructor() {
+  constructor(defaultConfig = MQTT_CONFIG, name = "MQTT") {
+    this.defaultConfig = defaultConfig;
+    this.name = name;
     this.client = null;
     this.isConnecting = false;
     this.subscriptions = new Map(); // 存储主题与回调的对应关系
@@ -27,39 +29,39 @@ class MqttService {
 
     // 默认配置（从环境变量读取）
     const defaultOptions = {
-      protocol: MQTT_CONFIG.protocol,
-      host: MQTT_CONFIG.host,
-      port: MQTT_CONFIG.port,
-      path: MQTT_CONFIG.path,
-      clientId: MQTT_CONFIG.clientId,
-      clean: MQTT_CONFIG.clean,
-      connectTimeout: MQTT_CONFIG.connectTimeout,
-      reconnectPeriod: MQTT_CONFIG.reconnectPeriod,
-      username: MQTT_CONFIG.username,
-      password: MQTT_CONFIG.password,
+      protocol: this.defaultConfig.protocol,
+      host: this.defaultConfig.host,
+      port: this.defaultConfig.port,
+      path: this.defaultConfig.path,
+      clientId: this.defaultConfig.clientId,
+      clean: this.defaultConfig.clean,
+      connectTimeout: this.defaultConfig.connectTimeout,
+      reconnectPeriod: this.defaultConfig.reconnectPeriod,
+      username: this.defaultConfig.username,
+      password: this.defaultConfig.password,
     };
 
     const config = { ...defaultOptions, ...options };
     const url = `${config.protocol}://${config.host}:${config.port}${config.path}`;
 
-    console.log("正在连接 MQTT:", url, config);
+    console.log(`正在连接 ${this.name}:`, url, config);
 
     this.client = mqtt.connect(url, config);
 
     // 全局事件监听
     this.client.on("connect", () => {
-      console.log("✅ MQTT 连接成功");
+      console.log(`✅ ${this.name} 连接成功`);
       systemStore.setMqttStatus(2);
     });
 
     this.client.on("error", (err) => {
-      console.error("❌ MQTT 连接失败:", err);
+      console.error(`❌ ${this.name} 连接失败:`, err);
       this.client.end();
       systemStore.setMqttStatus(3);
     });
 
     this.client.on("reconnect", () => {
-      console.log("🔄 正在尝试重连...", url);
+      console.log(`🔄 ${this.name} 正在尝试重连...`, url);
       systemStore.setMqttStatus(1);
     });
   }
@@ -71,7 +73,7 @@ class MqttService {
     if (!this.client) return;
     this.client.subscribe(topic, (err) => {
       if (!err) {
-        console.log(`📡 已成功订阅主题: ${topic}`);
+        console.log(`📡 ${this.name} 已成功订阅主题: ${topic}`);
         this.subscriptions.set(topic, callback);
       }
     });
@@ -130,7 +132,7 @@ class MqttService {
       this.client.end();
       this.client = null;
       this.subscriptions.clear();
-      console.log("🔌 MQTT 已断开连接");
+      console.log(`🔌 ${this.name} 已断开连接`);
     }
   }
 
@@ -149,4 +151,5 @@ class MqttService {
 }
 
 // 导出单例
-export const mqttService = new MqttService();
+export const mqttService = new MqttService(MQTT_CONFIG, "车机 MQTT");
+export const droneMqttService = new MqttService(WRJ_MQTT_CONFIG, "无人机 MQTT");
