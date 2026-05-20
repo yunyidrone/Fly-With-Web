@@ -7,7 +7,7 @@
  */
 import mqtt from "mqtt";
 import { useSystemStore } from "@/stores/index";
-import { MQTT_CONFIG, WRJ_MQTT_CONFIG } from "@/config/app-config.js";
+import { MQTT_CONFIG } from "@/config/app-config.js";
 
 class MqttService {
   constructor(defaultConfig = MQTT_CONFIG, name = "MQTT") {
@@ -67,10 +67,29 @@ class MqttService {
   }
 
   /**
+   * MQTT 主题匹配（支持 + 单级通配 和 # 多级通配）
+   */
+  _matchTopic(actual, pattern) {
+    const actualParts = actual.split("/");
+    const patternParts = pattern.split("/");
+    for (let i = 0; i < patternParts.length; i++) {
+      if (patternParts[i] === "#") return true;
+      if (i >= actualParts.length) return false;
+      if (patternParts[i] === "+") continue;
+      if (patternParts[i] !== actualParts[i]) return false;
+    }
+    return actualParts.length === patternParts.length;
+  }
+
+  /**
    * 订阅主题
    */
   subscribe(topic, callback) {
     if (!this.client) return;
+    if (this.subscriptions.has(topic)) return;
+
+    const hasWildcard = topic.includes("+") || topic.includes("#");
+
     this.client.subscribe(topic, (err) => {
       if (!err) {
         console.log(`📡 ${this.name} 已成功订阅主题: ${topic}`);
@@ -78,31 +97,16 @@ class MqttService {
       }
     });
 
-    // 监听消息
-    // 判断当前的topic 是否携带 通配符
-    // t 为收到的主题 payload 为收到的消息 t 为订阅的带通配符的主题
-    if (topic.endsWith("#")) {
-       this.client.on("message", (t, payload) => {
-        try {
-          const data = JSON.parse(payload.toString());
-          callback(t,data);
-        } catch (e) {
-          callback(payload.toString());
-        }
-      });
-    } else {
-      this.client.on("message", (t, payload) => {
-        if (t === topic) {
-          try {
-            const data = JSON.parse(payload.toString());
-            callback(data);
-          } catch (e) {
-            callback(payload.toString());
-          }
-        }
-      });
-    }
-    
+    this.client.on("message", (t, payload) => {
+      if (!this._matchTopic(t, topic)) return;
+      try {
+        const data = JSON.parse(payload.toString());
+        // 通配符订阅回调传入实际 topic，精确订阅只传 data
+        callback(hasWildcard ? t : undefined, data);
+      } catch (e) {
+        callback(hasWildcard ? t : undefined, payload.toString());
+      }
+    });
   }
 
   /**
@@ -151,5 +155,4 @@ class MqttService {
 }
 
 // 导出单例
-export const mqttService = new MqttService(MQTT_CONFIG, "车机 MQTT");
-export const droneMqttService = new MqttService(WRJ_MQTT_CONFIG, "无人机 MQTT");
+export const mqttService = new MqttService(MQTT_CONFIG, "MQTT");

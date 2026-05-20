@@ -19,18 +19,6 @@ export const MQTT_CONFIG = {
   reconnectPeriod: 1000,
 };
 
-export const WRJ_MQTT_CONFIG = {
-  protocol: import.meta.env.VITE_WRJ_MQTT_PROTOCOL || "ws",
-  host: import.meta.env.VITE_WRJ_MQTT_HOST || MQTT_CONFIG.host,
-  port: Number(import.meta.env.VITE_WRJ_MQTT_PORT) || MQTT_CONFIG.port,
-  path: import.meta.env.VITE_WRJ_MQTT_PATH || MQTT_CONFIG.path,
-  username: import.meta.env.VITE_WRJ_MQTT_USERNAME || "",
-  password: import.meta.env.VITE_WRJ_MQTT_PASSWORD || "",
-  clientId: `vue3_wrj_mqtt_${Math.random().toString(16).slice(3)}`,
-  clean: true,
-  connectTimeout: 4000,
-  reconnectPeriod: 1000,
-};
 
 // ==========================================
 // API 配置

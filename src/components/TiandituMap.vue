@@ -250,7 +250,7 @@ import { KeyboardRegular } from "@vicons/fa";
 import DefaultMapImg from "@/assets/images/img-map-default.png";
 import DefaultMapImg2 from "@/assets/images/img-map-default2.png";
 import axios from "axios";
-import { droneMqttService, mqttService } from "@/utils/mqtt-service";
+import { mqttService } from "@/utils/mqtt-service";
 import { cloneDeep, isEmpty } from "lodash-es";
 import { CameraFrustum } from "@/utils/cameraFrustum";
 import { CompanionFrustum } from "@/utils/companionFrustum";
@@ -394,18 +394,14 @@ async function submitStartFollow(targetId, droneSn, droneId) {
   }
 }
 
-function subscribeEscortDroneOsd(droneSn) {
-  console.log('droneSn', droneSn)
-  const sn = String(droneSn || "").trim();
-  if (!sn) return;
-  if (escortDroneOsdTopics.has(sn)) return;
-  if (!droneMqttService.client) return;
-  const topic = `thing/product/${sn}/osd`;
-  escortDroneOsdTopics.set(sn, topic);
-
-  droneMqttService.subscribe(topic, (msg) => {
-    console.log('接收到数据', msg)
+function subscribeEscortDroneOsd() {
+  const topic = "thing/product/+/osd";
+  mqttService.subscribe(topic, (actualTopic, msg) => {
+    // 从 thing/product/{sn}/osd 中提取 SN
+    const sn = String(actualTopic?.split("/")[2] || "").trim();
+    if (!sn) return;
     const payload = msg?.data ?? msg;
+    console.log('无人机 收到消息', sn, payload)
     if (!payload || typeof payload !== "object") return;
     const lng = toFiniteNumber(payload.longitude);
     const lat = toFiniteNumber(payload.latitude);
@@ -432,16 +428,10 @@ function subscribeEscortDroneOsd(droneSn) {
       lat: Number.isFinite(lat) ? lat : undefined,
       height: Number.isFinite(height) ? height : undefined,
       attitudeHead: Number.isFinite(attitudeHead) ? attitudeHead : undefined,
-      attitudePitch: Number.isFinite(attitudePitch)
-        ? attitudePitch
-        : undefined,
+      attitudePitch: Number.isFinite(attitudePitch) ? attitudePitch : undefined,
       attitudeRoll: Number.isFinite(attitudeRoll) ? attitudeRoll : undefined,
     });
-    if (
-      Number.isFinite(lng) &&
-      Number.isFinite(lat) &&
-      Number.isFinite(height)
-    ) {
+    if (Number.isFinite(lng) && Number.isFinite(lat) && Number.isFinite(height)) {
       updateDroneMapEntityBySn(sn, lng, lat, height);
     }
   });
@@ -476,40 +466,17 @@ function updateDroneMapEntityBySn(sn, lng, lat, height) {
 }
 
 function subscribeInitialDroneOsdTopics() {
-  console.log("droneSn0", deviceStore.drones?.length || 0);
-  const droneList = Array.isArray(deviceStore.drones) ? deviceStore.drones : [];
-  droneList.forEach((drone) => {
-    console.log("droneSn3");
-    subscribeEscortDroneOsd(drone?.sn || drone?.raw?.sn);
-  });
+  subscribeEscortDroneOsd();
 
   if (deviceStore.dronesLoadedFromApi || initialDroneOsdFetchPending) return;
   initialDroneOsdFetchPending = true;
   deviceStore
     .fetchDroneList()
-    .then(() => {
-      console.log("droneSn1", deviceStore.drones?.length || 0);
-      const latestDroneList = Array.isArray(deviceStore.drones)
-        ? deviceStore.drones
-        : [];
-      latestDroneList.forEach((drone) => {
-        console.log("droneSn3");
-        subscribeEscortDroneOsd(drone?.sn || drone?.raw?.sn);
-      });
-    })
     .finally(() => {
       initialDroneOsdFetchPending = false;
     });
 }
 
-function unsubscribeEscortDroneOsd(droneSn) {
-  const sn = String(droneSn || "").trim();
-  if (!sn) return;
-  const topic = escortDroneOsdTopics.get(sn);
-  if (!topic) return;
-  droneMqttService.unsubscribe(topic);
-  escortDroneOsdTopics.delete(sn);
-}
 
 async function submitStopFollow(targetId, droneId) {
   targetId = '25919cbc3d4811f1aded0242ac120005'
@@ -1209,6 +1176,14 @@ const droneTestManager = {
     return Array.from(this.drones.keys());
   },
 
+  removeDrone(droneId) {
+    const drone = this.drones.get(droneId);
+    if (!drone) return;
+    mainViewer.entities.remove(drone.entity);
+    this.drones.delete(droneId);
+    console.log(`🗑️ 移除无人机实体: ${droneId}`);
+  },
+
   clearAll() {
     this.drones.forEach((drone) => {
       mainViewer.entities.remove(drone.entity);
@@ -1299,10 +1274,6 @@ const target_id = DEVICE_CONFIG.targetId;
 const drone_id = DEVICE_CONFIG.droneId;
 const targetTopic = `flywith/target/${target_id}`;
 const droneTopic = `flywith/uav/${drone_id}`;
-/** 多无人机 OSD 订阅：key=sn, value=topic */
-const escortDroneOsdTopics = new Map();
-/** 车辆位置订阅：key=vehicleId, value=topic */
-const vehicleLocationTopics = new Map();
 let initialDroneOsdFetchPending = false;
 
 // 无人机姿态
@@ -3519,7 +3490,7 @@ const startPublishMessage = () => {
   sendDroneMessageTimer = setInterval(() => {
     if (sendDroneMessageCount < droneMessageList.length) {
       const droneMessage = droneMessageList[sendDroneMessageCount];
-      droneMqttService.publish(droneTopic, JSON.stringify(droneMessage));
+      mqttService.publish(droneTopic, JSON.stringify(droneMessage));
       sendDroneMessageCount++;
     } else {
       clearInterval(sendDroneMessageTimer);
@@ -3940,11 +3911,16 @@ const handleCarBoxMessage = (topic, data) => {
   if (isEmpty(data)) return;
 
   const topicParts = topic.split("/");
-  const deviceId = topicParts[1] || data.deviceId;
-  if (!deviceId) {
+  const sn = String(topicParts[1] || data.deviceId || "").trim();
+  if (!sn) {
     console.warn("⚠️ 无法从主题中提取设备号:", topic);
     return;
   }
+  // 按 SN 查找伴飞目标，统一使用 target.id 作为车辆 ID
+  const target = (Array.isArray(deviceStore.targets) ? deviceStore.targets : []).find(
+    (t) => String(t?.sn || "").trim() === sn,
+  );
+  const deviceId = target?.id || sn;
 
   const { latitude, longitude, alarmFlag } = data;
 
@@ -4059,6 +4035,13 @@ function syncStoreDevicesToMap() {
   });
 
   const droneList = Array.isArray(deviceStore.drones) ? deviceStore.drones : [];
+  const activeDroneIds = new Set();
+  const activeDroneSns = new Set();
+  droneList.forEach((drone) => {
+    if (drone?.id) activeDroneIds.add(String(drone.id));
+    if (drone?.sn) activeDroneSns.add(String(drone.sn));
+  });
+
   droneList.forEach((drone) => {
     if (!drone?.id) return;
     const lng = Number(drone.lng);
@@ -4072,40 +4055,30 @@ function syncStoreDevicesToMap() {
     droneTestManager.updateDroneLabel(id, label);
     droneTestManager.updateDronePosition(id, lng, lat, resolvedHeight);
   });
+
+  // 去重：同一无人机若同时存在 sn-keyed（MQTT 先到）和 id-keyed（API 后到）的实体，移除 sn-keyed
+  droneList.forEach((drone) => {
+    if (!drone?.id || !drone?.sn) return;
+    const idKey = String(drone.id);
+    const snKey = String(drone.sn);
+    if (idKey !== snKey && droneTestManager.drones.has(idKey) && droneTestManager.drones.has(snKey)) {
+      droneTestManager.removeDrone(snKey);
+    }
+  });
+
+  // 清理已从 store 移除的无人机实体
+  const orphanIds = [];
+  droneTestManager.drones.forEach((_drone, droneId) => {
+    if (!activeDroneIds.has(droneId) && !activeDroneSns.has(droneId)) {
+      orphanIds.push(droneId);
+    }
+  });
+  orphanIds.forEach((id) => droneTestManager.removeDrone(id));
 }
 
 function subscribeVehicleLocationTopics() {
-  const targets = Array.isArray(deviceStore.targets) ? deviceStore.targets : [];
-  const activeKeys = new Set();
-
-  targets.forEach((t) => {
-    const vehicleId = String(t?.id || "").trim();
-    const sn = String(t?.sn || "").trim();
-    if (!vehicleId || !sn) return;
-    const topic = `carBox/${sn}/location`;
-    activeKeys.add(vehicleId);
-    if (vehicleLocationTopics.get(vehicleId) === topic) return;
-
-    const prev = vehicleLocationTopics.get(vehicleId);
-    if (prev && prev !== topic) {
-      mqttService.unsubscribe(prev);
-    }
-    vehicleLocationTopics.set(vehicleId, topic);
-
-    mqttService.subscribe(topic, (data) => {
-      handleCarBoxMessage(topic, {
-        ...(data || {}),
-        deviceId: vehicleId,
-      });
-    });
-  });
-
-  Array.from(vehicleLocationTopics.keys()).forEach((vehicleId) => {
-    if (!activeKeys.has(vehicleId)) {
-      const topic = vehicleLocationTopics.get(vehicleId);
-      if (topic) mqttService.unsubscribe(topic);
-      vehicleLocationTopics.delete(vehicleId);
-    }
+  mqttService.subscribe("carBox/+/location", (actualTopic, data) => {
+    handleCarBoxMessage(actualTopic, data);
   });
 }
 
@@ -4160,37 +4133,13 @@ const simulateVehicleAlarmMessage = () => {
  */
 const initialMqttConnect = () => {
   mqttService.connect();
-  droneMqttService.connect();
 
-  // 原始全量订阅（先保留，不删除）
-  // mqttService.subscribe("carBox/#", (topic, data) => {
-  //   handleCarBoxMessage(topic, data);
-  // });
-
-  // 新逻辑：按每辆车逐条订阅 carBox/{SN}/location
+  // 通配订阅：carBox/+/location 匹配所有车辆位置
   subscribeVehicleLocationTopics();
 
-  // 初始化时统一订阅无人机 OSD：thing/product/{SN}/osd
+  // 通配订阅：thing/product/+/osd 匹配所有无人机 OSD
   subscribeInitialDroneOsdTopics();
 };
-
-watch(
-  () => deviceStore.targets,
-  () => {
-    subscribeVehicleLocationTopics();
-  },
-  { deep: true },
-);
-
-watch(
-  () =>
-    (Array.isArray(deviceStore.drones) ? deviceStore.drones : [])
-      .map((drone) => drone?.sn || drone?.raw?.sn || "")
-      .join("|"),
-  () => {
-    subscribeInitialDroneOsdTopics();
-  },
-);
 
 const handleSend = () => {
   const payload = {
@@ -4834,9 +4783,9 @@ const toggleLayerVisibility = ({ key, active }) => {
       break;
     case "route":
       routeLayerVisible = active;
-      setEntitiesShow(routeMarkers, active);
-      setEntitiesShow(verticalLines, active);
-      setEntitiesShow(companionRouteEntities, active);
+      setEntitiesShow(routeMarkers, active); // routeMarkers 是路径标记点
+      setEntitiesShow(verticalLines, active); // verticalLines 是从地面到空中某点高度的垂直高度指示线
+      setEntitiesShow(companionRouteEntities, active); // companionRouteEntities是一个动态折线，在 TiandituMap.vue:1906-1922 处创建，通过 CallbackProperty 实时获取无人机位置（dronePos）和伴飞目标/警车位置（carPos）
       droneTestManager.drones.forEach((drone) => {
         if (drone.entity?.path) drone.entity.path.show = active;
       });
@@ -4934,16 +4883,13 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  vehicleLocationTopics.forEach((topic) => mqttService.unsubscribe(topic));
-  vehicleLocationTopics.clear();
-  escortDroneOsdTopics.forEach((topic) => droneMqttService.unsubscribe(topic));
-  escortDroneOsdTopics.clear();
+  mqttService.unsubscribe("carBox/+/location");
+  mqttService.unsubscribe("thing/product/+/osd");
   targetOfficerEntities.forEach((entity) => {
     mainViewer?.entities?.remove(entity);
   });
   targetOfficerEntities.clear();
   mqttService.destroy();
-  droneMqttService.destroy();
   clearLockdownMarkers();
   closePoliceVehiclePopup();
   vehicleManager.selectedDeviceId = null;

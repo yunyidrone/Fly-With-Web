@@ -212,7 +212,48 @@ export const useDeviceStore = defineStore("device", () => {
         dronesFetchError.value = "无人机列表格式异常（缺少 data.records）";
         return drones.value;
       }
-      drones.value = records.map((r) => normalizeDroneRecord(r));
+      // 合并策略：保留 MQTT 已更新的动态字段，只更新 API 静态字段
+      const bySn = new Map();
+      const byId = new Map();
+      drones.value.forEach((d) => {
+        const s = String(d?.sn || "").trim();
+        const i = String(d?.id || "").trim();
+        if (s) bySn.set(s, d);
+        if (i) byId.set(i, d);
+      });
+
+      const merged = records.map((raw) => {
+        const n = normalizeDroneRecord(raw);
+        const snKey = String(n.sn || "").trim();
+        const idKey = String(n.id || "").trim();
+        const existing = (snKey && bySn.get(snKey)) || (idKey && byId.get(idKey));
+
+        if (existing) {
+          // 仅更新 API 静态字段，MQTT 动态字段保留现有值
+          existing.name = n.name;
+          existing.waylineId = n.waylineId;
+          existing.streamUrl = n.streamUrl;
+          existing.description = n.description;
+          existing.createTime = n.createTime;
+          existing.rawStatus = n.rawStatus;
+          existing.active = n.active;
+          existing.commOk = n.commOk;
+          existing.status = n.status;
+          existing.statusText = n.statusText;
+          existing.isEscorting = n.isEscorting;
+          // 仅当 MQTT 未推送过位置时才使用 API 坐标
+          if (!existing._mqttUpdated) {
+            existing.lng = n.lng;
+            existing.lat = n.lat;
+            existing.longitude = n.longitude;
+            existing.latitude = n.latitude;
+          }
+          return existing;
+        }
+        return n;
+      });
+
+      drones.value = merged;
       dronesLoadedFromApi.value = true;
       testActive.value = false;
       return drones.value;
@@ -291,16 +332,26 @@ export const useDeviceStore = defineStore("device", () => {
     if (drone) drone.battery = battery;
   }
 
+  const droneListRefreshPending = ref(false);
+
   /**
    * 按 SN 同步无人机遥测（电量/续航/位置）
-   * @param {string} sn
-   * @param {{battery?: number|string, endurance?: number|string, lng?: number, lat?: number, height?: number, attitudeHead?: number, attitudePitch?: number, attitudeRoll?: number}} payload
+   * 通配订阅可能收到列表外的无人机，找不到时触发列表刷新
+   * @returns {boolean} true=已更新 store，false=未找到（已触发刷新）
    */
   function updateDroneTelemetryBySn(sn, payload = {}) {
     const key = String(sn || "").trim();
-    if (!key) return;
+    if (!key) return false;
     const drone = drones.value.find((d) => String(d?.sn || "").trim() === key);
-    if (!drone) return;
+    if (!drone) {
+      if (!droneListRefreshPending.value) {
+        droneListRefreshPending.value = true;
+        fetchDroneList().finally(() => {
+          droneListRefreshPending.value = false;
+        });
+      }
+      return false;
+    }
     if (payload.battery != null && payload.battery !== "") {
       const b = Number(payload.battery);
       drone.battery = Number.isFinite(b) ? b : payload.battery;
@@ -311,10 +362,12 @@ export const useDeviceStore = defineStore("device", () => {
     if (typeof payload.lng === "number" && Number.isFinite(payload.lng)) {
       drone.lng = payload.lng;
       drone.longitude = payload.lng;
+      drone._mqttUpdated = true;
     }
     if (typeof payload.lat === "number" && Number.isFinite(payload.lat)) {
       drone.lat = payload.lat;
       drone.latitude = payload.lat;
+      drone._mqttUpdated = true;
     }
     if (typeof payload.height === "number" && Number.isFinite(payload.height)) {
       drone.height = payload.height;
@@ -337,6 +390,7 @@ export const useDeviceStore = defineStore("device", () => {
     ) {
       drone.attitudeRoll = payload.attitudeRoll;
     }
+    return true;
   }
 
   return {
