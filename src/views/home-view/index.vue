@@ -8,7 +8,7 @@
   <div class="page-wrapper" :class="{ 'immersive-flight': immersiveFlight }">
     <!-- 全屏地图（图例叠在地图区域内，沉浸分屏时随左半屏地图居中） -->
     <div class="map-container" @click="onMapAreaClick">
-      <TiandituMap ref="mapRef" />
+      <TiandituMap ref="mapRef" @open-drone-stream="openDroneStream" />
       <div v-show="!immersiveFlight" class="map-legend-host">
         <MapLegend
           @lockdown="mapRef?.triggerLockdown()"
@@ -168,7 +168,7 @@ const streamTargetLabel = computed(() => {
 
 const streamEscortStartTime = computed(() => {
   const d = streamDroneLive.value;
-  return String(d?.executeTiem ?? d?.executeTime ?? "").trim();
+  return String(d?.executeTime ?? d?.executeTime ?? "").trim();
 });
 
 /** 与左侧资源卡片一致：伴飞中 / 返航中 / 就绪 / 离线 */

@@ -102,7 +102,7 @@
           />
           {{ perspectiveVideoText }}
         </span>
-        <div class="video-view-switch" role="group" aria-label="视角切换">
+        <!-- <div class="video-view-switch" role="group" aria-label="视角切换">
           <button
             type="button"
             class="view-tile"
@@ -127,7 +127,7 @@
             </span>
             <span class="view-tile__label">机场视角</span>
           </button>
-        </div>
+        </div> -->
       </div>
       <button
         type="button"

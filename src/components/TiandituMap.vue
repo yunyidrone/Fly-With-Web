@@ -276,6 +276,8 @@ import { useLockdown } from "@/composables/useLockdown.js";
 import { ElMessageBox, ElMessage } from "element-plus";
 import { AccompanyingFlyService } from "@/api";
 
+const emit = defineEmits(["open-drone-stream"]);
+
 // 加载状态
 const isLoading = ref(true);
 
@@ -395,6 +397,8 @@ async function submitStartFollow(targetId, droneSn, droneId) {
 }
 
 function subscribeEscortDroneOsd() {
+  if (subscribeEscortDroneOsd._subscribed) return;
+  subscribeEscortDroneOsd._subscribed = true;
   const topic = "thing/product/+/osd";
   mqttService.subscribe(topic, (actualTopic, msg) => {
     // 从 thing/product/{sn}/osd 中提取 SN
@@ -421,7 +425,7 @@ function subscribeEscortDroneOsd() {
     const distanceLimit = toFiniteNumber(
       payload?.distance_limit_status?.distance_limit,
     );
-    deviceStore.updateDroneTelemetryBySn(sn, {
+    const telemetryUpdated = deviceStore.updateDroneTelemetryBySn(sn, {
       battery: batteryPercent,
       endurance: distanceLimit,
       lng: Number.isFinite(lng) ? lng : undefined,
@@ -431,7 +435,8 @@ function subscribeEscortDroneOsd() {
       attitudePitch: Number.isFinite(attitudePitch) ? attitudePitch : undefined,
       attitudeRoll: Number.isFinite(attitudeRoll) ? attitudeRoll : undefined,
     });
-    if (Number.isFinite(lng) && Number.isFinite(lat) && Number.isFinite(height)) {
+    if (!telemetryUpdated) return;
+    if (Number.isFinite(lng) && Number.isFinite(lat) && Number.isFinite(height) && (lng !== 0 || lat !== 0)) {
       updateDroneMapEntityBySn(sn, lng, lat, height);
     }
   });
@@ -440,11 +445,10 @@ function subscribeEscortDroneOsd() {
 function updateDroneMapEntityBySn(sn, lng, lat, height) {
   if (!mainViewer || mainViewer.isDestroyed?.()) return;
   const key = String(sn || "").trim();
-  const drone = deviceStore.drones.find(
-    (item) => String(item?.sn || "").trim() === key,
-  );
-  const droneId = String(drone?.id || key);
-  if (!droneId) return;
+  const drone = resolveDroneByMqttSn(key);
+  if (!drone) return;
+  const entityKey = getDroneEntityKey(drone);
+  if (!entityKey) return;
 
   const label = String(drone?.name || drone?.id || key || "无人机");
   const resolvedHeight = Number.isFinite(height)
@@ -455,14 +459,22 @@ function updateDroneMapEntityBySn(sn, lng, lat, height) {
 
   droneTestManager.createDrone(
     mainViewer,
-    droneId,
+    entityKey,
     lng,
     lat,
     resolvedHeight,
     label,
   );
-  droneTestManager.updateDroneLabel(droneId, label);
-  droneTestManager.updateDronePosition(droneId, lng, lat, resolvedHeight);
+  droneTestManager.updateDroneLabel(entityKey, label);
+  droneTestManager.updateDronePosition(entityKey, lng, lat, resolvedHeight);
+
+  [drone?.id, drone?.sn, drone?.mqttSn, key].forEach((alias) => {
+    const aliasKey = String(alias || "").trim();
+    if (!aliasKey || aliasKey === entityKey) return;
+    if (droneTestManager.drones.has(aliasKey)) {
+      droneTestManager.removeDrone(aliasKey);
+    }
+  });
 }
 
 function subscribeInitialDroneOsdTopics() {
@@ -479,7 +491,7 @@ function subscribeInitialDroneOsdTopics() {
 
 
 async function submitStopFollow(targetId, droneId) {
-  targetId = '25919cbc3d4811f1aded0242ac120005'
+  // targetId = '25919cbc3d4811f1aded0242ac120005'
   const id = String(targetId || "").trim();
   const targetDroneId = String(droneId || "").trim();
   if (!id) {
@@ -823,6 +835,39 @@ const getVehicleDeviceIdFromEntity = (entity) => {
   return null;
 };
 
+const getEntityType = (entity) => {
+  const propEntityType = entity?.properties?.entityType;
+  if (!propEntityType) return "";
+  if (typeof propEntityType.getValue === "function") {
+    const val = propEntityType.getValue(mainViewer?.clock?.currentTime);
+    return val != null ? String(val) : "";
+  }
+  return String(propEntityType || "");
+};
+
+const getDroneDeviceFromEntity = (entity) => {
+  const deviceId = getVehicleDeviceIdFromEntity(entity);
+  if (!deviceId || getEntityType(entity) !== "drone") return null;
+  return (
+    deviceStore.drones.find((drone) => String(drone?.mqttSn) === deviceId) ||
+    deviceStore.drones.find((drone) => String(drone?.id) === deviceId) ||
+    deviceStore.drones.find((drone) => String(drone?.sn) === deviceId) ||
+    null
+  );
+};
+
+const getDroneEntityKey = (drone) =>
+  String(drone?.id || drone?.sn || drone?.mqttSn || "").trim();
+
+function resolveDroneByMqttSn(sn) {
+  const key = String(sn || "").trim();
+  if (!key) return null;
+  return (
+    deviceStore.drones.find((item) => String(item?.sn || "").trim() === key) ||
+    deviceStore.drones.find((item) => String(item?.mqttSn || "").trim() === key)
+  );
+}
+
 // 多车辆管理系统
 const vehicleManager = {
   // 存储所有车辆实体 { deviceId: { entity, positionProp, orientationProp, lastPosition } }
@@ -942,7 +987,7 @@ const vehicleManager = {
         },
       },
       path: {
-        show: true,
+        show: routeLayerVisible,
         width: 5,
         material: defaultPathMaterial,
         leadTime: 0,
@@ -1015,6 +1060,15 @@ const vehicleManager = {
     return Array.from(this.vehicles.keys());
   },
 
+  removeVehicle(deviceId) {
+    const vehicle = this.vehicles.get(deviceId);
+    if (!vehicle) return;
+    if (this.selectedDeviceId === deviceId) this.selectedDeviceId = null;
+    mainViewer.entities.remove(vehicle.entity);
+    this.vehicles.delete(deviceId);
+    console.log(`🗑️ 移除车辆实体: ${deviceId}`);
+  },
+
   // 清除所有车辆
   clearAll() {
     this.selectedDeviceId = null;
@@ -1061,6 +1115,11 @@ const droneTestManager = {
         uri: "/models/uav.glb",
         minimumPixelSize: 48,
         runAnimations: true,
+      },
+      properties: {
+        deviceId: droneId,
+        deviceName: labelText || droneId,
+        entityType: "drone",
       },
       path: {
         show: routeLayerVisible,
@@ -1990,7 +2049,7 @@ const createDynamicVehicle = (viewer) => {
     //   },
     // },
     path: {
-      show: true,
+      show: routeLayerVisible,
       width: 10,
       material: new Cesium.PolylineGlowMaterialProperty({
         glowPower: 0.2,
@@ -2566,9 +2625,22 @@ const addFrustumLayer = (viewer, droneEntity, zoomSource, color, name) => {
 const toggleLockMode = () => {
   isLockMode.value = !isLockMode.value;
   if (isLockMode.value) {
-    if (carEntity) {
-      mainViewer.trackedEntity = carEntity;
-      switchTrackedView(mainViewer, carEntity, false);
+    // 优先锁定 vehicleManager 中的车辆：选中 > 第一个 > 旧 carEntity
+    let targetEntity = null;
+    const vehiclesArr = Array.from(vehicleManager.vehicles.values());
+    if (vehicleManager.selectedDeviceId) {
+      const selected = vehicleManager.vehicles.get(vehicleManager.selectedDeviceId);
+      if (selected?.entity) targetEntity = selected.entity;
+    }
+    if (!targetEntity && vehiclesArr.length > 0) {
+      targetEntity = vehiclesArr[0].entity;
+    }
+    if (!targetEntity && carEntity) {
+      targetEntity = carEntity;
+    }
+    if (targetEntity) {
+      mainViewer.trackedEntity = targetEntity;
+      switchTrackedView(mainViewer, targetEntity, false);
       isPitch2D.value = false;
     }
   } else {
@@ -2958,6 +3030,12 @@ const initVehicleClickHandler = (viewer) => {
 
     if (Cesium.defined(pickedObject) && pickedObject.id) {
       const entity = pickedObject.id;
+
+      const drone = getDroneDeviceFromEntity(entity);
+      if (drone) {
+        emit("open-drone-stream", drone);
+        return;
+      }
 
       // 检查是否是车辆实体
       if (entity && entity.model && entity.label) {
@@ -3920,12 +3998,27 @@ const handleCarBoxMessage = (topic, data) => {
   const target = (Array.isArray(deviceStore.targets) ? deviceStore.targets : []).find(
     (t) => String(t?.sn || "").trim() === sn,
   );
-  const deviceId = target?.id || sn;
+  const deviceId = String(target?.id || sn);
+  if (target && sn && deviceId !== sn) {
+    target.mqttSn = sn;
+    vehicleManager.removeVehicle(sn);
+  }
 
-  const { latitude, longitude, alarmFlag } = data;
+  const { alarmFlag } = data;
+  const latitude = toFiniteNumber(data.latitude);
+  const longitude = toFiniteNumber(data.longitude);
 
-  if (latitude && longitude) {
-    const vehicle = vehicleManager.createVehicle(mainViewer, deviceId, deviceId);
+  if (Number.isFinite(latitude) && Number.isFinite(longitude) && (latitude !== 0 || longitude !== 0)) {
+    if (target) {
+      target.lat = latitude;
+      target.lng = longitude;
+    }
+    const vehicle = vehicleManager.createVehicle(
+      mainViewer,
+      deviceId,
+      target?.name || deviceId,
+    );
+    vehicleManager.updateVehicleLabel(deviceId, target?.name || deviceId);
     vehicleManager.updateVehiclePosition(deviceId, longitude, latitude, 0);
 
     if (isFirstPoint) {
@@ -3947,8 +4040,8 @@ const handleCarBoxMessage = (topic, data) => {
     }
     lockToVehicle(deviceId);
     const devicePosition = {
-      longitude: toFiniteNumber(longitude),
-      latitude: toFiniteNumber(latitude),
+      longitude,
+      latitude,
     };
     showAlarmDialog(deviceId, alarmFlag, devicePosition);
   }
@@ -3970,7 +4063,7 @@ function syncStoreDevicesToMap() {
     if (!target?.id) return;
     const lng = Number(target.lng);
     const lat = Number(target.lat);
-    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+    if (!Number.isFinite(lng) || !Number.isFinite(lat) || (lng === 0 && lat === 0)) return;
     const id = String(target.id);
     const label = String(target.name || target.id || "目标");
     const targetType = Number(target.type);
@@ -4035,41 +4128,37 @@ function syncStoreDevicesToMap() {
   });
 
   const droneList = Array.isArray(deviceStore.drones) ? deviceStore.drones : [];
-  const activeDroneIds = new Set();
-  const activeDroneSns = new Set();
+  const activeDroneKeys = new Set();
   droneList.forEach((drone) => {
-    if (drone?.id) activeDroneIds.add(String(drone.id));
-    if (drone?.sn) activeDroneSns.add(String(drone.sn));
+    const key = getDroneEntityKey(drone);
+    if (key) activeDroneKeys.add(key);
   });
 
   droneList.forEach((drone) => {
-    if (!drone?.id) return;
+    const entityKey = getDroneEntityKey(drone);
+    if (!entityKey) return;
     const lng = Number(drone.lng);
     const lat = Number(drone.lat);
-    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
-    const id = String(drone.id);
-    const label = String(drone.name || drone.id || "无人机");
+    if (!Number.isFinite(lng) || !Number.isFinite(lat) || (lng === 0 && lat === 0)) return;
+    const label = String(drone.name || drone.id || drone.sn || "无人机");
     const height = Number(drone.height);
     const resolvedHeight = Number.isFinite(height) ? height : DRONE_HEIGHT;
-    droneTestManager.createDrone(mainViewer, id, lng, lat, resolvedHeight, label);
-    droneTestManager.updateDroneLabel(id, label);
-    droneTestManager.updateDronePosition(id, lng, lat, resolvedHeight);
-  });
-
-  // 去重：同一无人机若同时存在 sn-keyed（MQTT 先到）和 id-keyed（API 后到）的实体，移除 sn-keyed
-  droneList.forEach((drone) => {
-    if (!drone?.id || !drone?.sn) return;
-    const idKey = String(drone.id);
-    const snKey = String(drone.sn);
-    if (idKey !== snKey && droneTestManager.drones.has(idKey) && droneTestManager.drones.has(snKey)) {
-      droneTestManager.removeDrone(snKey);
-    }
+    droneTestManager.createDrone(
+      mainViewer,
+      entityKey,
+      lng,
+      lat,
+      resolvedHeight,
+      label,
+    );
+    droneTestManager.updateDroneLabel(entityKey, label);
+    droneTestManager.updateDronePosition(entityKey, lng, lat, resolvedHeight);
   });
 
   // 清理已从 store 移除的无人机实体
   const orphanIds = [];
   droneTestManager.drones.forEach((_drone, droneId) => {
-    if (!activeDroneIds.has(droneId) && !activeDroneSns.has(droneId)) {
+    if (!activeDroneKeys.has(droneId)) {
       orphanIds.push(droneId);
     }
   });
@@ -4786,9 +4875,13 @@ const toggleLayerVisibility = ({ key, active }) => {
       setEntitiesShow(routeMarkers, active); // routeMarkers 是路径标记点
       setEntitiesShow(verticalLines, active); // verticalLines 是从地面到空中某点高度的垂直高度指示线
       setEntitiesShow(companionRouteEntities, active); // companionRouteEntities是一个动态折线，在 TiandituMap.vue:1906-1922 处创建，通过 CallbackProperty 实时获取无人机位置（dronePos）和伴飞目标/警车位置（carPos）
+      vehicleManager.vehicles.forEach((vehicle) => {
+        if (vehicle.entity?.path) vehicle.entity.path.show = active;
+      });
       droneTestManager.drones.forEach((drone) => {
         if (drone.entity?.path) drone.entity.path.show = active;
       });
+      if (carEntity?.path) carEntity.path.show = active;
       if (droneEntity?.path) droneEntity.path.show = active;
       break;
     case "officer":
@@ -4885,6 +4978,7 @@ onMounted(() => {
 onUnmounted(() => {
   mqttService.unsubscribe("carBox/+/location");
   mqttService.unsubscribe("thing/product/+/osd");
+  subscribeEscortDroneOsd._subscribed = false;
   targetOfficerEntities.forEach((entity) => {
     mainViewer?.entities?.remove(entity);
   });

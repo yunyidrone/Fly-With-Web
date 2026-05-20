@@ -53,9 +53,15 @@ export function normalizeDroneRecord(raw) {
   }
   const id = raw.id ?? raw.sn;
   const name = raw.name?.trim?.() ? raw.name : raw.sn || "无人机";
+  const stableFallbackId =
+    raw.sn != null && raw.sn !== ""
+      ? `drone-${raw.sn}`
+      : raw.name?.trim?.()
+        ? `drone-${raw.name.trim()}`
+        : "drone-unknown";
 
   return {
-    id: id != null && id !== "" ? String(id) : `drone-${raw.sn ?? "unknown"}`,
+    id: id != null && id !== "" ? String(id) : stableFallbackId,
     name,
     sn: raw.sn ?? "",
     waylineId: raw.waylineId,
@@ -64,12 +70,12 @@ export function normalizeDroneRecord(raw) {
     latitude: raw.latitude,
     lng:
       typeof raw.longitude === "number" && Number.isFinite(raw.longitude)
-        ? raw.longitude
-        : 121.427,
+        ? raw.longitude : null,
+        // : 121.427,
     lat:
       typeof raw.latitude === "number" && Number.isFinite(raw.latitude)
-        ? raw.latitude
-        : 28.653,
+        ? raw.latitude : null,
+        // : 28.653,
     description: raw.description,
     createTime: raw.createTime,
     rawStatus: Number.isFinite(statusNum) ? statusNum : undefined,
@@ -78,7 +84,9 @@ export function normalizeDroneRecord(raw) {
     status: statusSlug,
     statusText,
     isEscorting: escort,
-    escortTarget: null,
+    escortTarget: raw.targetId ?? raw.target_id ?? null,
+    targetId: raw.targetId ?? raw.target_id ?? null,
+    targetName: raw.targetName ?? raw.target_name ?? null,
     battery: undefined,
     endurance: undefined,
     height: undefined,
@@ -86,6 +94,11 @@ export function normalizeDroneRecord(raw) {
     attitudePitch: undefined,
     attitudeRoll: undefined,
   };
+}
+
+function isGeneratedDroneId(id) {
+  const text = String(id || "").trim();
+  return text.startsWith("drone-");
 }
 
 /**
@@ -125,16 +138,22 @@ export function normalizeTargetRecord(raw) {
     }
     return null;
   };
+  const stableFallbackId =
+    snSrc !== "" && snSrc != null
+      ? `target-${snSrc}`
+      : typeof nameSrc === "string" && nameSrc.trim()
+        ? `target-${nameSrc.trim()}`
+        : "target-unknown";
   return {
-    id: id !== "" && id != null ? String(id) : `target-unknown-${Date.now()}`,
+    id: id !== "" && id != null ? String(id) : stableFallbackId,
     name:
       typeof nameSrc === "string" && nameSrc.trim()
         ? nameSrc.trim()
         : String(id || "目标"),
     sn: typeof snSrc === "string" ? snSrc.trim() : String(snSrc || ""),
     type: Number(raw?.type ?? raw?.targetType ?? raw?.category ?? 1) || 1,
-    lng: pickCoord(raw.longitude) ?? pickCoord(raw.lng) ?? 121.428,
-    lat: pickCoord(raw.latitude) ?? pickCoord(raw.lat) ?? 28.653,
+    lng: pickCoord(raw.longitude) ?? pickCoord(raw.lng) ?? null, // 121.428
+    lat: pickCoord(raw.latitude) ?? pickCoord(raw.lat) ?? null, // 28.653
     raw,
   };
 }
@@ -212,25 +231,48 @@ export const useDeviceStore = defineStore("device", () => {
         dronesFetchError.value = "无人机列表格式异常（缺少 data.records）";
         return drones.value;
       }
+      if (records.length === 0 && drones.value.length > 0) {
+        // 接口短暂返回空列表时，保留当前运行时无人机，避免地图实体抖动
+        dronesLoadedFromApi.value = true;
+        testActive.value = false;
+        return drones.value;
+      }
       // 合并策略：保留 MQTT 已更新的动态字段，只更新 API 静态字段
       const bySn = new Map();
       const byId = new Map();
+      const byMqttSn = new Map();
       drones.value.forEach((d) => {
         const s = String(d?.sn || "").trim();
         const i = String(d?.id || "").trim();
+        const ms = String(d?.mqttSn || "").trim();
         if (s) bySn.set(s, d);
         if (i) byId.set(i, d);
+        if (ms) byMqttSn.set(ms, d);
       });
 
       const merged = records.map((raw) => {
         const n = normalizeDroneRecord(raw);
         const snKey = String(n.sn || "").trim();
         const idKey = String(n.id || "").trim();
-        const existing = (snKey && bySn.get(snKey)) || (idKey && byId.get(idKey));
+        const existing =
+          (snKey && bySn.get(snKey)) ||
+          (snKey && byMqttSn.get(snKey)) ||
+          (idKey && byId.get(idKey));
 
         if (existing) {
           // 仅更新 API 静态字段，MQTT 动态字段保留现有值
+          if (!existing.id) {
+            existing.id = n.id;
+          } else if (
+            existing.id !== n.id &&
+            isGeneratedDroneId(existing.id) &&
+            !isGeneratedDroneId(n.id)
+          ) {
+            // 若已有的是本地兜底 ID，且接口返回了更稳定的真实 ID，则升级为真实 ID
+            existing.id = n.id;
+          }
           existing.name = n.name;
+          existing.sn = n.sn;
           existing.waylineId = n.waylineId;
           existing.streamUrl = n.streamUrl;
           existing.description = n.description;
@@ -241,6 +283,11 @@ export const useDeviceStore = defineStore("device", () => {
           existing.status = n.status;
           existing.statusText = n.statusText;
           existing.isEscorting = n.isEscorting;
+          existing.targetId = n.targetId;
+          existing.targetName = n.targetName;
+          if (!existing.escortTarget || n.escortTarget) {
+            existing.escortTarget = n.escortTarget;
+          }
           // 仅当 MQTT 未推送过位置时才使用 API 坐标
           if (!existing._mqttUpdated) {
             existing.lng = n.lng;
@@ -342,16 +389,19 @@ export const useDeviceStore = defineStore("device", () => {
   function updateDroneTelemetryBySn(sn, payload = {}) {
     const key = String(sn || "").trim();
     if (!key) return false;
-    const drone = drones.value.find((d) => String(d?.sn || "").trim() === key);
+    const drone =
+      drones.value.find((d) => String(d?.sn || "").trim() === key) ||
+      drones.value.find((d) => String(d?.mqttSn || "").trim() === key);
     if (!drone) {
-      if (!droneListRefreshPending.value) {
-        droneListRefreshPending.value = true;
-        fetchDroneList().finally(() => {
-          droneListRefreshPending.value = false;
-        });
-      }
+      // if (!droneListRefreshPending.value) {
+      //   droneListRefreshPending.value = true;
+      //   fetchDroneList().finally(() => {
+      //     droneListRefreshPending.value = false;
+      //   });
+      // }
       return false;
     }
+    drone.mqttSn = key;
     if (payload.battery != null && payload.battery !== "") {
       const b = Number(payload.battery);
       drone.battery = Number.isFinite(b) ? b : payload.battery;

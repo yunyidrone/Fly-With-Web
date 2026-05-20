@@ -3,17 +3,18 @@ import yjfcPng from "@/assets/images/dt_kd.png";
 
 // 封城点预设坐标（围绕默认中心点的关键路口/区域）
 const DEFAULT_LOCKDOWN_POINTS = [
-  { lng: 121.41, lat: 28.67 },
-  { lng: 121.448, lat: 28.668 },
-  { lng: 121.452, lat: 28.65 },
-  { lng: 121.445, lat: 28.633 },
-  { lng: 121.415, lat: 28.635 },
-  { lng: 121.405, lat: 28.652 },
+  { lng: 121.34, lat: 28.69, name: '联华科技门口', id: '1' },
+  { lng: 121.32, lat: 28.58, name: '城南所对面', id: '2' },
+  { lng: 121.26, lat: 28.67, name: '黄土岭隧道口（南向北）', id: '3' },
+  { lng: 121.14, lat: 28.63, name: '头陀滨江路振兴路桥头', id: '4' },
+  { lng: 121.23, lat: 28.67, name: '北院大道-拱东医疗门前主道西', id: '5' },
+  { lng: 121.00, lat: 28.60, name: '快乐村36号鹿鸣潭路口', id: '6' },
+  { lng: 121.57, lat: 28.30, name: '沙埠三角路口', id: '7' },
 ];
 
 const LOCKDOWN_FOCUS_PADDING_RATIO = 1.8;
 const MIN_LOCKDOWN_FOCUS_HEIGHT = 4500;
-const MAX_LOCKDOWN_FOCUS_HEIGHT = 15000;
+const MAX_LOCKDOWN_FOCUS_HEIGHT = 55000;
 
 export function useLockdown({
   getViewer,
@@ -54,8 +55,19 @@ export function useLockdown({
           width: 52,
           height: 65,
           verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-          // 底部中心锚定到经纬度点位，不做额外上移
           pixelOffset: new Cesium.Cartesian2(0, 0),
+          heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+        label: {
+          text: point.name || "封锁",
+          font: "14px sans-serif",
+          fillColor: Cesium.Color.RED,
+          // outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          pixelOffset: new Cesium.Cartesian2(0, -70),
           heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
@@ -120,7 +132,7 @@ export function useLockdown({
       destination: Cesium.Cartesian3.fromDegrees(centerLng, centerLat, height),
       orientation: {
         heading: Cesium.Math.toRadians(0),
-        pitch: Cesium.Math.toRadians(-90),
+        pitch: Cesium.Math.toRadians(-80),
         roll: 0,
       },
       duration: 0.8,
@@ -212,7 +224,7 @@ export function useLockdown({
     addLockdownMarkers(viewer);
     viewer.scene.requestRender();
     focusLockdownArea(viewer);
-    dispatchDronesToNearestLockdownPoints();
+    // dispatchDronesToNearestLockdownPoints();
   };
 
   return {
