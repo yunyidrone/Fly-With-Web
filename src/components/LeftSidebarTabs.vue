@@ -100,6 +100,7 @@ $sidebar-width: calc(#{$tab-btn-width} * 2 + #{$tab-head-gap});
   display: flex;
   flex-direction: column;
   width: min($sidebar-width, calc(100vw - 48px));
+  max-height: calc(100vh - 110px);
   box-sizing: border-box;
 
   .btn-wrap {
@@ -198,6 +199,20 @@ $sidebar-width: calc(#{$tab-btn-width} * 2 + #{$tab-head-gap});
     width: 100%;
     overflow-x: hidden;
     overflow-y: auto;
+
+    &::-webkit-scrollbar {
+      width: 4px;
+    }
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    &::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 2px;
+    }
+    &::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
   }
 
   &__pane {

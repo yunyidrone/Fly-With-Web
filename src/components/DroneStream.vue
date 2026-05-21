@@ -855,15 +855,14 @@ onUnmounted(() => {
   position: relative;
   width: 100%;
   height: 100%;
-  min-height: 220px;
-  max-height: 350px
+  min-height: 324px;
 }
 
 .video-element {
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 220px;
+  min-height: 324px;
   object-fit: contain;
   vertical-align: top;
 }
