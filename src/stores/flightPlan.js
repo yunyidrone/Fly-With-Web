@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { reactive, ref } from "vue";
+import { reactive, ref, computed } from "vue";
 import { AccompanyingFlyService } from "@/api";
 import {
   resolvePolygonRingByPath,
@@ -7,6 +7,13 @@ import {
   resolveLocationLabelsFromPaths,
   normalizePlanLocationPaths,
   migrateLegacyLocationPath,
+  createCustomLocationTree,
+  createCategoryNode,
+  createRegionNode,
+  buildFlightLocationTreeData,
+  buildCustomLocationTreeData,
+  findCustomLocationNode,
+  FLIGHT_LOCATION_CASCADER_OPTIONS,
 } from "@/config/flight-plan-locations.js";
 
 let idSeq = 200;
@@ -230,6 +237,129 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
 
   const selectedPlanId = ref(null);
 
+  // ===== 自定义地点树（地点设置） =====
+  /** @type {import('vue').Ref<Array<{value:string,label:string,children?:Array,ring?:number[]|null}>>} */
+  const customLocationTree = ref([]);
+
+  /** 是否已初始化自定义地点树 */
+  const customTreeInitialized = ref(false);
+
+  function initCustomLocationTree() {
+    if (customTreeInitialized.value) return;
+    customLocationTree.value = createCustomLocationTree();
+    customTreeInitialized.value = true;
+  }
+
+  function addCustomCategory(label) {
+    if (!customTreeInitialized.value) initCustomLocationTree();
+    const node = createCategoryNode(label);
+    customLocationTree.value.push(node);
+    return node.value;
+  }
+
+  function removeCustomCategory(categoryValue) {
+    const idx = customLocationTree.value.findIndex((n) => n.value === categoryValue);
+    if (idx >= 0) customLocationTree.value.splice(idx, 1);
+  }
+
+  function addCustomRegion(categoryValue, label) {
+    if (!customTreeInitialized.value) initCustomLocationTree();
+    const found = findCustomLocationNode(customLocationTree.value, categoryValue);
+    if (!found) return null;
+    const node = createRegionNode(label);
+    if (!found.category.children) found.category.children = [];
+    found.category.children.push(node);
+    return node.value;
+  }
+
+  function removeCustomRegion(categoryValue, regionValue) {
+    const found = findCustomLocationNode(customLocationTree.value, categoryValue, regionValue);
+    if (found && found.regionIndex >= 0) {
+      found.category.children.splice(found.regionIndex, 1);
+    }
+  }
+
+  /**
+   * @param {string} categoryValue
+   * @param {string} regionValue
+   * @param {object} data — { type, ring, points?, center?, radius? }
+   */
+  function setCustomRegionData(categoryValue, regionValue, data) {
+    // 先在自定义树中查找
+    const found = findCustomLocationNode(customLocationTree.value, categoryValue, regionValue);
+    if (found && found.region) {
+      found.region.regionData = data || null;
+      found.region.ring = data?.ring && data.ring.length >= 6 ? [...data.ring] : null;
+      return;
+    }
+
+    // 回退到预设树查找并克隆到自定义树
+    const presetCategory = FLIGHT_LOCATION_CASCADER_OPTIONS.find((n) => n.value === categoryValue);
+    if (!presetCategory) return;
+    const presetChildren = presetCategory.children || [];
+    const presetRegion = presetChildren.find((n) => n.value === regionValue);
+    if (!presetRegion) return;
+
+    // 确保自定义树中有该分类（不存在则克隆整个分类及其全部子地区）
+    let customCat = customLocationTree.value.find((n) => n.value === categoryValue);
+    if (!customCat) {
+      customCat = {
+        value: presetCategory.value,
+        label: presetCategory.label,
+        children: presetChildren.map((r) => ({
+          value: r.value,
+          label: r.label,
+          ring: r.ring ? [...r.ring] : null,
+          regionData: r.regionData ? { ...r.regionData } : null,
+        })),
+      };
+      customLocationTree.value.push(customCat);
+    }
+
+    // 在克隆的分类中找到对应地区并更新数据
+    const customRegion = (customCat.children || []).find((n) => n.value === regionValue);
+    if (customRegion) {
+      customRegion.regionData = data || null;
+      customRegion.ring = data?.ring && data.ring.length >= 6 ? [...data.ring] : null;
+    }
+  }
+
+  /** 自定义地点树 → el-tree data 格式 */
+  const customLocationTreeData = computed(() =>
+    customTreeInitialized.value ? buildCustomLocationTreeData(customLocationTree.value) : [],
+  );
+
+  /**
+   * 合并后的完整地点树（预设 + 自定义，用于飞行计划地点选择）
+   * 自定义分类覆盖同 value 的预设分类（编辑预设地区后会克隆到自定义树）
+   */
+  const mergedLocationTreeData = computed(() => {
+    const preset = buildFlightLocationTreeData();
+    if (!customTreeInitialized.value) return preset;
+    const custom = buildCustomLocationTreeData(customLocationTree.value);
+    // 递归标记所有自定义节点（含子级地区），方便 PlanPanel 做视觉区分
+    function markCustom(nodes) {
+      for (const node of nodes) {
+        node._custom = true;
+        if (node.children && node.children.length) markCustom(node.children);
+      }
+    }
+    markCustom(custom);
+    // 自定义分类覆盖同 value 的预设分类，保持预设原始顺序
+    const customByValue = new Map(custom.map((n) => [n.value, n]));
+    const result = [];
+    for (const node of preset) {
+      result.push(customByValue.get(node.value) || node);
+    }
+    // 追加纯新增的自定义分类（不在预设中的）
+    for (const node of custom) {
+      if (!preset.some((n) => n.value === node.value)) {
+        result.push(node);
+      }
+    }
+    return result;
+  });
+
   function getPlanById(id) {
     if (!id) return null;
     for (const key of Object.keys(plansByScenario)) {
@@ -384,5 +514,16 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
     clearPlanHighlight,
     setHighlightedPlan,
     deletePlan,
+    // 自定义地点树
+    customLocationTree,
+    customTreeInitialized,
+    initCustomLocationTree,
+    addCustomCategory,
+    removeCustomCategory,
+    addCustomRegion,
+    removeCustomRegion,
+    setCustomRegionData,
+    customLocationTreeData,
+    mergedLocationTreeData,
   };
 });

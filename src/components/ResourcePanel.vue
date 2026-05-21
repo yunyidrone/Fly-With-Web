@@ -107,11 +107,11 @@
                 <div class="device-card__meta">
                   <span>{{ device.commOk ? "在线" : "离线" }}</span>
                   <span class="device-card__meta-sep">|</span>
-                  <span>ID:{{ formatDeviceListId(device) }}</span>
+                  <span>ID：{{ formatDeviceListId(device) }}</span>
                   <span class="device-card__meta-sep">|</span>
-                  <span>电量 {{ formatDeviceBattery(device) }}</span>
-                  <span class="device-card__meta-sep">|</span>
-                  <span>续航 {{ formatDeviceEndurance(device) }}</span>
+                  <span>电量：{{ formatDeviceBattery(device) }}</span>
+                  <!-- <span class="device-card__meta-sep">|</span> -->
+                  <!-- <span>续航 {{ formatDeviceEndurance(device) }}</span> -->
                 </div>
               </div>
             </div>

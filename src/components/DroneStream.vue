@@ -856,6 +856,7 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   min-height: 220px;
+  max-height: 350px
 }
 
 .video-element {

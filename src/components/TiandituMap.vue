@@ -21,14 +21,6 @@
           <RiEraserLine size="18px" color="#4d4d4d" />
         </button>
       </el-tooltip>
-      <el-tooltip effect="dark" content="设置测试数据" placement="left">
-        <button @click="setupTestData" class="test-data-btn">测试</button>
-      </el-tooltip>
-      <el-tooltip effect="dark" content="模拟车辆告警伴飞请求" placement="left">
-        <button @click="simulateVehicleAlarmMessage" class="test-alarm-btn">
-          告警
-        </button>
-      </el-tooltip>
       <el-tooltip effect="dark" content="发送消息" placement="left">
         <button @click="startPublishMessage">
           <RiSendPlaneFill size="18px" color="#4d4d4d" />
@@ -1827,55 +1819,6 @@ const getTdtLayerProvider = (layerCode, options = {}) => {
  */
 const initScene = (viewer) => {
   carEntity = createDynamicVehicle(viewer);
-  // carEntity = viewer.entities.add({
-  //   availability: new Cesium.TimeIntervalCollection([
-  //     new Cesium.TimeInterval({
-  //       start: viewer.clock.startTime,
-  //       stop: Cesium.JulianDate.fromIso8601("9999-12-31T23:59:59Z"),
-  //     }),
-  //   ]),
-  //   position: carPositionProp,
-  //   // orientation: new Cesium.VelocityOrientationProperty(carPositionProp),
-  //   orientation: new Cesium.CallbackProperty((time, result) => {
-  //     // Obtain the direction calculated based on the speed at the current moment
-  //     const currentOrientation = velocityOrientation.getValue(time);
-
-  //     if (Cesium.defined(currentOrientation)) {
-  //       // If the current direction is valid (indicating movement), then record it and return it.
-  //       lastValidOrientation = Cesium.Quaternion.clone(currentOrientation, lastValidOrientation);
-  //       return currentOrientation;
-  //     } else {
-  //       // If the direction is invalid (the car has stopped), then return to the last valid direction.
-  //       return lastValidOrientation;
-  //     }
-  //   }, false), // false means not constant and needs to be calculated for each frame
-  //   model: {
-  //     uri: "/models/car.glb",
-  //     minimumPixelSize: 64,
-  //     maximumScale: 20000,
-  //     // Correct the deviation in the direction of the front of the car model
-  //     nodeTransformations: {
-  //       root: new Cesium.NodeTransformationProperty({
-  //         rotation: new Cesium.CallbackProperty(() => {
-  //           const hpr = new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(180), 0, 0);
-  //           return Cesium.Quaternion.fromHeadingPitchRoll(hpr);
-  //         }, false),
-  //       }),
-  //     },
-  //   },
-  //   path: {
-  //     show: true,
-  //     width: 10,
-  //     material: new Cesium.PolylineGlowMaterialProperty({
-  //       glowPower: 0.2,
-  //       taperPower: 0.7,
-  //       color: Cesium.Color.fromCssColorString("#00eeee"),
-  //     }),
-  //     leadTime: 0,
-  //     trailTime: 999999,
-  //   },
-  //   viewFrom: new Cesium.Cartesian3(-150, -150, 100),
-  // });
   droneEntity = viewer.entities.add({
     // 设置可用时间范围为从 1970 年到 9999 年，确保无人机在任何时间都可见
     availability: new Cesium.TimeIntervalCollection([
@@ -1886,14 +1829,6 @@ const initScene = (viewer) => {
     ]),
     position: dronePositionProp,
     orientation: droneOrientationProp,
-    // orientation: new Cesium.CallbackProperty((time) => {
-    //   const currentOri = droneVelocityOrientation.getValue(time);
-    //   if (Cesium.defined(currentOri)) {
-    //     lastValidDroneOrientation = Cesium.Quaternion.clone(currentOri, lastValidDroneOrientation);
-    //     return currentOri;
-    //   }
-    //   return lastValidDroneOrientation; // 如果没速度了，返回上一次存的方向
-    // }, false),
     model: {
       uri: "/models/uav.glb",
       minimumPixelSize: 48,
@@ -1913,25 +1848,7 @@ const initScene = (viewer) => {
     },
   });
 
-  // 无人机视角方向锥体
-  // const cameraFrustum = new CameraFrustum(viewer, droneEntity, 60, 40);
-
-  //  companion 视角方向锥体
-  // const companionFrustum = new CompanionFrustum(viewer, droneEntity, carEntity);
-
-  // 转换大疆姿态绘制视场锥
-  // 标准广角镜头：fovH: 60 到 75，fovV: 35 到 45。
-  // 超广角镜头：fovH: 90 到 110。
-  // 长焦镜头：fovH: 15 到 30
-  // addDJIFrustum(mainViewer, droneEntity, 62, 41.2);
-
-  addDJIZoomFrustum(mainViewer, droneEntity, 84);
-
-  // 绘制【基准全景视场】：固定 Zoom 为 1.0
-  // addFrustumLayer(mainViewer, droneEntity, 1.0, Cesium.Color.CYAN, "Base");
-
-  // 绘制【当前变焦视场】：传入动态函数
-  // addFrustumLayer(mainViewer, droneEntity, () => droneState.zoom_factor, Cesium.Color.YELLOW, "Zoomed");
+  // addDJIZoomFrustum(mainViewer, droneEntity, 84);
 
   const companionRouteEntity = viewer.entities.add({
     polyline: {
@@ -2117,121 +2034,6 @@ const getDroneOrientation = (position, head, pitch, roll) => {
   );
   // 基于当前位置的东-北-上 (ENU) 坐标系计算四元数
   return Cesium.Transforms.headingPitchRollQuaternion(position, hpr);
-};
-
-/**
- * @description: 绘制大疆无人机的视场锥
- * @param {*} viewer
- * @param {*} droneEntity
- * @param {*} fovH 水平视场角度，指相机从最左侧到最右侧能看到的角度
- * @param {*} fovV 垂直视场角度，指相机从最上方到最下方能看到的角度
- * @return {*}
- */
-const addDJIFrustum = (viewer, droneEntity, fovH = 60, fovV = 40) => {
-  const hfov = Cesium.Math.toRadians(fovH);
-  const vfov = Cesium.Math.toRadians(fovV);
-
-  const getCorners = (time) => {
-    // 获取机身的基础位置和姿态
-    const position = droneEntity.position.getValue(time);
-    const bodyOrientation = droneEntity.orientation.getValue(time);
-
-    // 如果位置或姿态属性本身没有数据，或者状态位为 false
-    if (
-      !Cesium.defined(position) ||
-      !Cesium.defined(bodyOrientation) ||
-      !isAttitudeValid
-    ) {
-      return null;
-    }
-
-    // 检查四元数数值是否有效（防止 NaN 崩溃）
-    if (isNaN(bodyOrientation.x) || isNaN(bodyOrientation.y)) {
-      return null;
-    }
-
-    // --- 云台俯仰叠加逻辑 ---
-
-    // 假设从 MQTT 获取到的云台俯仰角，如果没有，默认下看 -90 度
-    // 注意：大疆云台 0度是水平，-90度是垂直向下
-    const gimbalPitchValue = droneState?.gimbal_pitch ?? -90; // droneState.gimbal_pitch
-    const gimbalPitchRad = Cesium.Math.toRadians(gimbalPitchValue);
-
-    // 创建云台的旋转四元数 (围绕机身的本地 X 轴旋转)
-    const gimbalQuaternion = Cesium.Quaternion.fromAxisAngle(
-      Cesium.Cartesian3.UNIT_X,
-      gimbalPitchRad,
-      new Cesium.Quaternion(),
-    );
-
-    // 将【机身姿态】与【云台姿态】合并
-    // 最终姿态 = 机身姿态 * 云台姿态
-    const finalOrientation = Cesium.Quaternion.multiply(
-      bodyOrientation,
-      gimbalQuaternion,
-      new Cesium.Quaternion(),
-    );
-
-    // 使用合并后的 finalOrientation 生成旋转矩阵
-    const matrix = Cesium.Matrix3.fromQuaternion(finalOrientation);
-
-    const tanH = Math.tan(hfov / 2);
-    const tanV = Math.tan(vfov / 2);
-
-    // 定义视场四个角的本地方向 (此时 localDirs 是相对于镜头中心的)
-    const directions = [
-      new Cesium.Cartesian3(-tanH, 1, tanV), // 左上
-      new Cesium.Cartesian3(tanH, 1, tanV), // 右上
-      new Cesium.Cartesian3(tanH, 1, -tanV), // 右下
-      new Cesium.Cartesian3(-tanH, 1, -tanV), // 左下
-    ];
-
-    const corners = [];
-    directions.forEach((dir) => {
-      // 使用合并了云台旋转的矩阵进行转换
-      const worldDir = Cesium.Matrix3.multiplyByVector(
-        matrix,
-        dir,
-        new Cesium.Cartesian3(),
-      );
-      Cesium.Cartesian3.normalize(worldDir, worldDir);
-
-      const ray = new Cesium.Ray(position, worldDir);
-      let intersect = viewer.scene.globe.pick(ray, viewer.scene);
-
-      if (!intersect) {
-        intersect = Cesium.Ray.getPoint(ray, 500.0);
-      }
-      corners.push(intersect);
-    });
-
-    return { apex: position, corners };
-  };
-
-  // 绘制 4 个侧面
-  for (let i = 0; i < 4; i++) {
-    viewer.entities.add({
-      polygon: {
-        hierarchy: new Cesium.CallbackProperty((time) => {
-          const res = getCorners(time);
-          if (!res || !res.apex || res.corners.length < 4) {
-            // 返回一个空的对象，而不是 null，这样实体不会消失，只是暂时不画
-            return new Cesium.PolygonHierarchy([]);
-          }
-          return new Cesium.PolygonHierarchy([
-            res.apex,
-            res.corners[i],
-            res.corners[(i + 1) % 4],
-          ]);
-        }, false),
-        material: Cesium.Color.YELLOW.withAlpha(0.3),
-        perPositionHeight: true,
-        outline: true,
-        outlineColor: Cesium.Color.WHITE,
-        show: new Cesium.CallbackProperty(() => isAttitudeValid, false), // 双重保险
-      },
-    });
-  }
 };
 
 /**
@@ -2530,92 +2332,6 @@ const calcFovByFocalLength = (focalLength, aspect = 16 / 9) => {
     h: hfov, // 弧度
     v: vfov, // 弧度
   };
-};
-
-/**
- * 绘制视场层（可用于基准和变焦对比）
- * @param {Number|Function} zoomSource 变焦倍数，可以是数字，也可以是动态获取倍数的函数
- * @param {Cesium.Color} color 颜色
- */
-const addFrustumLayer = (viewer, droneEntity, zoomSource, color, name) => {
-  const getCorners = (time) => {
-    // 获取机身的基础位置和姿态 (attitude_head/pitch/roll)
-    const position = droneEntity.position.getValue(time);
-    const bodyOrientation = droneEntity.orientation.getValue(time);
-    if (!position || !bodyOrientation) return null;
-
-    // 获取云台俯仰角并合成新姿态
-    // 注意：大疆云台 0 为水平，-90 为垂直向下。这里根据droneState.gimbal_pitch 获取
-    const gPitch = Cesium.Math.toRadians(droneState.gimbal_pitch || -90);
-
-    // 创建云台旋转：绕机身的本地 X 轴旋转（即俯仰）
-    const gimbalQuaternion = Cesium.Quaternion.fromAxisAngle(
-      Cesium.Cartesian3.UNIT_X,
-      gPitch,
-      new Cesium.Quaternion(),
-    );
-
-    // 合成最终姿态：机身姿态 * 云台姿态
-    const finalOrientation = Cesium.Quaternion.multiply(
-      bodyOrientation,
-      gimbalQuaternion,
-      new Cesium.Quaternion(),
-    );
-
-    // 使用合成后的 finalOrientation 生成旋转矩阵
-    const matrix = Cesium.Matrix3.fromQuaternion(finalOrientation);
-
-    const zoom = typeof zoomSource === "function" ? zoomSource() : zoomSource;
-    const fov = getZoomedFOV(zoom);
-    const tanH = Math.tan(fov.h / 2);
-    const tanV = Math.tan(fov.v / 2);
-
-    // 定义射线方向 (假设相机朝向无人机的前方，即 Y 轴)
-    // 如果发现视锥体偏了90度，请尝试交换 Cartesian3 里的坐标位置
-    const directions = [
-      new Cesium.Cartesian3(-tanH, 1, tanV), // 左上
-      new Cesium.Cartesian3(tanH, 1, tanV), // 右上
-      new Cesium.Cartesian3(tanH, 1, -tanV), // 右下
-      new Cesium.Cartesian3(-tanH, 1, -tanV), // 左下
-    ];
-
-    const corners = directions.map((dir) => {
-      const worldDir = Cesium.Matrix3.multiplyByVector(
-        matrix,
-        dir,
-        new Cesium.Cartesian3(),
-      );
-      Cesium.Cartesian3.normalize(worldDir, worldDir);
-      const ray = new Cesium.Ray(position, worldDir);
-
-      const intersection = viewer.scene.globe.pick(ray, viewer.scene);
-      return intersection || Cesium.Ray.getPoint(ray, 1000.0);
-    });
-
-    return { apex: position, corners };
-  };
-
-  // 绘制 4 个侧面
-  for (let i = 0; i < 4; i++) {
-    viewer.entities.add({
-      name: `${name}_side_${i}`,
-      polygon: {
-        hierarchy: new Cesium.CallbackProperty((time) => {
-          const res = getCorners(time);
-          if (!res) return new Cesium.PolygonHierarchy([]);
-          return new Cesium.PolygonHierarchy([
-            res.apex,
-            res.corners[i],
-            res.corners[(i + 1) % 4],
-          ]);
-        }, false),
-        material: color.withAlpha(0.3),
-        perPositionHeight: true,
-        outline: true,
-        outlineColor: color.withAlpha(0.5),
-      },
-    });
-  }
 };
 
 /**
@@ -3383,79 +3099,7 @@ const clearRunningRoute = () => {
 // 伴飞跟踪定时器
 const escortTimers = new Map();
 
-/**
- * @description: 设置测试数据 - 在地图上放置3辆警车和3架无人机
- */
-const setupTestData = () => {
-  if (!mainViewer) return;
 
-  // 清除旧数据
-  vehicleManager.clearAll();
-  droneTestManager.clearAll();
-  escortTimers.forEach((timer) => clearInterval(timer));
-  escortTimers.clear();
-
-  // 初始化 store（左侧面板同步响应）
-  deviceStore.initTestDevices();
-
-  // 创建警车实体
-  TEST_POLICE_VEHICLES.forEach((vehicle) => {
-    vehicleManager.createVehicle(mainViewer, vehicle.id);
-    vehicleManager.updateVehiclePosition(
-      vehicle.id,
-      vehicle.lng,
-      vehicle.lat,
-      0,
-    );
-  });
-
-  // 创建无人机实体
-  TEST_DRONES.forEach((drone) => {
-    droneTestManager.createDrone(
-      mainViewer,
-      drone.id,
-      drone.lng,
-      drone.lat,
-      80,
-    );
-  });
-
-  // 先解除跟踪，避免干扰 flyTo
-  mainViewer.trackedEntity = undefined;
-
-  // 视角居中覆盖所有车辆和无人机
-  const allLngs = [
-    ...TEST_POLICE_VEHICLES.map((v) => v.lng),
-    ...TEST_DRONES.map((d) => d.lng),
-  ];
-  const allLats = [
-    ...TEST_POLICE_VEHICLES.map((v) => v.lat),
-    ...TEST_DRONES.map((d) => d.lat),
-  ];
-  const centerLng = (Math.min(...allLngs) + Math.max(...allLngs)) / 2;
-  const centerLat = (Math.min(...allLats) + Math.max(...allLats)) / 2;
-  // 跨度(km) → 高度(m)：FOV≈60°时高度 ≈ 跨度 × 870，取 2x 安全系数
-  const lngSpan =
-    (Math.max(...allLngs) - Math.min(...allLngs)) *
-    111 *
-    Math.cos(Cesium.Math.toRadians(centerLat));
-  const latSpan = (Math.max(...allLats) - Math.min(...allLats)) * 111;
-  const altitude = Math.max(lngSpan, latSpan) * 1800 + 3000;
-
-  mainViewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromDegrees(centerLng, centerLat, altitude),
-    orientation: {
-      heading: Cesium.Math.toRadians(0),
-      pitch: Cesium.Math.toRadians(-90),
-      roll: 0,
-    },
-    duration: 0.8,
-  });
-
-  ElMessage.success(
-    `已放置 ${TEST_POLICE_VEHICLES.length} 辆警车 和 ${TEST_DRONES.length} 架无人机`,
-  );
-};
 
 /**
  * @description: 模拟伴飞 - 让指定无人机飞向并跟随指定车辆（本地模拟，不依赖后端）
@@ -4170,51 +3814,6 @@ function subscribeVehicleLocationTopics() {
     handleCarBoxMessage(actualTopic, data);
   });
 }
-
-/**
- * @description: 模拟实体车辆上报告警（本地测试，不依赖 MQTT Broker）
- */
-const simulateVehicleAlarmMessage = () => {
-  if (!mainViewer || mainViewer.isDestroyed?.()) {
-    ElMessage.warning("请等待地图加载完成");
-    return;
-  }
-
-  let deviceId = DEVICE_CONFIG.targetId;
-  let latitude = DEFAULT_CENTER.lat;
-  let longitude = DEFAULT_CENTER.lng;
-
-  const mapVehicleIds = [...vehicleManager.vehicles.keys()];
-  if (vehicleManager.selectedDeviceId) {
-    deviceId = vehicleManager.selectedDeviceId;
-    const pos = vehicleManager.vehicles.get(deviceId)?.lastPosition;
-    if (pos) {
-      longitude = pos.longitude;
-      latitude = pos.latitude;
-    }
-  } else if (mapVehicleIds.length) {
-    deviceId = mapVehicleIds[0];
-    const pos = vehicleManager.vehicles.get(deviceId)?.lastPosition;
-    if (pos) {
-      longitude = pos.longitude;
-      latitude = pos.latitude;
-    }
-  } else if (TEST_POLICE_VEHICLES[0]) {
-    deviceId = TEST_POLICE_VEHICLES[0].id;
-    longitude = TEST_POLICE_VEHICLES[0].lng;
-    latitude = TEST_POLICE_VEHICLES[0].lat;
-  }
-
-  handleCarBoxMessage(`carBox/${deviceId}/alarm`, {
-    latitude,
-    longitude,
-    alarmFlag: 1,
-    deviceId,
-    simulated: true,
-  });
-
-  ElMessage.info(`已模拟车辆 ${deviceId} 的告警消息`);
-};
 
 /**
  * @description: Initialize MQTT connection
@@ -5055,7 +4654,7 @@ onUnmounted(() => {
 
 .custom-controls {
   position: absolute;
-  bottom: 40px;
+  bottom: 20px;
   right: 20px;
   z-index: 100;
   display: flex;

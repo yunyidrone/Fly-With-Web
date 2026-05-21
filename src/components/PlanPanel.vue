@@ -227,28 +227,49 @@
                     :class="{ 'plan-sec__head-arrow--open': sectionOpen.location }"
                   />
                 </button>
-                <div v-show="sectionOpen.location" class="plan-sec__body plan-sec__body--tree">
-                  <el-tree
-                    v-if="isViewMode"
-                    class="plan-loc-tree plan-loc-tree--readonly"
-                    :data="readonlyLocationTreeData"
-                    node-key="id"
-                    default-expand-all
-                    :props="locationTreeProps"
-                    :expand-on-click-node="false"
-                  />
-                  <el-tree
-                    v-else
-                    ref="locationTreeRef"
-                    class="plan-loc-tree"
-                    :data="locationTreeData"
-                    node-key="id"
-                    show-checkbox
-                    default-expand-all
-                    :check-strictly="false"
-                    :props="locationTreeProps"
-                    @check="onLocationTreeCheck"
-                  />
+                <div v-show="sectionOpen.location">
+                  <div class="plan-sec__body plan-sec__body--tree">
+                    <el-tree
+                      v-if="isViewMode"
+                      class="plan-loc-tree plan-loc-tree--readonly"
+                      :data="readonlyLocationTreeData"
+                      node-key="id"
+                      default-expand-all
+                      :props="locationTreeProps"
+                      :expand-on-click-node="false"
+                    />
+                    <el-tree
+                      v-else
+                      ref="locationTreeRef"
+                      class="plan-loc-tree"
+                      :data="locationTreeData"
+                      node-key="id"
+                      show-checkbox
+                      default-expand-all
+                      :check-strictly="false"
+                      :props="locationTreeProps"
+                      @check="onLocationTreeCheck"
+                    >
+                      <template #default="{ node, data }">
+                        <span class="custom-tree-node">
+                          <span class="custom-tree-node__label">{{ node.label }}</span>
+                          <span class="custom-tree-node__actions">
+                            <!-- <template v-if="data.children !== undefined">
+                              <button class="tree-btn" @click.stop="handleAddRegion(data.value)">+ 地区</button>
+                              <button class="tree-btn tree-btn--del" @click.stop="handleRemoveCategory(data.value)">×</button>
+                            </template>
+                            <template v-else>
+                              <button class="tree-btn tree-btn--draw" @click.stop="emit('start-area-draw', { categoryValue: node.parent.data.value, regionValue: data.value, existingArea: data.regionData || null })">{{ data.regionData ? '编辑地区' : '选择地区' }}</button>
+                              <button class="tree-btn tree-btn--del" @click.stop="handleRemoveRegion(node.parent.data.value, data.value)">×</button>
+                            </template> -->
+                          </span>
+                        </span>
+                      </template>
+                    </el-tree>
+                  </div>
+                  <!-- <div v-if="!isViewMode" class="plan-sec__body plan-sec__body--locations">
+                    <button type="button" class="loc-add-btn loc-add-btn--cat" @click="handleAddCategory">+ 添加分类</button>
+                  </div> -->
                 </div>
               </section>
 
@@ -439,6 +460,8 @@ import {
   resolvePolygonRingByPath,
 } from "@/config/flight-plan-locations.js";
 
+const emit = defineEmits(["start-area-draw", "view-area"]);
+
 const props = defineProps({
   embedded: {
     type: Boolean,
@@ -626,6 +649,7 @@ const resourceRowsBaseline = computed(() => {
 });
 
 onMounted(() => {
+  flightPlanStore.initCustomLocationTree();
   loadResourceSourceDefs();
   if (!props.embedded) loadPlansForActiveTab();
 });
@@ -641,7 +665,7 @@ function notifyPlanSidebarOpened() {
   loadPlansForActiveTab();
 }
 
-defineExpose({ notifyPlanSidebarOpened });
+defineExpose({ notifyPlanSidebarOpened, setDialogVisible });
 
 const planDialogVisible = ref(false);
 /** @type {import('vue').Ref<'add' | 'view'>} */
@@ -750,7 +774,7 @@ const displayRows = computed(() => {
 });
 
 const locationTreeRef = ref(null);
-const locationTreeData = buildFlightLocationTreeData();
+const locationTreeData = computed(() => flightPlanStore.mergedLocationTreeData);
 const locationTreeProps = { label: "label", children: "children", disabled: "disabled" };
 
 const sectionOpen = reactive({
@@ -763,6 +787,52 @@ const sectionOpen = reactive({
 
 function toggleSection(key) {
   sectionOpen[key] = !sectionOpen[key];
+}
+
+async function handleAddCategory() {
+  try {
+    const { value } = await ElMessageBox.prompt("请输入分类名称", "添加分类", {
+      confirmButtonText: "确定",
+      cancelButtonText: "取消",
+      inputPlaceholder: "例如：商业区",
+    });
+    const label = String(value || "").trim();
+    if (label) flightPlanStore.addCustomCategory(label);
+  } catch { /* cancelled */ }
+}
+
+async function handleRemoveCategory(categoryValue) {
+  try {
+    await ElMessageBox.confirm("确定删除该分类及其所有地区？", "删除分类", {
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      type: "warning",
+    });
+    flightPlanStore.removeCustomCategory(categoryValue);
+  } catch { /* cancelled */ }
+}
+
+async function handleAddRegion(categoryValue) {
+  try {
+    const { value } = await ElMessageBox.prompt("请输入地区名称", "添加地区", {
+      confirmButtonText: "确定",
+      cancelButtonText: "取消",
+      inputPlaceholder: "例如：XX路口",
+    });
+    const label = String(value || "").trim();
+    if (label) flightPlanStore.addCustomRegion(categoryValue, label);
+  } catch { /* cancelled */ }
+}
+
+async function handleRemoveRegion(categoryValue, regionValue) {
+  try {
+    await ElMessageBox.confirm("确定删除该地区？", "删除地区", {
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+      type: "warning",
+    });
+    flightPlanStore.removeCustomRegion(categoryValue, regionValue);
+  } catch { /* cancelled */ }
 }
 
 const filteredResourceRows = computed(() => {
@@ -845,11 +915,17 @@ const addForm = reactive({
   resourceBoatCount: 0,
 });
 
+function getCustomTreeRoots() {
+  flightPlanStore.initCustomLocationTree();
+  return flightPlanStore.customLocationTree;
+}
+
 function getSelectedLocationPaths() {
   const keys = addForm.locationCheckedKeys || [];
+  const customTree = getCustomTreeRoots();
   return keys
     .map((k) => locationNodeKeyToPath(k))
-    .filter((p) => p?.length && resolvePolygonRingByPath(p));
+    .filter((p) => p?.length && resolvePolygonRingByPath(p, customTree));
 }
 
 function syncLocationTreeCheckedKeys(keys) {
@@ -1010,6 +1086,10 @@ function closePlanDialog() {
   viewingPlanId.value = null;
 }
 
+function setDialogVisible(v) {
+  planDialogVisible.value = !!v;
+}
+
 function reloadDetailFormIfViewing(planId) {
   if (!planDialogVisible.value || viewingPlanId.value !== planId) return;
   const latest = flightPlanStore.getPlanById(planId);
@@ -1122,7 +1202,7 @@ async function confirmAddPlan() {
     ElMessage.warning("请至少选择一个地点");
     return;
   }
-  const polygonLngLatList = resolvePolygonRingsFromPaths(locationPaths);
+  const polygonLngLatList = resolvePolygonRingsFromPaths(locationPaths, getCustomTreeRoots());
   if (polygonLngLatList.length !== locationPaths.length) {
     ElMessage.error("部分地点缺少围栏数据，无法上图");
     return;
@@ -1155,7 +1235,7 @@ async function confirmAddPlan() {
     return;
   }
 
-  const placeLabel = resolveLocationLabelsFromPaths(locationPaths) || "—";
+  const placeLabel = resolveLocationLabelsFromPaths(locationPaths, getCustomTreeRoots()) || "—";
   const name =
     addForm.subject.trim() ||
     placeLabel ||
@@ -1658,8 +1738,8 @@ background: #15191E;
 }
 
 .plan-editor-modal {
-  width: 450px;
-  max-height: min(92vh, 80vh);
+  width: 500px;
+  max-height: min(98vh, 95vh);
   display: flex;
   flex-direction: column;
   border-radius: 6px;
@@ -1995,6 +2075,189 @@ background: #1C222A;
 .plan-loc-tree--readonly {
   padding: 4px 0;
 }
+
+/* ===== 自定义树节点内联操作按钮 ===== */
+.custom-tree-node {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 6px;
+  padding-right: 4px;
+}
+
+.custom-tree-node__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-tree-node__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.tree-btn {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 3px;
+  border: 1px solid #30363b;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  line-height: 1.5;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+
+  &:hover {
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+}
+
+.tree-btn--draw {
+  border-color: #4965c9;
+  color: #4965c9;
+  &:hover { background: rgba(73, 101, 201, 0.15); }
+}
+
+.tree-btn--del {
+  padding: 1px 5px;
+  font-size: 14px;
+  line-height: 1;
+  &:hover { color: #f56c6c; border-color: #f56c6c; }
+}
+
+.tree-badge {
+  font-size: 10px;
+  color: #67c23a;
+  background: rgba(103, 194, 58, 0.12);
+  border-radius: 2px;
+  padding: 0 5px;
+  line-height: 1.6;
+  flex-shrink: 0;
+}
+
+/* ===== 地点设置 ===== */
+.plan-sec__body--locations {
+  padding: 10px 12px;
+  background: #03060A;
+  gap: 10px;
+}
+
+.loc-cat {
+  border: 1px solid #25272b;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.loc-cat__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.loc-cat__name {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.loc-cat__del {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 4px;
+}
+.loc-cat__del:hover { color: #f56c6c; }
+
+.loc-reg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0 5px 8px;
+  border-left: 2px solid #25272b;
+  margin: 4px 0 4px 4px;
+}
+
+.loc-reg__name {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+}
+
+.loc-reg__badge {
+  font-size: 11px;
+  color: #67c23a;
+  background: rgba(103, 194, 58, 0.12);
+  border-radius: 3px;
+  padding: 1px 6px;
+  flex-shrink: 0;
+}
+
+.loc-reg__view {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid #67c23a;
+  background: transparent;
+  color: #67c23a;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.loc-reg__view:hover { background: rgba(103, 194, 58, 0.12); }
+
+.loc-reg__draw {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 2px 10px;
+  border-radius: 3px;
+  border: 1px solid #4965c9;
+  background: transparent;
+  color: #4965c9;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.loc-reg__draw:hover { background: rgba(73, 101, 201, 0.15); }
+
+.loc-reg__del {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 2px;
+}
+.loc-reg__del:hover { color: #f56c6c; }
+
+.loc-add-btn {
+  display: block;
+  width: 100%;
+  padding: 5px 0;
+  margin-top: 4px;
+  background: none;
+  border: 1px dashed #30363b;
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: center;
+}
+.loc-add-btn:hover { border-color: #4965c9; color: #4965c9; }
+.loc-add-btn--cat { margin-top: 4px; }
 
 .plan-res-row {
   display: flex;

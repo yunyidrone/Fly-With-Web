@@ -122,6 +122,7 @@ onUnmounted(() => {
   line-height: normal;
   color: #ffffff;
   white-space: nowrap;
+  letter-spacing: 3px;
 }
 
 .brand-text__en {

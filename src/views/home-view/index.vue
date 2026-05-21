@@ -37,7 +37,7 @@
         />
       </template>
       <template #plan>
-        <PlanPanel ref="planPanelRef" embedded />
+        <PlanPanel ref="planPanelRef" embedded @start-area-draw="onStartAreaDraw" @view-area="onViewArea" />
       </template>
     </LeftSidebarTabs>
 
@@ -67,7 +67,7 @@
               :head="streamDroneLive?.attitudeHead"
               :pitch="streamDroneLive?.attitudePitch"
               :roll="streamDroneLive?.attitudeRoll"
-              :status-label="streamStatusLabel"
+              :status-label="streamStatusLabel"import
               :escort-start-time="streamEscortStartTime"
               :companion-task-title="streamCompanionTaskTitle"
               :immersive-flight="immersiveFlight"
@@ -77,19 +77,32 @@
         </div>
       </Transition>
     </Teleport>
+
+    <!-- 地图框选弹窗 -->
+    <!-- <AreaDrawPopup
+      :visible="areaDrawPopup.visible"
+      :initial-area="areaDrawPopup.existingArea"
+      :initial-center="areaDrawInitialCenter"
+      @save="onAreaDrawSave"
+      @cancel="onAreaDrawCancel"
+    /> -->
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from "vue";
+import { ref, reactive, computed, onMounted, watch, nextTick, defineAsyncComponent } from "vue";
 import TiandituMap from "@/components/TiandituMap.vue";
 import HomeHeader from "@/components/HomeHeader.vue";
-import DroneStream from "@/components/DroneStream.vue";
-import ResourcePanel from "@/components/ResourcePanel.vue";
 import MapLegend from "@/components/MapLegend.vue";
-import PlanPanel from "@/components/PlanPanel.vue";
 import LeftSidebarTabs from "@/components/LeftSidebarTabs.vue";
+
+const PlanPanel = defineAsyncComponent(() => import("@/components/PlanPanel.vue"));
+// const AreaDrawPopup = defineAsyncComponent(() => import("@/components/AreaDrawPopup.vue"));
+const ResourcePanel = defineAsyncComponent(() => import("@/components/ResourcePanel.vue"));
+const DroneStream = defineAsyncComponent(() => import("@/components/DroneStream.vue"));
+import { MAP_CONFIG } from "@/config/app-config.js";
 import { useDeviceStore } from "@/stores/device.js";
+import { useFlightPlanStore } from "@/stores/flightPlan.js";
 import { AccompanyingFlyService } from "@/api";
 
 const mapRef = ref(null);
@@ -106,10 +119,62 @@ const streamDrone = ref(null);
 const immersiveFlight = ref(false);
 
 const deviceStore = useDeviceStore();
+const flightPlanStore = useFlightPlanStore();
+
+// ===== 地点设置 → 地图框选弹窗 =====
+const areaDrawPopup = reactive({
+  visible: false,
+  categoryValue: "",
+  regionValue: "",
+  existingArea: null,
+});
+
+const areaDrawInitialCenter = computed(() => {
+  if (areaDrawPopup.existingArea?.center) {
+    return areaDrawPopup.existingArea.center;
+  }
+  return { lng: MAP_CONFIG.defaultCenter.lng, lat: MAP_CONFIG.defaultCenter.lat };
+});
+
+/** 地点设置 → 打开框选弹窗 */
+function onStartAreaDraw({ categoryValue, regionValue, existingArea }) {
+  showAreaDrawPopup(categoryValue, regionValue, existingArea);
+}
+
+function showAreaDrawPopup(categoryValue, regionValue, existingArea) {
+  areaDrawPopup.categoryValue = categoryValue;
+  areaDrawPopup.regionValue = regionValue;
+  areaDrawPopup.existingArea = existingArea || null;
+  areaDrawPopup.visible = true;
+}
+
+function onAreaDrawSave(result) {
+  if (result && (result.type === "rectangle" || result.type === "circle")) {
+    flightPlanStore.setCustomRegionData(
+      areaDrawPopup.categoryValue,
+      areaDrawPopup.regionValue,
+      result,
+    );
+  }
+  areaDrawPopup.visible = false;
+}
+
+function onAreaDrawCancel() {
+  areaDrawPopup.visible = false;
+}
+
+/** PlanPanel "查看" 按钮 → 主地图飞到指定区域 */
+function onViewArea(ring) {
+  mapRef.value?.flyToRing?.(ring);
+}
 
 onMounted(() => {
-  deviceStore.fetchDroneList();
-  deviceStore.fetchTargetList();
+  // 等地图完成首帧渲染后再拉数据，避免阻塞首次绘制
+  const schedule = window.requestIdleCallback || ((fn) => setTimeout(fn, 0));
+  schedule(() => {
+    deviceStore.fetchDroneList();
+    deviceStore.fetchTargetList();
+  });
 });
 
 watch(immersiveFlight, () => {

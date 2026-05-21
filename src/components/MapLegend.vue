@@ -287,7 +287,7 @@ function clearAllSelection() {
 <style lang="scss" scoped>
 .map-legend-wrapper {
   position: absolute;
-  bottom: 40px;
+  bottom: 20px;
   left: 0;
   right: 0;
   z-index: 100;
