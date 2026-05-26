@@ -574,7 +574,7 @@ function deviceCardStatusLabel(device) {
   > .panel-body {
     overflow: hidden;
     overflow-y: auto;
-    max-height: calc(100vh - 400px);
+    // max-height: calc(100vh - 400px);
     min-height: 0;
   }
 }

@@ -376,6 +376,11 @@ async function submitStartFollow(targetId, droneSn, droneId) {
     if (res?.code === 2000) {
       // 临时注掉伴飞成功后订阅，改为 MQTT 初始化时统一订阅无人机 OSD。
       // subscribeEscortDroneOsd(droneSn);
+      const escortDrone = resolveDroneByMqttSn(droneSn);
+      const entityKey = escortDrone
+        ? getDroneEntityKey(escortDrone)
+        : String(droneId || "").trim();
+      droneTestManager.clearDroneTrajectory(entityKey);
       await deviceStore.fetchDroneList();
       ElMessage.success(`已下发伴飞指令：${targetId}`);
       return true;
@@ -1168,6 +1173,36 @@ const droneTestManager = {
     const position = Cesium.Cartesian3.fromDegrees(lng, lat, height);
     drone.positionProp.addSample(now, position);
     drone.lastPosition = { lng, lat, height };
+  },
+
+  clearDroneTrajectory(droneId) {
+    const drone = this.drones.get(droneId);
+    if (!drone) return;
+
+    // 清空所有历史轨迹
+    drone.positionProp.removeSamples(
+      new Cesium.TimeInterval({
+        start: Cesium.JulianDate.fromIso8601("1970-01-01T00:00:00Z"),
+        stop: Cesium.JulianDate.fromIso8601("9999-12-31T23:59:59Z"),
+      }),
+    );
+
+    // 保留当前位置作为新轨迹起点（只留一个点 = 无轨迹线）
+    if (drone.lastPosition?.lng != null && drone.lastPosition?.lat != null) {
+      const pos = Cesium.Cartesian3.fromDegrees(
+        drone.lastPosition.lng,
+        drone.lastPosition.lat,
+        drone.lastPosition.height || 80,
+      );
+      drone.positionProp.addSample(mainViewer.clock.currentTime, pos);
+    }
+
+    // 强制刷新轨迹显示
+    drone.entity.path.show = false;
+    drone.entity.path.show = true;
+
+    drone.lastScheduledTime = null;
+    console.log(`🧹 已清除无人机 ${droneId} 轨迹`);
   },
 
   updateDroneLabel(droneId, labelText) {
@@ -3587,13 +3622,16 @@ const showAlarmDialog = async (deviceId, alarmFlag, devicePosition) => {
     : '<option value="">暂无可用无人机</option>';
 
   ElMessageBox.confirm(
-    `<div style="padding: 10px;">
+    `<style>
+      #alarm-drone-select option { color: #fff; background: #1c222a; }
+    </style>
+    <div style="padding: 10px;">
       <h4 style="margin: 0 0 10px 0;">接收到伴飞请求</h4>
       <p>车辆名称：${vehicleName}</p>
       <p style="margin:10px;">设备ID：${deviceId}</p>
       <div style="margin-top:10px;display: flex;">
         <label for="alarm-drone-select" style="margin-left: -18px;">推荐无人机：</label>
-        <select id="alarm-drone-select" style="width:250px;height: 32px;padding:8px;border: 1px solid #30363b;background: rgba(255, 255, 255, 0.08);border-radius:2px;color: #fff;">
+        <select id="alarm-drone-select" style="width:250px;height:32px;padding:8px;border:1px solid #30363b;background:rgba(255,255,255,0.08);border-radius:2px;color:#fff;">
           ${optionsHtml}
         </select>
       </div>
@@ -3696,6 +3734,9 @@ const handleCarBoxMessage = (topic, data) => {
 /**
  * 将 store 中接口设备（targets / drones）同步到地图实体
  */
+/** 上一轮同步时处于伴飞中的无人机 entityKey 集合，用于检测就绪→伴飞中的状态跃迁 */
+const prevEscortingDroneKeys = new Set();
+
 function syncStoreDevicesToMap() {
   if (!mainViewer || mainViewer.isDestroyed?.()) return;
 
@@ -3773,10 +3814,25 @@ function syncStoreDevicesToMap() {
 
   const droneList = Array.isArray(deviceStore.drones) ? deviceStore.drones : [];
   const activeDroneKeys = new Set();
+  const currentEscortingKeys = new Set();
   droneList.forEach((drone) => {
     const key = getDroneEntityKey(drone);
-    if (key) activeDroneKeys.add(key);
+    if (key) {
+      activeDroneKeys.add(key);
+      if (drone.isEscorting) {
+        currentEscortingKeys.add(key);
+      }
+    }
   });
+
+  // 检测就绪→伴飞中的状态跃迁，清除旧轨迹
+  currentEscortingKeys.forEach((key) => {
+    if (!prevEscortingDroneKeys.has(key)) {
+      droneTestManager.clearDroneTrajectory(key);
+    }
+  });
+  prevEscortingDroneKeys.clear();
+  currentEscortingKeys.forEach((key) => prevEscortingDroneKeys.add(key));
 
   droneList.forEach((drone) => {
     const entityKey = getDroneEntityKey(drone);
