@@ -3,18 +3,24 @@ import yjfcPng from "@/assets/images/dt_kd.png";
 
 // 封城点预设坐标（围绕默认中心点的关键路口/区域）
 const DEFAULT_LOCKDOWN_POINTS = [
-  { lng: 121.34, lat: 28.69, name: '联华科技门口', id: '1' },
-  { lng: 121.32, lat: 28.58, name: '城南所对面', id: '2' },
-  { lng: 121.26, lat: 28.67, name: '黄土岭隧道口（南向北）', id: '3' },
-  { lng: 121.14, lat: 28.63, name: '头陀滨江路振兴路桥头', id: '4' },
-  { lng: 121.23, lat: 28.67, name: '北院大道-拱东医疗门前主道西', id: '5' },
-  { lng: 121.00, lat: 28.60, name: '快乐村36号鹿鸣潭路口', id: '6' },
-  { lng: 121.57, lat: 28.30, name: '沙埠三角路口', id: '7' },
+  { id: 1, lng: 121.225750, lat: 28.678600, name: '新前封控点', address: '浙江拱东医疗器械股份有限公司-浙江省台州市黄岩区北城街道北院大道10号' }, 
+  { id: 2, lng: 121.282370, lat: 28.684380, name: '巡特警封控点-站前大道与站西大道交叉口', address: '王林停车场-浙江省台州市黄岩区北城街道王林村521号附近' },
+  { id: 3, lng: 121.260190, lat: 28.618350, name: '城西封控点-九澄大道与劳动南路交叉口', address: '黄岩车辆检测有限公司-浙江省台州市黄岩区黄岩车辆检测站东北门旁' },
+  { id: 4, lng: 121.263920, lat: 28.618380, name: '城南封控点', address: '城南派出所-浙江省台州市黄岩区十里铺11号' },
+  { id: 5, lng: 121.242400, lat: 28.694970, name: '城北封控点', address: '黄土幸岭-浙江省台州市黄岩区北城街道' },
+  { id: 6, lng: 121.262120, lat: 28.558540, name: '院桥封控点', address: '台州黄岩奥特莱斯广场-浙江省台州市黄岩区院桥镇兴华路211号奥特莱斯广场F2' },
+  { id: 7, lng: 121.144280, lat: 28.630050, name: '头陀封控点', address: '黄岩农商银行(头陀支行)-浙江省台州市黄岩区头陀镇振兴路西2号' },
+  { id: 8, lng: 121.116250, lat: 28.609380, name: '北洋封控点', address: '黄岩区黄前线-黄岩区小里桥分离立交桥西南100米处' },
+  { id: 9, lng: 121.331250, lat: 28.677560, name: '江口封控点', address: '中国边检-浙江省台州市黄岩区江口街道大闸路黄岩江口中学东侧约220米' },
+  { id: 10, lng: 121.285750, lat: 28.663170, name: '城东封控点', address: '台州黄岩之星汽车销售服务有限公司-浙江省台州市黄岩区东城街道站西大道338号' },
+  { id: 11, lng: 121.198540, lat: 28.562540, name: '院桥第二个封控点', address: '旭日工贸-浙江省台州市黄岩区沙埠镇凤凰路198号' },
+  { id: 12, lng: 120.990940, lat: 28.607440, name: '宁溪封控点', address: '快乐农家小院-浙江省台州市黄岩区S321与长决线交叉口西南方向116米左右' },
+  { id: 13, lng: 121.205390, lat: 28.624480, name: '澄江封控点', address: '台州汉地无花果基地-浙江省台州市黄岩区澄江镇余家屿村口' },
 ];
 
-const LOCKDOWN_FOCUS_PADDING_RATIO = 1.8;
-const MIN_LOCKDOWN_FOCUS_HEIGHT = 4500;
-const MAX_LOCKDOWN_FOCUS_HEIGHT = 55000;
+const LOCKDOWN_FOCUS_PADDING_RATIO = 1.2; // 边距系数 计算出的理想视野高度乘以 1.8，让所有封控点周围留出一定的空白边距，避免点位紧贴屏幕边缘
+const MIN_LOCKDOWN_FOCUS_HEIGHT = 4500; // 相机最小高度 4500 米。如果封控点分布很集中，计算出的高度可能过低（太近），用这个下限兜底，防止视角过度拉近
+const MAX_LOCKDOWN_FOCUS_HEIGHT = 55000; // 相机最大高度 55000 米。如果封控点分布极广，计算出的高度可能过高（太远），用这个上限兜底，防止视角过度拉远。
 
 export function useLockdown({
   getViewer,
@@ -128,11 +134,16 @@ export function useLockdown({
   const focusLockdownArea = (viewer) => {
     const { centerLng, centerLat, height } = getFocusView(viewer);
 
+    const pitchRad = Cesium.Math.toRadians(-80);
+    // 补偿 pitch 倾斜带来的视线偏移：相机向北看，需向南挪动相机使画面中心对准地理中心
+    const pitchOffsetMeters = height * Math.tan(Math.PI / 2 - Math.abs(pitchRad));
+    const latOffset = pitchOffsetMeters / 111000;
+
     viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(centerLng, centerLat, height),
+      destination: Cesium.Cartesian3.fromDegrees(centerLng, centerLat - latOffset, height),
       orientation: {
         heading: Cesium.Math.toRadians(0),
-        pitch: Cesium.Math.toRadians(-80),
+        pitch: pitchRad,
         roll: 0,
       },
       duration: 0.8,
