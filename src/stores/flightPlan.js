@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { reactive, ref, computed } from "vue";
-import { AccompanyingFlyService } from "@/api";
+import { FlightPlanService } from "@/api/plan";
 import {
   resolvePolygonRingByPath,
   resolveLocationLabelByPath,
@@ -17,6 +17,19 @@ import {
 } from "@/config/flight-plan-locations.js";
 
 let idSeq = 200;
+
+/** 中心 + 半径 → 圆形围栏环 [lng,lat,lng,lat,...] */
+function generateCircleRing(lng, lat, radiusM, numPoints = 36) {
+  const ring = [];
+  const cosLat = Math.cos((lat * Math.PI) / 180);
+  for (let i = 0; i < numPoints; i++) {
+    const angle = (i / numPoints) * 2 * Math.PI;
+    const dLat = (radiusM * Math.cos(angle)) / 111320;
+    const dLng = (radiusM * Math.sin(angle)) / (111320 * cosLat);
+    ring.push(lng + dLng, lat + dLat);
+  }
+  return ring;
+}
 
 /**
  * API type → 前端场景 key（1山林救援 2水上观察 3重点安保）
@@ -99,9 +112,6 @@ export function normalizeFlightPlanRecord(raw) {
   const name = String(raw?.name ?? raw?.planName ?? raw?.title ?? "").trim();
   const subject =
     String(raw?.subject ?? raw?.theme ?? name).trim() || name || "飞行计划";
-  const detailRemark = String(
-    raw?.detailRemark ?? raw?.remark ?? raw?.description ?? "",
-  ).trim();
 
   const flightDate = raw?.flightDate ?? raw?.startDate ?? raw?.beginDate ?? "";
   const flightDateEnd =
@@ -193,7 +203,7 @@ export function normalizeFlightPlanRecord(raw) {
       ? polygonLngLatList.map((r) => [...r])
       : [],
     subject,
-    detailRemark,
+    description: raw?.description ?? raw?.remark ?? "",
     resourceDroneCount,
     resourceDogCount,
     resourceBoatCount,
@@ -217,7 +227,7 @@ export function normalizeFlightPlanRecord(raw) {
  * @property {number[]} polygonLngLat 首个围栏（兼容）
  * @property {number[][]} [polygonLngLatList] 多区域围栏
  * @property {string} [subject] 主题 / 救援主题
- * @property {string} [detailRemark] 详情备注
+ * @property {string} [description] 详情备注
  * @property {number} [resourceDroneCount]
  * @property {number} [resourceDogCount]
  * @property {number} [resourceBoatCount]
@@ -236,6 +246,9 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
   const planListTotal = ref(0);
 
   const selectedPlanId = ref(null);
+
+  /** 接口地点数据版本号，用于触发 mergedLocationTreeData 重算 */
+  const planLocationsVersion = ref(0);
 
   // ===== 自定义地点树（地点设置） =====
   /** @type {import('vue').Ref<Array<{value:string,label:string,children?:Array,ring?:number[]|null}>>} */
@@ -334,6 +347,7 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
    * 自定义分类覆盖同 value 的预设分类（编辑预设地区后会克隆到自定义树）
    */
   const mergedLocationTreeData = computed(() => {
+    void planLocationsVersion.value;
     const preset = buildFlightLocationTreeData();
     if (!customTreeInitialized.value) return preset;
     const custom = buildCustomLocationTreeData(customLocationTree.value);
@@ -407,7 +421,7 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
       polygonLngLat: [...(polygonLngLatList[0] || payload.polygonLngLat || [])],
       polygonLngLatList,
       subject: payload.subject ?? "",
-      detailRemark: payload.detailRemark ?? "",
+      description: payload.description ?? "",
       resourceDroneCount: Number(payload.resourceDroneCount) || 0,
       resourceDogCount: Number(payload.resourceDogCount) || 0,
       resourceBoatCount: Number(payload.resourceBoatCount) || 0,
@@ -441,7 +455,7 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
   async function fetchPlanList(query = {}) {
     plansFetchError.value = null;
     try {
-      const res = await AccompanyingFlyService.planPageQuery(query);
+      const res = await FlightPlanService.planPageQuery(query);
       if (res?.code !== 2000) {
         plansFetchError.value = res?.message || "加载飞行计划失败";
         return [];
@@ -501,6 +515,62 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
     return false;
   }
 
+  /**
+   * 从接口拉取地点数据，填充 FLIGHT_LOCATION_CASCADER_OPTIONS
+   * @param {number} type 1山林救援 2水上观察 3重点安保
+   */
+  const PLACE_TYPE_LABEL = {
+    1: "小学",
+    2: "中学",
+    3: "高校",
+    4: "加油站",
+    5: "动车站",
+    6: "医院",
+    7: "公园",
+    8: "政府单位",
+  };
+
+  async function fetchPlaceList(type) {
+    try {
+      const res = await FlightPlanService.placeListQuery({ type });
+      if (res?.code !== 2000) return;
+      const data = res?.data;
+      const list = Array.isArray(data?.records)
+        ? data.records
+        : Array.isArray(data?.list)
+          ? data.list
+          : Array.isArray(data)
+            ? data
+            : [];
+      const tree = list.map((group) => {
+        const pt = group?.placeType;
+        const places = Array.isArray(group?.followPlaceList) ? group.followPlaceList : [];
+        const children = places
+          .filter((p) => p?.delFlag !== 1 && p?.delFlag !== "1")
+          .map((p) => {
+            const lng = Number(p?.longitude);
+            const lat = Number(p?.latitude);
+            const radius = Number(p?.radius) || 500;
+            return {
+              value: String(p?.id ?? ""),
+              label: String(p?.name ?? ""),
+              ring: generateCircleRing(lng, lat, radius),
+              regionData: { longitude: lng, latitude: lat, radius },
+            };
+          });
+        return {
+          value: `place_${pt}`,
+          label: PLACE_TYPE_LABEL[pt] || `类型${pt}`,
+          children,
+        };
+      });
+      FLIGHT_LOCATION_CASCADER_OPTIONS.splice(0, FLIGHT_LOCATION_CASCADER_OPTIONS.length, ...tree);
+      planLocationsVersion.value++;
+    } catch {
+      // silent
+    }
+  }
+
   return {
     plansByScenario,
     plansLoadedFromApi,
@@ -510,6 +580,7 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
     getPlanById,
     addPlan,
     fetchPlanList,
+    fetchPlaceList,
     selectPlan,
     clearPlanHighlight,
     setHighlightedPlan,

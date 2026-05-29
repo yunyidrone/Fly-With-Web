@@ -1,22 +1,37 @@
 import * as Cesium from "cesium";
 import yjfcPng from "@/assets/images/dt_kd.png";
+import { CommonService } from "@/api/common.js";
 
-// 封城点预设坐标（围绕默认中心点的关键路口/区域）
-const DEFAULT_LOCKDOWN_POINTS = [
-  { id: 1, lng: 121.225750, lat: 28.678600, name: '新前封控点', address: '浙江拱东医疗器械股份有限公司-浙江省台州市黄岩区北城街道北院大道10号' }, 
-  { id: 2, lng: 121.282370, lat: 28.684380, name: '巡特警封控点-站前大道与站西大道交叉口', address: '王林停车场-浙江省台州市黄岩区北城街道王林村521号附近' },
-  { id: 3, lng: 121.260190, lat: 28.618350, name: '城西封控点-九澄大道与劳动南路交叉口', address: '黄岩车辆检测有限公司-浙江省台州市黄岩区黄岩车辆检测站东北门旁' },
-  { id: 4, lng: 121.263920, lat: 28.618380, name: '城南封控点', address: '城南派出所-浙江省台州市黄岩区十里铺11号' },
-  { id: 5, lng: 121.242400, lat: 28.694970, name: '城北封控点', address: '黄土幸岭-浙江省台州市黄岩区北城街道' },
-  { id: 6, lng: 121.262120, lat: 28.558540, name: '院桥封控点', address: '台州黄岩奥特莱斯广场-浙江省台州市黄岩区院桥镇兴华路211号奥特莱斯广场F2' },
-  { id: 7, lng: 121.144280, lat: 28.630050, name: '头陀封控点', address: '黄岩农商银行(头陀支行)-浙江省台州市黄岩区头陀镇振兴路西2号' },
-  { id: 8, lng: 121.116250, lat: 28.609380, name: '北洋封控点', address: '黄岩区黄前线-黄岩区小里桥分离立交桥西南100米处' },
-  { id: 9, lng: 121.331250, lat: 28.677560, name: '江口封控点', address: '中国边检-浙江省台州市黄岩区江口街道大闸路黄岩江口中学东侧约220米' },
-  { id: 10, lng: 121.285750, lat: 28.663170, name: '城东封控点', address: '台州黄岩之星汽车销售服务有限公司-浙江省台州市黄岩区东城街道站西大道338号' },
-  { id: 11, lng: 121.198540, lat: 28.562540, name: '院桥第二个封控点', address: '旭日工贸-浙江省台州市黄岩区沙埠镇凤凰路198号' },
-  { id: 12, lng: 120.990940, lat: 28.607440, name: '宁溪封控点', address: '快乐农家小院-浙江省台州市黄岩区S321与长决线交叉口西南方向116米左右' },
-  { id: 13, lng: 121.205390, lat: 28.624480, name: '澄江封控点', address: '台州汉地无花果基地-浙江省台州市黄岩区澄江镇余家屿村口' },
-];
+// 封控点数据（由 fetchLockdownPoints 从接口拉取填充）
+const DEFAULT_LOCKDOWN_POINTS = [];
+
+/**
+ * 从接口拉取封控点列表，填充 DEFAULT_LOCKDOWN_POINTS
+ */
+export async function fetchLockdownPoints() {
+  try {
+    const res = await CommonService.controlPointListQuery();
+    if (res?.code !== 2000) return;
+    const data = res?.data;
+    const list = Array.isArray(data?.records)
+      ? data.records
+      : Array.isArray(data?.list)
+        ? data.list
+        : Array.isArray(data)
+          ? data
+          : [];
+    const points = list.map((item) => ({
+      id: item?.id ?? "",
+      lng: Number(item?.longitude),
+      lat: Number(item?.latitude),
+      name: item?.name ?? "",
+      address: item?.description ?? "",
+    }));
+    DEFAULT_LOCKDOWN_POINTS.splice(0, DEFAULT_LOCKDOWN_POINTS.length, ...points);
+  } catch {
+    // silent
+  }
+}
 
 const LOCKDOWN_FOCUS_PADDING_RATIO = 1.2; // 边距系数 计算出的理想视野高度乘以 1.8，让所有封控点周围留出一定的空白边距，避免点位紧贴屏幕边缘
 const MIN_LOCKDOWN_FOCUS_HEIGHT = 4500; // 相机最小高度 4500 米。如果封控点分布很集中，计算出的高度可能过低（太近），用这个下限兜底，防止视角过度拉近
@@ -227,10 +242,11 @@ export function useLockdown({
     );
   };
 
-  const triggerLockdown = () => {
+  const triggerLockdown = async () => {
     const viewer = getViewer?.();
     if (!viewer) return;
 
+    await fetchLockdownPoints();
     clearLockdownMarkers();
     addLockdownMarkers(viewer);
     viewer.scene.requestRender();

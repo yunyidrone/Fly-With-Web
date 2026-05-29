@@ -210,7 +210,7 @@
                     :readonly="isViewMode"
                   />
                   <textarea
-                    v-model="addForm.detailRemark"
+                    v-model="addForm.description"
                     class="plan-input plan-input--area"
                     rows="3"
                     placeholder="详情备注"
@@ -245,7 +245,7 @@
                       :data="locationTreeData"
                       node-key="id"
                       show-checkbox
-                      default-expand-all
+
                       :check-strictly="false"
                       :props="locationTreeProps"
                       @check="onLocationTreeCheck"
@@ -253,16 +253,16 @@
                       <template #default="{ node, data }">
                         <span class="custom-tree-node">
                           <span class="custom-tree-node__label">{{ node.label }}</span>
-                          <span class="custom-tree-node__actions">
-                            <!-- <template v-if="data.children !== undefined">
+                          <!-- <span class="custom-tree-node__actions">
+                            <template v-if="data.children !== undefined">
                               <button class="tree-btn" @click.stop="handleAddRegion(data.value)">+ 地区</button>
                               <button class="tree-btn tree-btn--del" @click.stop="handleRemoveCategory(data.value)">×</button>
                             </template>
                             <template v-else>
                               <button class="tree-btn tree-btn--draw" @click.stop="emit('start-area-draw', { categoryValue: node.parent.data.value, regionValue: data.value, existingArea: data.regionData || null })">{{ data.regionData ? '编辑地区' : '选择地区' }}</button>
                               <button class="tree-btn tree-btn--del" @click.stop="handleRemoveRegion(node.parent.data.value, data.value)">×</button>
-                            </template> -->
-                          </span>
+                            </template>
+                          </span> -->
                         </span>
                       </template>
                     </el-tree>
@@ -332,12 +332,10 @@
                   </div>
                   <div v-else class="plan-picker-field">
                     <el-date-picker
-                      v-model="addForm.flightDateRange"
+                      v-model="addForm.flightDate"
                       class="plan-el-picker"
-                      type="daterange"
-                      range-separator="至"
-                      start-placeholder="开始日期"
-                      end-placeholder="结束日期"
+                      type="date"
+                      placeholder="请选择日期"
                       value-format="YYYY-MM-DD"
                       format="YYYY-MM-DD"
                       teleported
@@ -359,34 +357,42 @@
                   />
                 </button>
                 <div v-show="sectionOpen.resources" class="plan-sec__body plan-sec__body--resources">
-                  <div v-for="r in filteredResourceRows" :key="r.sourceId ?? r.field" class="plan-res-row">
-                    <span class="plan-res-row__label">{{ r.label }}</span>
-                    <div class="plan-res-counter">
-                      <template v-if="isViewMode">
-                        <span class="plan-res-counter__num">{{ addForm[r.field] }}</span>
-                      </template>
-                      <template v-else>
+                  <template v-if="isViewMode">
+                    <div v-for="(count, key) in addForm.resourceCounts" :key="key" class="plan-res-row">
+                      <span class="plan-res-row__label">{{ resourceLabel(key) }}</span>
+                      <div class="plan-res-counter">
+                        <span class="plan-res-counter__num">{{ count }}</span>
+                      </div>
+                    </div>
+                    <div v-if="!Object.keys(addForm.resourceCounts).length" class="plan-res-row">
+                      <span class="plan-res-row__label" style="color: rgba(255,255,255,0.35)">暂无资源配置</span>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <div v-for="r in resourceRowsBaseline" :key="r.key" class="plan-res-row">
+                      <span class="plan-res-row__label">{{ r.label }}</span>
+                      <div class="plan-res-counter">
                         <button
                           type="button"
                           class="plan-res-counter__btn"
-                          :disabled="addForm[r.field] <= 0"
+                          :disabled="(addForm.resourceCounts[r.key] || 0) <= 0"
                           aria-label="减少"
-                          @click="bumpResource(r.field, -1)"
+                          @click="bumpResource(r.key, -1)"
                         >
                           <i class="ri-subtract-line" />
                         </button>
-                        <span class="plan-res-counter__num">{{ addForm[r.field] }}</span>
+                        <span class="plan-res-counter__num">{{ addForm.resourceCounts[r.key] || 0 }}</span>
                         <button
                           type="button"
                           class="plan-res-counter__btn"
                           aria-label="增加"
-                          @click="bumpResource(r.field, 1)"
+                          @click="bumpResource(r.key, 1)"
                         >
                           <i class="ri-add-line" />
                         </button>
-                      </template>
+                      </div>
                     </div>
-                  </div>
+                  </template>
                 </div>
               </section>
             </div>
@@ -411,6 +417,14 @@
                 >
                   停止任务
                 </button>
+                <!-- <button
+                  type="button"
+                  class="plan-editor-btn plan-editor-btn--ghost"
+                  :disabled="detailActionSubmitting"
+                  @click="switchToEditMode"
+                >
+                  编辑
+                </button> -->
                 <button
                   type="button"
                   class="plan-editor-btn plan-editor-btn--danger"
@@ -421,14 +435,14 @@
                 </button>
               </template>
               <template v-else>
-                <button type="button" class="plan-editor-btn plan-editor-btn--primary" @click="resetPlanForm">
+                <button v-if="!isEditMode" type="button" class="plan-editor-btn plan-editor-btn--primary" @click="resetPlanForm">
                   重置
                 </button>
                 <button
                   type="button"
                   class="plan-editor-btn plan-editor-btn--outline"
                   :disabled="planSubmitting"
-                  @click="confirmAddPlan"
+                  @click="submitPlan"
                 >
                   {{ planSubmitting ? "提交中…" : "确认" }}
                 </button>
@@ -445,6 +459,7 @@
 import { ref, reactive, computed, nextTick, onMounted, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { AccompanyingFlyService } from "@/api";
+import { FlightPlanService } from "@/api/plan";
 import { useFlightPlanStore } from "@/stores/flightPlan.js";
 import arrowRightPng from "@/assets/images/arrow_right.png";
 import MountainRescueIcon from "@/components/icons/MountainRescueIcon.vue";
@@ -454,10 +469,8 @@ import {
   buildFlightLocationTreeData,
   pathToLocationNodeKey,
   locationNodeKeyToPath,
-  resolvePolygonRingsFromPaths,
   resolveLocationLabelsFromPaths,
   normalizePlanLocationPaths,
-  resolvePolygonRingByPath,
 } from "@/config/flight-plan-locations.js";
 
 const emit = defineEmits(["start-area-draw", "view-area"]);
@@ -483,6 +496,11 @@ const listLoading = ref(false);
 const planNameQuery = ref("");
 const planSubmitting = ref(false);
 
+function fetchPlaceListForActiveTab() {
+  const type = TAB_TO_API_TYPE[activeScenarioKey.value];
+  if (type) flightPlanStore.fetchPlaceList(type);
+}
+
 async function loadPlansForActiveTab() {
   const type = TAB_TO_API_TYPE[activeScenarioKey.value];
   if (!type) return;
@@ -499,12 +517,12 @@ async function loadPlansForActiveTab() {
 
 /** 后端未就绪或解析失败时使用 */
 const DEFAULT_RESOURCE_ROWS = [
-  { key: "drone", label: "无人机", field: "resourceDroneCount", defaultCount: undefined },
-  { key: "dog", label: "无人犬", field: "resourceDogCount", defaultCount: undefined },
-  { key: "boat", label: "无人艇", field: "resourceBoatCount", defaultCount: undefined },
+  { key: "drone", label: "无人机", defaultCount: undefined },
+  { key: "dog", label: "无人犬", defaultCount: undefined },
+  { key: "boat", label: "无人艇", defaultCount: undefined },
 ];
 
-/** @type {import('vue').Ref<({ key: string, label: string, field: string, defaultCount?: number, sort?: number, sourceId?: string }) [] | null>} */
+/** @type {import('vue').Ref<({ key: string, label: string, defaultCount?: number, sort?: number, sourceId?: string }) [] | null>} */
 const resourceRowsFromApi = ref(null);
 
 /** value 若为非负整数字符串，表示该项默认数量；否则视作展示文案 */
@@ -515,27 +533,11 @@ function parseApiSourceDefaultCount(rawValue) {
   return Math.max(0, Number(s));
 }
 
-/**
- * GET /config/getSource · data[] 条目（id,type,key,value,sort）。
- * label：value 为纯数字时使用 key（或 id）作展示名；否则用 value 文案。
- */
 function pickLabelFromSourceItem(raw) {
+  const v = raw?.value != null ? String(raw.value).trim() : "";
+  if (v) return v;
   const k = String(raw?.key ?? "").trim();
-  const def = parseApiSourceDefaultCount(raw?.value);
-  if (def !== null)
-    return k || String(raw?.id ?? "").trim() || `资源`;
-
-  const fromValue = raw?.value != null ? String(raw.value).trim() : "";
-  const s =
-    fromValue ||
-    (raw?.dictLabel ??
-      raw?.label ??
-      raw?.name ??
-      raw?.title ??
-      raw?.sourceName ??
-      raw?.desc ??
-      "");
-  return String(s).trim() || k || String(raw?.id ?? "").trim();
+  return k || String(raw?.id ?? "").trim() || "资源";
 }
 
 function normalizeResourceRowsPayload(payload) {
@@ -551,82 +553,34 @@ function normalizeResourceRowsPayload(payload) {
   return [];
 }
 
-/**
- * type：1伴随资源 2目标资源 — 与本页「所需资源」无关的项跳过（若后端同包返回）。
- */
 function isAccompanyResourceSourceRow(raw) {
   const t = raw?.type;
   if (t === undefined || t === null || t === "") return true;
   return Number(t) === 1;
 }
 
-/**
- * 将 /config/getSource 单项映射到与计划存储一致的表单字段；
- * 仅识别无人机 / 无人犬 / 无人艇三类，超出部分忽略以保持与现有计划字段兼容。
- * 匹配用 key + 文案，不把「纯数字的 value」（默认值）误当作类型编码干扰分类。
- */
-function resolveLegacyPlanResourceField(raw) {
-  const label = pickLabelFromSourceItem(raw);
-  const codeKey = String(raw?.key ?? "").trim();
-
-  /** 语义匹配用拼接串（默认值数字仅附在末尾供 1/2/3 编码兜底） */
-  const defCnt = parseApiSourceDefaultCount(raw?.value);
-  const valSemantic =
-    raw?.dictValue ??
-    raw?.code ??
-    (defCnt !== null ? "" : raw?.value != null ? String(raw.value).trim() : "");
-
-  const blob = `${codeKey.toLowerCase()} ${valSemantic.toLowerCase()} ${label.toLowerCase()}`;
-
-  if (label.includes("无人艇") || /艇|boat|ship|vessel/.test(blob))
-    return { field: "resourceBoatCount", key: "boat" };
-  if (label.includes("无人犬") || /(^|[^无])犬|dog\b|resource.?dog/.test(blob))
-    return { field: "resourceDogCount", key: "dog" };
-  if (label.includes("无人机") || /uav|drone|wrj/.test(blob) || /\b(resource)?drone/i.test(blob))
-    return { field: "resourceDroneCount", key: "drone" };
-
-  /** 后端若用语义 value 编码 无人机/犬/艇 */
-  const v = String(valSemantic).trim();
-  if (v === "1") return { field: "resourceDroneCount", key: "drone" };
-  if (v === "2") return { field: "resourceDogCount", key: "dog" };
-  if (v === "3") return { field: "resourceBoatCount", key: "boat" };
-
-  return null;
-}
-
 function buildResourceRowsFromSourceList(list) {
   const sorted = [...list].sort((a, b) => (Number(a?.sort) || 0) - (Number(b?.sort) || 0));
-
-  /** field -> row（多条映射同一 field 时保留 sort 更小的一条） */
-  /** @type {Map<string, { key: string, label: string, field: string, defaultCount?: number, sort: number, sourceId?: string }>} */
-  const byField = new Map();
-
+  const seen = new Set();
+  const rows = [];
   for (const raw of sorted) {
     if (!isAccompanyResourceSourceRow(raw)) continue;
-    const meta = resolveLegacyPlanResourceField(raw);
-    if (!meta?.field) continue;
-    const label = pickLabelFromSourceItem(raw) || meta.key;
+    const key = String(raw?.key ?? "").trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const label = pickLabelFromSourceItem(raw) || key;
     const def = parseApiSourceDefaultCount(raw?.value);
     const sortN = Number(raw?.sort) || 0;
     const sourceId = raw?.id != null && raw?.id !== "" ? String(raw.id) : "";
-
-    const existing = byField.get(meta.field);
-    if (!existing || sortN < existing.sort) {
-      byField.set(meta.field, {
-        key: meta.key,
-        label,
-        field: meta.field,
-        ...(def !== null ? { defaultCount: def } : {}),
-        sort: sortN,
-        ...(sourceId ? { sourceId } : {}),
-      });
-    }
+    rows.push({
+      key,
+      label,
+      ...(def !== null ? { defaultCount: def } : {}),
+      sort: sortN,
+      ...(sourceId ? { sourceId } : {}),
+    });
   }
-
-  /** 列表展示顺序遵循后端 sort */
-  return [...byField.values()]
-    .sort((a, b) => a.sort - b.sort)
-    .map(({ sort: _, ...rest }) => rest);
+  return rows.sort((a, b) => a.sort - b.sort).map(({ sort: _, ...rest }) => rest);
 }
 
 async function loadResourceSourceDefs() {
@@ -699,6 +653,7 @@ const scenarios = [
 ];
 
 const isViewMode = computed(() => planDialogMode.value === "view");
+const isEditMode = computed(() => planDialogMode.value === "edit");
 const detailActionSubmitting = ref(false);
 const currentViewingPlan = computed(() =>
   flightPlanStore.getPlanById(viewingPlanId.value),
@@ -715,7 +670,7 @@ const themeSectionTitle = computed(() => {
 });
 
 const planEditorTitle = computed(() =>
-  planDialogMode.value === "view" ? "飞行计划详情" : "添加飞行计划",
+  planDialogMode.value === "view" ? "飞行计划详情" : planDialogMode.value === "edit" ? "编辑飞行计划" : "添加飞行计划",
 );
 const activeScenarioTitle = computed(
   () => scenarios.find((s) => s.key === activeScenarioKey.value)?.title || "飞行",
@@ -766,7 +721,7 @@ const displayRows = computed(() => {
       resolveLocationLabelsFromPaths(normalizePlanLocationPaths(p)) ||
       `${prefix}信息${i + 1}`,
     subtitle:
-      p.detailRemark ||
+      p.description ||
       `${formatPlanDateRange(p.flightDate, p.flightDateEnd)} ${p.timeStart}–${p.timeEnd} · ${p.droneLabel}`,
     showEmergency: Number(p?.status) === 0 && i < 4,
     showStop: Number(p?.status) !== 0 && i < 4,
@@ -835,21 +790,9 @@ async function handleRemoveRegion(categoryValue, regionValue) {
   } catch { /* cancelled */ }
 }
 
-const filteredResourceRows = computed(() => {
-  const rows = resourceRowsBaseline.value;
-  // 场景差异化资源展示：
-  // 山林救援不展示无人艇；水上观察不展示无人犬。
-  if (addForm.scenarioKey === "mountain") {
-    return rows.filter((r) => r.key !== "boat");
-  }
-  if (addForm.scenarioKey === "water") {
-    return rows.filter((r) => r.key !== "dog");
-  }
-  return rows;
-});
 const locationNodeLabelMap = computed(() => {
   const map = new Map();
-  const queue = [...locationTreeData];
+  const queue = [...locationTreeData.value];
   while (queue.length) {
     const node = queue.shift();
     if (!node?.id) continue;
@@ -893,47 +836,30 @@ const viewTimeText = computed(() => {
   return `结束时间：${end}`;
 });
 const viewDateText = computed(() => {
-  const range = addForm.flightDateRange || [];
-  if (!Array.isArray(range) || range.length === 0) return "暂无日期设置";
-  const [start, end] = range;
-  if (!start) return "暂无日期设置";
-  return formatPlanDateRange(start, end || start);
+  const d = addForm.flightDate;
+  if (!d) return "暂无日期设置";
+  return formatPlanDate(d);
 });
 
 const addForm = reactive({
   scenarioKey: "mountain",
   subject: "",
-  detailRemark: "",
+  description: "",
   /** 地点树叶子节点 id 列表 */
   locationCheckedKeys: [],
   timeStart: "",
   timeEnd: "",
   /** @type {string[]} [开始日期, 结束日期] YYYY-MM-DD */
-  flightDateRange: [],
-  resourceDroneCount: 0,
-  resourceDogCount: 0,
-  resourceBoatCount: 0,
+  flightDate: "",
+  resourceCounts: {},
 });
 
-function getCustomTreeRoots() {
-  flightPlanStore.initCustomLocationTree();
-  return flightPlanStore.customLocationTree;
-}
-
-function getSelectedLocationPaths() {
-  const keys = addForm.locationCheckedKeys || [];
-  const customTree = getCustomTreeRoots();
-  return keys
-    .map((k) => locationNodeKeyToPath(k))
-    .filter((p) => p?.length && resolvePolygonRingByPath(p, customTree));
-}
-
-function syncLocationTreeCheckedKeys(keys) {
-  addForm.locationCheckedKeys = [...keys];
-  nextTick(() => {
-    locationTreeRef.value?.setCheckedKeys(keys, false);
-  });
-}
+watch(() => addForm.scenarioKey, () => {
+  if (planDialogVisible.value) {
+    const type = TAB_TO_API_TYPE[addForm.scenarioKey];
+    if (type) flightPlanStore.fetchPlaceList(type);
+  }
+});
 
 function onLocationTreeCheck() {
   if (isViewMode.value) return;
@@ -941,10 +867,15 @@ function onLocationTreeCheck() {
   addForm.locationCheckedKeys = leafKeys;
 }
 
-function bumpResource(field, delta) {
+function resourceLabel(key) {
+  const row = resourceRowsBaseline.value.find((r) => r.key === key);
+  return row?.label || key;
+}
+
+function bumpResource(key, delta) {
   if (isViewMode.value) return;
-  const n = Number(addForm[field]) || 0;
-  addForm[field] = Math.max(0, n + delta);
+  const n = Number(addForm.resourceCounts[key]) || 0;
+  addForm.resourceCounts[key] = Math.max(0, n + delta);
 }
 
 function formatPlanDate(iso) {
@@ -967,67 +898,32 @@ function timeToMinutes(t) {
 }
 
 /** 围栏环 [lng,lat,...] 的几何中心，供接口 longitude / latitude */
-function ringCentroidLngLat(ringFlat) {
-  if (!ringFlat?.length || ringFlat.length < 6) return null;
-  let sx = 0;
-  let sy = 0;
-  const n = ringFlat.length / 2;
-  for (let i = 0; i < ringFlat.length; i += 2) {
-    sx += ringFlat[i];
-    sy += ringFlat[i + 1];
-  }
-  return { longitude: sx / n, latitude: sy / n };
-}
-
 /** 接口实行时间，补全为 HH:mm:ss */
 function formatExecuteTimeForApi(hm) {
   const s = String(hm || "").trim();
   if (!s) return "";
   const parts = s.split(":").map((p) => p.trim());
-  if (parts.length === 2) {
-    const h = parts[0].padStart(2, "0");
-    const m = parts[1].padStart(2, "0");
-    return `${h}:${m}:00`;
-  }
-  if (parts.length >= 3) {
-    return `${parts[0].padStart(2, "0")}:${parts[1].padStart(2, "0")}:${parts[2].padStart(2, "0")}`;
-  }
-  return s;
+  const h = parts[0].padStart(2, "0");
+  const m = (parts[1] || "").padStart(2, "0");
+  return `${h}:${m}`;
 }
 
 /** @returns {{ description?: string }[]} */
 function buildResourceConfigForApi() {
   const out = [];
-  for (const r of filteredResourceRows.value) {
-    const count = Number(addForm[r.field]) || 0;
-    if (count > 0) {
-      out.push({ description: `${r.label}×${count}` });
-    }
-  }
-  const remark = addForm.detailRemark?.trim?.();
-  if (remark) {
-    out.push({ description: remark });
-  }
-  if (!out.length) {
-    out.push({ description: "暂无资源分项说明" });
+  for (const [key, count] of Object.entries(addForm.resourceCounts)) {
+    const n = Number(count) || 0;
+    if (n > 0) out.push({ resourceType: key, resourceCount: n });
   }
   return out;
 }
 
 function resetResourceCountersFromBaseline() {
-  addForm.resourceDroneCount = 0;
-  addForm.resourceDogCount = 0;
-  addForm.resourceBoatCount = 0;
+  addForm.resourceCounts = {};
   for (const r of resourceRowsBaseline.value) {
-    if (
-      r.field === "resourceDroneCount" ||
-      r.field === "resourceDogCount" ||
-      r.field === "resourceBoatCount"
-    ) {
-      if (r.defaultCount != null) {
-        const n = Number(r.defaultCount);
-        if (!Number.isNaN(n)) addForm[r.field] = Math.max(0, n);
-      }
+    if (r.defaultCount != null) {
+      const n = Number(r.defaultCount);
+      if (!Number.isNaN(n)) addForm.resourceCounts[r.key] = Math.max(0, n);
     }
   }
 }
@@ -1035,33 +931,71 @@ function resetResourceCountersFromBaseline() {
 function resetPlanForm() {
   addForm.scenarioKey = activeScenarioKey.value;
   addForm.subject = "";
-  addForm.detailRemark = "";
+  addForm.description = "";
   addForm.locationCheckedKeys = [];
   addForm.timeStart = "";
   addForm.timeEnd = "";
-  addForm.flightDateRange = [];
+  addForm.flightDate = "";
   resetResourceCountersFromBaseline();
+  nextTick(() => locationTreeRef.value?.setCheckedKeys([], false));
 }
 
-function loadPlanIntoForm(p) {
-  addForm.scenarioKey = p.scenarioKey;
-  addForm.subject = p.subject ?? "";
-  addForm.detailRemark = p.detailRemark ?? "";
-  const paths = normalizePlanLocationPaths(p);
-  syncLocationTreeCheckedKeys(paths.map((path) => pathToLocationNodeKey(path)).filter(Boolean));
-  addForm.timeStart = p.timeStart || "";
-  addForm.timeEnd = p.timeEnd || "";
-  addForm.flightDateRange =
-    p.flightDate ? [p.flightDate, p.flightDateEnd || p.flightDate] : [];
-  addForm.resourceDroneCount = p.resourceDroneCount ?? 0;
-  addForm.resourceDogCount = p.resourceDogCount ?? 0;
-  addForm.resourceBoatCount = p.resourceBoatCount ?? 0;
+function typeNumToScenarioKey(typeNum) {
+  if (typeNum === 2) return "water";
+  if (typeNum === 3) return "security";
+  return "mountain";
 }
 
-function openPlanDialog(mode, planId = null) {
+function placeIdsToTreeNodeKeys(placeIds) {
+  const keys = [];
+  const tree = locationTreeData.value;
+  const idSet = new Set((placeIds || []).map(String));
+  for (const cat of tree) {
+    if (!cat.children) continue;
+    for (const leaf of cat.children) {
+      if (idSet.has(String(leaf.value))) {
+        keys.push(leaf.id);
+      }
+    }
+  }
+  return keys;
+}
+
+function loadPlanDetailIntoForm(detail) {
+  const typeNum = Number(detail?.type);
+  addForm.scenarioKey = typeNumToScenarioKey(typeNum);
+  addForm.subject = detail?.planName ?? detail?.name ?? "";
+  addForm.description = detail?.description ?? detail?.detailRemark ?? "";
+  addForm.flightDate = detail?.executeDate ?? detail?.flightDate ?? "";
+  addForm.timeStart = (detail?.executeStartTime ?? detail?.timeStart ?? "").slice(0, 5);
+  addForm.timeEnd = (detail?.executeEndTime ?? detail?.timeEnd ?? "").slice(0, 5);
+  addForm.resourceCounts = {};
+  const rc = detail?.resourceConfig ?? detail?.resourceList;
+  if (Array.isArray(rc)) {
+    for (const r of rc) {
+      const k = r?.resourceType ?? r?.key;
+      const c = Number(r?.resourceCount ?? r?.count) || 0;
+      if (k && c > 0) addForm.resourceCounts[k] = c;
+    }
+  }
+  // placeIds 兼容：逗号分隔字符串 / 字符串数组 / 对象数组含 id
+  const rawPlaceIds = detail?.placeIds ?? detail?.placeIdList ?? detail?.placeList ?? [];
+  const placeIds = typeof rawPlaceIds === "string"
+    ? rawPlaceIds.split(",").map((s) => s.trim()).filter(Boolean)
+    : Array.isArray(rawPlaceIds)
+      ? rawPlaceIds.map((v) => (typeof v === "object" ? v?.id ?? String(v) : String(v)))
+      : [];
+  const nodeKeys = placeIdsToTreeNodeKeys(placeIds);
+  console.log("[PlanPanel] detail placeIds:", rawPlaceIds, "→ nodeKeys:", nodeKeys, "tree:", locationTreeData.value);
+  addForm.locationCheckedKeys = nodeKeys;
+  nextTick(() => locationTreeRef.value?.setCheckedKeys(nodeKeys, false));
+}
+
+async function openPlanDialog(mode, planId = null) {
   planDialogMode.value = mode;
   viewingPlanId.value = null;
   if (mode === "add") {
+    fetchPlaceListForActiveTab();
     resetPlanForm();
     addForm.scenarioKey = activeScenarioKey.value;
     planDialogVisible.value = true;
@@ -1069,14 +1003,26 @@ function openPlanDialog(mode, planId = null) {
     return;
   }
   if (planId) {
-    const p = flightPlanStore.getPlanById(planId);
-    if (!p) {
+    const res = await FlightPlanService.planDetail({ id: planId });
+    if (res?.code !== 2000) {
+      ElMessage.warning(res?.message || "获取计划详情失败");
+      return;
+    }
+    const detail = res?.data;
+    if (!detail) {
       ElMessage.warning("未找到该计划");
       return;
     }
+    // 根据计划类型拉取对应的地点树
+    const detailType = Number(detail?.type);
+    if (detailType) await flightPlanStore.fetchPlaceList(detailType);
+    await nextTick();
     viewingPlanId.value = planId;
     planDialogVisible.value = true;
-    loadPlanIntoForm(p);
+    loadPlanDetailIntoForm(detail);
+    if (mode === "edit") {
+      nextTick(() => locationTreeRef.value?.setCheckedKeys(addForm.locationCheckedKeys, false));
+    }
     flightPlanStore.setHighlightedPlan(planId);
   }
 }
@@ -1090,10 +1036,12 @@ function setDialogVisible(v) {
   planDialogVisible.value = !!v;
 }
 
-function reloadDetailFormIfViewing(planId) {
+async function reloadDetailFormIfViewing(planId) {
   if (!planDialogVisible.value || viewingPlanId.value !== planId) return;
-  const latest = flightPlanStore.getPlanById(planId);
-  if (latest) loadPlanIntoForm(latest);
+  const res = await FlightPlanService.planDetail({ id: planId });
+  if (res?.code === 2000 && res?.data) {
+    loadPlanDetailIntoForm(res.data);
+  }
 }
 
 function requestPlanStartFollow(plan) {
@@ -1108,7 +1056,7 @@ function requestPlanStartFollow(plan) {
     .then(async () => {
       detailActionSubmitting.value = true;
       try {
-        const res = await AccompanyingFlyService.planStartFollow({ id: plan.id });
+        const res = await FlightPlanService.planStartFollow({ id: plan.id });
         if (res?.code === 2000) {
           await loadPlansForActiveTab();
           reloadDetailFormIfViewing(plan.id);
@@ -1133,7 +1081,7 @@ function requestPlanStopFollow(plan) {
     .then(async () => {
       detailActionSubmitting.value = true;
       try {
-        const res = await AccompanyingFlyService.planStopFollow({ id: plan.id });
+        const res = await FlightPlanService.planStopFollow({ id: plan.id });
         if (res?.code === 2000) {
           await loadPlansForActiveTab();
           reloadDetailFormIfViewing(plan.id);
@@ -1181,7 +1129,7 @@ function onDetailDelete() {
     .then(async () => {
       detailActionSubmitting.value = true;
       try {
-        const res = await AccompanyingFlyService.planDelete({ id: planId });
+        const res = await FlightPlanService.planDelete({ id: planId });
         if (res?.code === 2000) {
           closePlanDialog();
           await loadPlansForActiveTab();
@@ -1194,29 +1142,19 @@ function onDetailDelete() {
     .catch(() => {});
 }
 
-async function confirmAddPlan() {
+async function submitPlan() {
   if (planSubmitting.value) return;
 
-  const locationPaths = getSelectedLocationPaths();
-  if (!locationPaths.length) {
+  const checkedNodes = locationTreeRef.value?.getCheckedNodes(true) || [];
+  const placeIds = checkedNodes.map((n) => n.value).filter(Boolean);
+  if (!placeIds.length) {
     ElMessage.warning("请至少选择一个地点");
     return;
   }
-  const polygonLngLatList = resolvePolygonRingsFromPaths(locationPaths, getCustomTreeRoots());
-  if (polygonLngLatList.length !== locationPaths.length) {
-    ElMessage.error("部分地点缺少围栏数据，无法上图");
-    return;
-  }
 
-  const range = addForm.flightDateRange || [];
-  const flightDate = range[0];
-  const flightDateEnd = range[1];
+  const flightDate = addForm.flightDate;
   if (!flightDate) {
     ElMessage.warning("请选择实行日期");
-    return;
-  }
-  if (flightDateEnd && flightDateEnd < flightDate) {
-    ElMessage.warning("结束日期不能早于开始日期");
     return;
   }
 
@@ -1235,22 +1173,6 @@ async function confirmAddPlan() {
     return;
   }
 
-  const placeLabel = resolveLocationLabelsFromPaths(locationPaths, getCustomTreeRoots()) || "—";
-  const name =
-    addForm.subject.trim() ||
-    placeLabel ||
-    (scenarios.find((s) => s.key === addForm.scenarioKey)?.title ?? "飞行计划");
-
-  const center = ringCentroidLngLat(polygonLngLatList[0]);
-  if (
-    !center ||
-    !Number.isFinite(center.longitude) ||
-    !Number.isFinite(center.latitude)
-  ) {
-    ElMessage.error("无法解析地点坐标，请重新选择地点");
-    return;
-  }
-
   const type = TAB_TO_API_TYPE[addForm.scenarioKey];
   if (!type) {
     ElMessage.error("未知计划场景类型");
@@ -1259,19 +1181,29 @@ async function confirmAddPlan() {
 
   const body = {
     type,
-    name,
-    place: placeLabel,
-    longitude: Number(center.longitude.toFixed(6)),
-    latitude: Number(center.latitude.toFixed(6)),
+    name: addForm.subject.trim(),
     executeDate: String(flightDate).slice(0, 10),
     executeStartTime: formatExecuteTimeForApi(addForm.timeStart),
     executeEndTime: formatExecuteTimeForApi(addForm.timeEnd),
+    placeIds: placeIds.join(','),
     resourceConfig: buildResourceConfigForApi(),
+    description: addForm.description,
   };
+
+  if (isEditMode.value) {
+    body.id = viewingPlanId.value;
+  }
+
+  if (addForm.scenarioKey === "rescue") {
+    body.rescueType = addForm.rescueType;
+  }
+  console.log("submitPlan", isEditMode.value ? "edit" : "add", body);
 
   planSubmitting.value = true;
   try {
-    const res = await AccompanyingFlyService.planAdd(body);
+    const res = isEditMode.value
+      ? await FlightPlanService.planUpdate(body)
+      : await FlightPlanService.planAdd(body);
     if (res?.code !== 2000) {
       return;
     }
@@ -1281,10 +1213,15 @@ async function confirmAddPlan() {
     if (nq) q.name = nq;
     await flightPlanStore.fetchPlanList(q);
     closePlanDialog();
-    ElMessage.success("已提交飞行计划");
+    ElMessage.success(isEditMode.value ? "已更新飞行计划" : "已提交飞行计划");
   } finally {
     planSubmitting.value = false;
   }
+}
+
+function switchToEditMode() {
+  planDialogMode.value = "edit";
+  nextTick(() => locationTreeRef.value?.setCheckedKeys(addForm.locationCheckedKeys, false));
 }
 
 function onRowClick(row) {
