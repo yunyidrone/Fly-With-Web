@@ -6,14 +6,20 @@ import AutoImport from "unplugin-auto-import/vite";
 import Components from "unplugin-vue-components/vite";
 import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
   const apiBase = env.VITE_API_BASE_URL || "";
   const proxyTarget = /^https?:\/\//i.test(apiBase)
     ? new URL(apiBase).origin
     : "http://220.185.228.104:19949";
 
+  const isBuild = command === "build";
+
   return {
+    esbuild: {
+      // 仅 vite build 时移除 console；dev / preview 源里仍可正常打日志
+      drop: isBuild ? ["console", "debugger"] : [],
+    },
     plugins: [
       vue(),
       cesium(),

@@ -142,6 +142,7 @@
 import { ref, computed, reactive, onMounted } from "vue";
 import { useDeviceStore } from "@/stores/device.js";
 import { AccompanyingFlyService } from "@/api";
+import { unwrapApiList } from "@/utils/request.js";
 import planePng from "@/assets/images/plane.png";
 import dogPng from "@/assets/images/dog.png";
 import boatPng from "@/assets/images/boat.png";
@@ -238,15 +239,7 @@ function getDevicesForResource(key, name) {
 }
 
 function normalizeResourceSourceList(data) {
-  const list = Array.isArray(data)
-    ? data
-    : Array.isArray(data?.records)
-      ? data.records
-      : Array.isArray(data?.list)
-        ? data.list
-        : [];
-
-  return list
+  return unwrapApiList(data)
     .filter((item) => item?.key)
     .filter((item) => item?.type == null || item.type === "" || Number(item.type) === 1)
     .sort((a, b) => (Number(a?.sort) || 0) - (Number(b?.sort) || 0))

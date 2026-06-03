@@ -52,23 +52,6 @@ export class AccompanyingFlyService {
   static async stopFollow(params) {
     return requestData("/target/stopFollow", params, "POST", "application/json");
   }
-  /**
-   * 一键起飞
-   * @param params
-   * @returns {Promise<*>}
-   */
-  // static async takeOff(params) {
-  //   return request("/flywith/start", params);
-  // }
-
-  /**
-   * 一键返航
-   * @param params
-   * @returns {Promise<*>}
-   */
-  // static async returnHome(params) {
-  //   return request("/flywith/stop", params);
-  // }
 
   /**
    * 通用配置数据源

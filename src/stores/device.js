@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import { TEST_POLICE_VEHICLES, TEST_DRONES } from "@/config/test-devices.js";
 import { AccompanyingFlyService } from "@/api";
+import { unwrapApiList } from "@/utils/request.js";
 
 /**
  * @typedef {object} ApiDroneRecord
@@ -221,9 +222,16 @@ export const useDeviceStore = defineStore("device", () => {
     dronesFetchError.value = null;
     try {
       const data = await AccompanyingFlyService.droneList(query);
-      const records = data?.records;
-      if (!Array.isArray(records)) {
-        dronesFetchError.value = "无人机列表格式异常（缺少 data.records）";
+      const records = unwrapApiList(data);
+      if (
+        data != null &&
+        typeof data === "object" &&
+        !Array.isArray(data) &&
+        !Array.isArray(data.records) &&
+        !Array.isArray(data.list) &&
+        records.length === 0
+      ) {
+        dronesFetchError.value = "无人机列表格式异常（缺 records/list 或数组）";
         return drones.value;
       }
       if (records.length === 0 && drones.value.length > 0) {
@@ -313,15 +321,16 @@ export const useDeviceStore = defineStore("device", () => {
     targetsFetchError.value = null;
     try {
       const data = await AccompanyingFlyService.targetList(query);
-      const records = Array.isArray(data?.records)
-        ? data.records
-        : Array.isArray(data?.list)
-          ? data.list
-          : Array.isArray(data)
-            ? data
-            : null;
-      if (!Array.isArray(records)) {
-        targetsFetchError.value = "伴飞目标列表格式异常（缺 records/list）";
+      const records = unwrapApiList(data);
+      if (
+        data != null &&
+        typeof data === "object" &&
+        !Array.isArray(data) &&
+        !Array.isArray(data.records) &&
+        !Array.isArray(data.list) &&
+        records.length === 0
+      ) {
+        targetsFetchError.value = "伴飞目标列表格式异常（缺 records/list 或数组）";
         return targets.value;
       }
       targets.value = records.map((r) => normalizeTargetRecord(r));

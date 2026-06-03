@@ -267,20 +267,12 @@ import { useFlightPlanStore } from "@/stores/flightPlan.js";
 import { useLockdown } from "@/composables/useLockdown.js";
 import { ElMessageBox, ElMessage } from "element-plus";
 import { AccompanyingFlyService } from "@/api";
+import { unwrapApiList } from "@/utils/request.js";
 
 const emit = defineEmits(["open-drone-stream"]);
 
 // 加载状态
 const isLoading = ref(true);
-
-// 车辆弹窗状态
-const vehicleDialog = reactive({
-  visible: false,
-  deviceId: "",
-  position: null,
-  lastMessage: null,
-  vehicleData: {},
-});
 
 const POLICE_POPUP_WIDTH = 280;
 const POLICE_POPUP_OFFSET = 16;
@@ -541,15 +533,7 @@ const SUGGEST_DRONES_CACHE_TTL = 15 * 1000;
 const suggestDronesCache = new Map();
 
 function extractReadySuggestedDronesFromResponse(res) {
-  const data = res?.data;
-  const list = Array.isArray(data)
-    ? data
-    : Array.isArray(data?.records)
-      ? data.records
-      : Array.isArray(data?.list)
-        ? data.list
-        : [];
-  return list.filter((d) => Number(d?.status) === 1);
+  return unwrapApiList(res).filter((d) => Number(d?.status) === 1);
 }
 
 function buildSuggestDronesQuery(targetId, devicePosition) {
@@ -2799,109 +2783,6 @@ const initVehicleClickHandler = (viewer) => {
 };
 
 /**
- * @description: 显示车辆信息弹窗
- * @param {string} deviceId - 设备号
- * @param {Object} position - 位置信息
- * @return {*}
- */
-const showVehicleDialog = (deviceId, position) => {
-  // 从系统存储中获取最新的车辆消息
-  const carMessages = systemStore.carMessageList;
-  const lastMessage = carMessages.find((msg) => msg.deviceId === deviceId);
-
-  // 更新弹窗数据
-  vehicleDialog.deviceId = deviceId;
-  vehicleDialog.position = position;
-  vehicleDialog.lastMessage = lastMessage;
-
-  // 无人机SN列表（可以从配置或store中获取）
-  const droneSnList = [DEVICE_CONFIG.droneId];
-  const defaultDroneSn = droneSnList[0];
-
-  // 构建弹窗内容
-  const dialogContent = `
-    <div style="padding: 10px;">
-      <h3 style="margin: 0 0 10px 0;">车辆信息</h3>
-      <div style="margin-bottom: 8px;">
-        <strong>设备号:</strong> ${deviceId}
-      </div>
-      ${
-        position
-          ? `
-        <div style="margin-bottom: 8px;">
-          <strong>位置:</strong><br>
-          经度: ${position.longitude.toFixed(6)}<br>
-          纬度: ${position.latitude.toFixed(6)}<br>
-          高度: ${position.height || 0}m
-        </div>
-      `
-          : ""
-      }
-      ${
-        lastMessage
-          ? `
-        <div style="margin-bottom: 8px;">
-          <strong>最新状态:</strong><br>
-          <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; font-size: 12px; overflow: auto; max-height: 150px;">
-            ${JSON.stringify(lastMessage, null, 2)}
-          </pre>
-        </div>
-      `
-          : '<div style="color: #999;">暂无车辆数据</div>'
-      }
-      <div style="margin-bottom: 12px;">
-        <label for="drone-sn-select" style="display: block; margin-bottom: 5px;"><strong>无人机SN:</strong></label>
-        <select id="drone-sn-select" style="width: 100%; padding: 8px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 14px;">
-          ${droneSnList.map((sn) => `<option value="${sn}" ${sn === defaultDroneSn ? "selected" : ""}>${sn}</option>`).join("")}
-        </select>
-      </div>
-      <div style="margin-top: 15px; text-align: center;">
-        <button id="take-off-btn" style="margin-right: 10px; padding: 8px 16px; background: #409eff; color: white; border: none; border-radius: 4px; cursor: pointer;">一键伴飞</button>
-        <button id="return-home-btn" style="padding: 8px 16px; background: #67c23a; color: white; border: none; border-radius: 4px; cursor: pointer;">一键返航</button>
-      </div>
-    </div>
-  `;
-
-  // 显示弹窗
-  ElMessageBox.alert(dialogContent, "车辆详情", {
-    confirmButtonText: "关闭",
-    dangerouslyUseHTMLString: true,
-    customClass: "vehicle-dialog",
-    showCancelButton: false,
-    callback: (action) => {
-      // 清理事件监听
-      const takeOffBtn = document.getElementById("take-off-btn");
-      const returnHomeBtn = document.getElementById("return-home-btn");
-      if (takeOffBtn) {
-        takeOffBtn.removeEventListener("click", handleTakeOffForVehicle);
-      }
-      if (returnHomeBtn) {
-        returnHomeBtn.removeEventListener("click", handleReturnHomeForVehicle);
-      }
-    },
-  });
-
-  // 延迟添加事件监听，确保DOM已渲染
-  setTimeout(() => {
-    const takeOffBtn = document.getElementById("take-off-btn");
-    const returnHomeBtn = document.getElementById("return-home-btn");
-
-    if (takeOffBtn) {
-      takeOffBtn.addEventListener("click", () => {
-        const droneSn = document.getElementById("drone-sn-select").value;
-        handleTakeOffForVehicle(deviceId, droneSn);
-      });
-    }
-    if (returnHomeBtn) {
-      returnHomeBtn.addEventListener("click", () => {
-        const droneSn = document.getElementById("drone-sn-select").value;
-        handleReturnHomeForVehicle(deviceId, droneSn);
-      });
-    }
-  }, 100);
-};
-
-/**
  * @description: 测试警车详情浮层（锚定在车辆旁）
  */
 const showTestVehicleDialog = (deviceId, position) => {
@@ -2944,107 +2825,6 @@ const showApiVehiclePopup = (deviceId, position) => {
   updatePolicePopupScreenPosition();
   attachPolicePopupTracker();
   loadSuggestedDronesForPopup(deviceId, position);
-};
-
-/**
- * @description: 为指定车辆一键伴飞
- * @param {string} deviceId - 车辆设备号
- * @param {string} droneSn - 无人机SN
- * @return {*}
- */
-const handleTakeOffForVehicle = (deviceId, droneSn) => {
-  ElMessageBox.prompt("请输入mode,1或5", "Tip", {
-    confirmButtonText: "确定",
-    cancelButtonText: "取消",
-    inputPattern: /^[0-9]+$/,
-    inputErrorMessage: "Invalid Number",
-  })
-    .then(({ value }) => {
-      requestTakeOff(value, deviceId, droneSn);
-    })
-    .catch(() => {});
-};
-
-/**
- * @description: 为指定车辆一键返航
- * @param {string} deviceId - 车辆设备号
- * @param {string} droneSn - 无人机SN
- * @return {*}
- */
-const handleReturnHomeForVehicle = (deviceId, droneSn) => {
-  ElMessageBox.prompt("请输入mode,1或5", "Tip", {
-    confirmButtonText: "确定",
-    cancelButtonText: "取消",
-    inputPattern: /^[0-9]+$/,
-    inputErrorMessage: "Invalid Number",
-  })
-    .then(({ value }) => {
-      requestReturnHome(value, deviceId, droneSn);
-    })
-    .catch(() => {});
-};
-
-/**
- * @description: 请求起飞
- * @param {number} mode - 模式
- * @param {string} deviceId - 车辆设备号
- * @param {string} droneSn - 无人机SN
- * @return {*}
- */
-const requestTakeOff = async (mode, deviceId, droneSn) => {
-  let params = {
-    target_id: deviceId,
-    mode: Number(mode),
-    uav_id: droneSn,
-  };
-  isLoading.value = true;
-  try {
-    const res = await AccompanyingFlyService.takeOff(params);
-    console.log("一键伴飞响应:", res);
-    const { code } = res;
-    if (code === 200 || code === 201) {
-      systemStore.setDroneStatus(1);
-      ElMessage.success(`已开始为车辆 ${deviceId} 伴飞，使用无人机 ${droneSn}`);
-    }
-  } catch (error) {
-    console.log(error);
-    ElMessage.error("一键伴飞失败");
-  } finally {
-    isLoading.value = false;
-  }
-};
-
-/**
- * @description: 请求返航
- * @param {number} mode - 模式
- * @param {string} deviceId - 车辆设备号
- * @param {string} droneSn - 无人机SN
- * @return {*}
- */
-const requestReturnHome = async (mode, deviceId, droneSn) => {
-  let params = {
-    target_id: deviceId,
-    mode,
-    drone_id: droneSn,
-  };
-  isLoading.value = true;
-  try {
-    const res = await AccompanyingFlyService.returnHome(params);
-    console.log("一键返航响应:", res);
-    const { code } = res;
-    if (code === 200 || code === 404) {
-      // 初始化订阅模式下暂不随返航取消订阅，保留原代码方便后续切回。
-      // unsubscribeEscortDroneOsd(droneSn);
-      await deviceStore.fetchDroneList();
-      systemStore.setDroneStatus(0);
-      ElMessage.success(`无人机 ${droneSn} 已开始返航`);
-    }
-  } catch (error) {
-    console.log(error);
-    ElMessage.error("一键返航失败");
-  } finally {
-    isLoading.value = false;
-  }
 };
 
 /**
@@ -3546,7 +3326,7 @@ async function requestRouteFromTDT(startLng, startLat, endLng, endLat) {
       return points;
     }
   } catch (e) {
-    console.error("request route fail", e);
+    console.warn("request route fail", e);
     return [];
   }
 }

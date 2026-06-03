@@ -100,6 +100,7 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { AccompanyingFlyService } from "@/api";
+import { unwrapApiList } from "@/utils/request.js";
 import dbWrjPng from "@/assets/images/db_wrj.png";
 import dbWrgPng from "@/assets/images/db_wrg.png";
 import dbWrtPng from "@/assets/images/db_wrt.png";
@@ -149,14 +150,7 @@ const legendIconModules = import.meta.glob("../assets/images/db_*.png", {
 });
 
 function normalizeLegendPayload(data) {
-  const list = Array.isArray(data)
-    ? data
-    : Array.isArray(data?.records)
-      ? data.records
-      : Array.isArray(data?.list)
-        ? data.list
-        : [];
-  return list
+  return unwrapApiList(data)
     .filter((item) => item?.key)
     .sort((a, b) => (Number(a?.sort) || 0) - (Number(b?.sort) || 0));
 }

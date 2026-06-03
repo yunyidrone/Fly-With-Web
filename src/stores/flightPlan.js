@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { reactive, ref, computed } from "vue";
 import { FlightPlanService } from "@/api/plan";
+import { unwrapApiList } from "@/utils/request.js";
 import {
   resolvePolygonRingByPath,
   resolveLocationLabelByPath,
@@ -456,13 +457,7 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
     plansFetchError.value = null;
     try {
       const data = await FlightPlanService.planPageQuery(query);
-      const records = Array.isArray(data?.records)
-        ? data.records
-        : Array.isArray(data?.list)
-          ? data.list
-          : Array.isArray(data)
-            ? data
-            : [];
+      const records = unwrapApiList(data);
       const total = data?.total ?? records.length;
       planListTotal.value = total;
 
@@ -528,13 +523,7 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
   async function fetchPlaceList(type) {
     try {
       const data = await FlightPlanService.placeListQuery({ type });
-      const list = Array.isArray(data?.records)
-        ? data.records
-        : Array.isArray(data?.list)
-          ? data.list
-          : Array.isArray(data)
-            ? data
-            : [];
+      const list = unwrapApiList(data);
       const tree = list.map((group) => {
         const pt = group?.placeType;
         const places = Array.isArray(group?.followPlaceList) ? group.followPlaceList : [];

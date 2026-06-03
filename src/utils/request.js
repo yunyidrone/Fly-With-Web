@@ -49,6 +49,28 @@ export function isApiBusinessError(err) {
   return err instanceof ApiBusinessError;
 }
 
+/**
+ * 从 requestData 返回值（或仍带一层 data 的 body）中解析列表
+ * 兼容：数组 | records | list | 嵌套 data
+ * @param {unknown} payload
+ * @returns {unknown[]}
+ */
+export function unwrapApiList(payload) {
+  if (payload == null) return [];
+  if (Array.isArray(payload)) return payload;
+  if (typeof payload !== "object") return [];
+
+  const obj = /** @type {Record<string, unknown>} */ (payload);
+  if (Array.isArray(obj.records)) return obj.records;
+  if (Array.isArray(obj.list)) return obj.list;
+
+  if (obj.data != null && obj.data !== payload) {
+    return unwrapApiList(obj.data);
+  }
+
+  return [];
+}
+
 // 配置项
 const client = Axios.create({
   baseURL,

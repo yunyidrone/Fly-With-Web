@@ -1,6 +1,7 @@
 import * as Cesium from "cesium";
 import yjfcPng from "@/assets/images/dt_kd.png";
 import { CommonService } from "@/api/common.js";
+import { unwrapApiList } from "@/utils/request.js";
 
 // 封控点数据（由 fetchLockdownPoints 从接口拉取填充）
 const DEFAULT_LOCKDOWN_POINTS = [];
@@ -11,13 +12,7 @@ const DEFAULT_LOCKDOWN_POINTS = [];
 export async function fetchLockdownPoints() {
   try {
     const data = await CommonService.controlPointListQuery();
-    const list = Array.isArray(data?.records)
-      ? data.records
-      : Array.isArray(data?.list)
-        ? data.list
-        : Array.isArray(data)
-          ? data
-          : [];
+    const list = unwrapApiList(data);
     const points = list.map((item) => ({
       id: item?.id ?? "",
       lng: Number(item?.longitude),
