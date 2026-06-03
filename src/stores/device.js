@@ -220,13 +220,8 @@ export const useDeviceStore = defineStore("device", () => {
   async function fetchDroneList(query) {
     dronesFetchError.value = null;
     try {
-      const res = await AccompanyingFlyService.droneList(query);
-      console.log('shujushuju ',res);
-      if (res?.code !== 2000) {
-        dronesFetchError.value = res?.message || "加载无人机列表失败";
-        return drones.value;
-      }
-      const records = res?.data?.records;
+      const data = await AccompanyingFlyService.droneList(query);
+      const records = data?.records;
       if (!Array.isArray(records)) {
         dronesFetchError.value = "无人机列表格式异常（缺少 data.records）";
         return drones.value;
@@ -305,7 +300,7 @@ export const useDeviceStore = defineStore("device", () => {
       testActive.value = false;
       return drones.value;
     } catch (e) {
-      dronesFetchError.value = e?.message || String(e);
+      dronesFetchError.value = e?.message || "加载无人机列表失败";
       return drones.value;
     }
   }
@@ -317,12 +312,7 @@ export const useDeviceStore = defineStore("device", () => {
   async function fetchTargetList(query) {
     targetsFetchError.value = null;
     try {
-      const res = await AccompanyingFlyService.targetList(query);
-      if (res?.code !== 2000) {
-        targetsFetchError.value = res?.message || "加载伴飞目标列表失败";
-        return targets.value;
-      }
-      const data = res?.data;
+      const data = await AccompanyingFlyService.targetList(query);
       const records = Array.isArray(data?.records)
         ? data.records
         : Array.isArray(data?.list)

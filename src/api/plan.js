@@ -1,4 +1,4 @@
-import { request } from "@/utils/request.js";
+import { requestData } from "@/utils/request.js";
 
 export class FlightPlanService {
   /**
@@ -11,7 +11,7 @@ export class FlightPlanService {
       pageSize: 100,
       ...query,
     };
-    return request("/plan/pageQuery", { params }, "GET");
+    return requestData("/plan/pageQuery", { params }, "GET");
   }
 
   /**
@@ -19,7 +19,7 @@ export class FlightPlanService {
    * @param {Record<string, any>} body type name place longitude latitude executeDate executeStartTime executeEndTime resourceConfig
    */
   static async planAdd(body) {
-    return request("/plan/add", body, "POST");
+    return requestData("/plan/add", body, "POST");
   }
 
   /**
@@ -27,7 +27,7 @@ export class FlightPlanService {
    * @param {{id:string|number}} params
    */
   static async planDelete(params) {
-    return request("/plan/delete", params, "POST", "application/json");
+    return requestData("/plan/delete", params, "POST", "application/json");
   }
 
   /**
@@ -35,7 +35,7 @@ export class FlightPlanService {
    * @param {{id:string|number}} params
    */
   static async planStartFollow(params) {
-    return request("/plan/startFollow", params, "POST", "application/json");
+    return requestData("/plan/startFollow", params, "POST", "application/json");
   }
 
   /**
@@ -43,7 +43,7 @@ export class FlightPlanService {
    * @param {{id:string|number}} params
    */
   static async planStopFollow(params) {
-    return request("/plan/stopFollow", params, "POST", "application/json");
+    return requestData("/plan/stopFollow", params, "POST", "application/json");
   }
 
   /**
@@ -51,7 +51,7 @@ export class FlightPlanService {
    * @param {{type:number}} params type: 1山林救援 2水上观察 3重点安保
    */
   static async placeListQuery(params) {
-    return request("/place/listQuery", { params }, "GET");
+    return requestData("/place/listQuery", { params }, "GET");
   }
 
   /**
@@ -59,7 +59,7 @@ export class FlightPlanService {
    * @param {{id:string|number}} params
    */
   static async planDetail(params) {
-    return request("/plan/detail", { params }, "GET");
+    return requestData("/plan/detail", { params }, "GET");
   }
 
   /**
@@ -67,6 +67,6 @@ export class FlightPlanService {
    * @param {Record<string, any>} body id type name executeDate executeStartTime executeEndTime placeIds resourceConfig
    */
   static async planUpdate(body) {
-    return request("/plan/update", body, "POST");
+    return requestData("/plan/update", body, "POST");
   }
 }

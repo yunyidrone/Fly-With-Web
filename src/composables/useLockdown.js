@@ -10,9 +10,7 @@ const DEFAULT_LOCKDOWN_POINTS = [];
  */
 export async function fetchLockdownPoints() {
   try {
-    const res = await CommonService.controlPointListQuery();
-    if (res?.code !== 2000) return;
-    const data = res?.data;
+    const data = await CommonService.controlPointListQuery();
     const list = Array.isArray(data?.records)
       ? data.records
       : Array.isArray(data?.list)

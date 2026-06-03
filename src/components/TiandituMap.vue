@@ -369,26 +369,20 @@ async function submitStartFollow(targetId, droneSn, droneId) {
     return false;
   }
   try {
-    const res = await AccompanyingFlyService.startFollow({
+    await AccompanyingFlyService.startFollow({
       id: targetId,
       droneId: droneId,
     });
-    if (res?.code === 2000) {
-      // 临时注掉伴飞成功后订阅，改为 MQTT 初始化时统一订阅无人机 OSD。
-      // subscribeEscortDroneOsd(droneSn);
-      const escortDrone = resolveDroneByMqttSn(droneSn);
-      const entityKey = escortDrone
-        ? getDroneEntityKey(escortDrone)
-        : String(droneId || "").trim();
-      droneTestManager.clearDroneTrajectory(entityKey);
-      await deviceStore.fetchDroneList();
-      ElMessage.success(`已下发伴飞指令：${targetId}`);
-      return true;
-    }
-    ElMessage.warning(res?.message || "下发伴飞指令失败");
-    return false;
-  } catch (_) {
-    ElMessage.error("下发伴飞指令失败");
+    const escortDrone = resolveDroneByMqttSn(droneSn);
+    const entityKey = escortDrone
+      ? getDroneEntityKey(escortDrone)
+      : String(droneId || "").trim();
+    droneTestManager.clearDroneTrajectory(entityKey);
+    await deviceStore.fetchDroneList();
+    ElMessage.success(`已下发伴飞指令：${targetId}`);
+    return true;
+  } catch (e) {
+    ElMessage.error(e?.message || "下发伴飞指令失败");
     return false;
   }
 }
@@ -500,24 +494,15 @@ async function submitStopFollow(targetId, droneId) {
     return false;
   }
   try {
-    const res = await AccompanyingFlyService.stopFollow({
+    await AccompanyingFlyService.stopFollow({
       id,
       droneId: targetDroneId,
     });
-    if (res?.code === 2000) {
-      const drone = deviceStore.drones.find(
-        (d) => String(d?.id) === targetDroneId,
-      );
-      // 初始化订阅模式下暂不随伴飞结束取消订阅，保留原代码方便后续切回。
-      // unsubscribeEscortDroneOsd(drone?.sn);
-      await deviceStore.fetchDroneList();
-      ElMessage.success(`已结束伴飞：${id}`);
-      return true;
-    }
-    ElMessage.warning(res?.message || "结束伴飞失败");
-    return false;
-  } catch (_) {
-    ElMessage.error("结束伴飞失败");
+    await deviceStore.fetchDroneList();
+    ElMessage.success(`已结束伴飞：${id}`);
+    return true;
+  } catch (e) {
+    ElMessage.error(e?.message || "结束伴飞失败");
     return false;
   }
 }

@@ -10,7 +10,44 @@ import axiosRetry from "axios-retry";
 import { networkConfig } from "@/config/network.js";
 import { isEmpty, cloneDeep } from "lodash-es";
 import { ElMessage } from "element-plus";
-const { baseURL, contentType, requestTimeout, successCode, invalidCode, throttleTime } = networkConfig;
+
+const { baseURL, contentType, requestTimeout, successCode, invalidCode, throttleTime } =
+  networkConfig;
+
+/** 与 network.js 中 successCode 一致，业务层勿再写死 2000 */
+export const API_SUCCESS_CODE = successCode;
+
+/** @typedef {{ silent?: boolean }} RequestOptions */
+
+export class ApiBusinessError extends Error {
+  /**
+   * @param {string} [message]
+   * @param {number|string} [code]
+   * @param {Record<string, unknown>} [response]
+   */
+  constructor(message, code, response) {
+    super(message || "请求失败");
+    this.name = "ApiBusinessError";
+    this.code = code;
+    this.response = response;
+  }
+}
+
+/**
+ * 判断接口业务是否成功（仅看 body.code，与 HTTP 状态无关）
+ * @param {unknown} payload
+ */
+export function isApiSuccess(payload) {
+  if (payload == null || typeof payload !== "object") return false;
+  return Number(payload.code) === Number(API_SUCCESS_CODE);
+}
+
+/**
+ * @param {unknown} err
+ */
+export function isApiBusinessError(err) {
+  return err instanceof ApiBusinessError;
+}
 
 // 配置项
 const client = Axios.create({
@@ -60,7 +97,7 @@ client.interceptors.request.use(
     // 检查当前请求的URL是否需要添加参数
     const needAddParams = REASON_API_NEED_ORGID.some((api) => config.url.includes(api));
     const userStore = JSON.parse(localStorage.getItem("user"));
-    if (needAddParams && !isEmpty(userStore.currentOrgId) && userStore.currentOrgId !== -1) {
+    if (needAddParams && !isEmpty(userStore?.currentOrgId) && userStore.currentOrgId !== -1) {
       const commonParam = {
         orgId: userStore.currentOrgId,
       };
@@ -136,8 +173,9 @@ client.interceptors.response.use(
       return Promise.reject(new Error("EMPTY_OR_NOT_MODIFIED"));
     }
     let { code, message, ...rest } = payload;
+    const silent = response.config?.meta?.silent === true;
     // 只在错误时提示，成功时不弹出消息避免干扰用户
-    if (code !== successCode) {
+    if (!isApiSuccess(payload) && !silent) {
       ElMessage.warning(message || "请求失败");
     }
     return response.data;
@@ -159,9 +197,10 @@ client.interceptors.response.use(
  * @param data
  * @param method
  * @param ContentType
+ * @param {RequestOptions} [options]
  * @returns {Promise<any>}
  */
-export async function request(url, data, method = "POST", ContentType) {
+export async function request(url, data, method = "POST", ContentType, options = {}) {
   const m = String(method || "POST").toLowerCase();
   // axios / 拦截器里多用小写 method（如 "get"），统一小写避免分支失效
   const config =
@@ -171,7 +210,31 @@ export async function request(url, data, method = "POST", ContentType) {
   if (ContentType) {
     config.headers = { "Content-Type": ContentType };
   }
+  if (options.silent) {
+    config.meta = { ...(config.meta || {}), silent: true };
+  }
   return await client.request(config);
+}
+
+/**
+ * 业务成功时返回完整 body；失败 reject ApiBusinessError（拦截器已按 silent 决定是否 toast）
+ * @param {RequestOptions} [options]
+ */
+export async function requestOk(url, data, method = "POST", ContentType, options = {}) {
+  const body = await request(url, data, method, ContentType, options);
+  if (!isApiSuccess(body)) {
+    throw new ApiBusinessError(body?.message, body?.code, body);
+  }
+  return body;
+}
+
+/**
+ * 业务成功时只返回 data 字段；失败 reject ApiBusinessError
+ * @param {RequestOptions} [options]
+ */
+export async function requestData(url, data, method = "POST", ContentType, options = {}) {
+  const body = await requestOk(url, data, method, ContentType, options);
+  return body?.data;
 }
 
 /**

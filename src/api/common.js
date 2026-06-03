@@ -1,10 +1,10 @@
-import { request } from "@/utils/request.js";
+import { requestData } from "@/utils/request.js";
 
 export class CommonService {
   /**
    * 封控点列表
    */
   static async controlPointListQuery(params = {}) {
-    return request("/control/point/listQuery", { params }, "GET");
+    return requestData("/control/point/listQuery", { params }, "GET");
   }
 }

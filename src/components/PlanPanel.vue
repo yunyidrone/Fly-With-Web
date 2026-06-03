@@ -585,12 +585,8 @@ function buildResourceRowsFromSourceList(list) {
 
 async function loadResourceSourceDefs() {
   try {
-    const res = await AccompanyingFlyService.getConfigSource({ type: 1 });
-    if (res?.code !== 2000) {
-      resourceRowsFromApi.value = null;
-      return;
-    }
-    const list = normalizeResourceRowsPayload(res);
+    const data = await AccompanyingFlyService.getConfigSource({ type: 1 }, { silent: true });
+    const list = normalizeResourceRowsPayload(data);
     const rows = buildResourceRowsFromSourceList(list);
     resourceRowsFromApi.value = rows.length ? rows : null;
   } catch {
@@ -1003,12 +999,13 @@ async function openPlanDialog(mode, planId = null) {
     return;
   }
   if (planId) {
-    const res = await FlightPlanService.planDetail({ id: planId });
-    if (res?.code !== 2000) {
-      ElMessage.warning(res?.message || "获取计划详情失败");
+    let detail;
+    try {
+      detail = await FlightPlanService.planDetail({ id: planId });
+    } catch (e) {
+      ElMessage.warning(e?.message || "获取计划详情失败");
       return;
     }
-    const detail = res?.data;
     if (!detail) {
       ElMessage.warning("未找到该计划");
       return;
@@ -1038,9 +1035,11 @@ function setDialogVisible(v) {
 
 async function reloadDetailFormIfViewing(planId) {
   if (!planDialogVisible.value || viewingPlanId.value !== planId) return;
-  const res = await FlightPlanService.planDetail({ id: planId });
-  if (res?.code === 2000 && res?.data) {
-    loadPlanDetailIntoForm(res.data);
+  try {
+    const detail = await FlightPlanService.planDetail({ id: planId });
+    if (detail) loadPlanDetailIntoForm(detail);
+  } catch {
+    /* 静默刷新 */
   }
 }
 
@@ -1056,12 +1055,10 @@ function requestPlanStartFollow(plan) {
     .then(async () => {
       detailActionSubmitting.value = true;
       try {
-        const res = await FlightPlanService.planStartFollow({ id: plan.id });
-        if (res?.code === 2000) {
-          await loadPlansForActiveTab();
-          reloadDetailFormIfViewing(plan.id);
-          ElMessage.success("任务已开启");
-        }
+        await FlightPlanService.planStartFollow({ id: plan.id });
+        await loadPlansForActiveTab();
+        reloadDetailFormIfViewing(plan.id);
+        ElMessage.success("任务已开启");
       } finally {
         detailActionSubmitting.value = false;
       }
@@ -1081,12 +1078,10 @@ function requestPlanStopFollow(plan) {
     .then(async () => {
       detailActionSubmitting.value = true;
       try {
-        const res = await FlightPlanService.planStopFollow({ id: plan.id });
-        if (res?.code === 2000) {
-          await loadPlansForActiveTab();
-          reloadDetailFormIfViewing(plan.id);
-          ElMessage.success("任务已停止");
-        }
+        await FlightPlanService.planStopFollow({ id: plan.id });
+        await loadPlansForActiveTab();
+        reloadDetailFormIfViewing(plan.id);
+        ElMessage.success("任务已停止");
       } finally {
         detailActionSubmitting.value = false;
       }
@@ -1129,12 +1124,10 @@ function onDetailDelete() {
     .then(async () => {
       detailActionSubmitting.value = true;
       try {
-        const res = await FlightPlanService.planDelete({ id: planId });
-        if (res?.code === 2000) {
-          closePlanDialog();
-          await loadPlansForActiveTab();
-          ElMessage.success("已删除飞行计划");
-        }
+        await FlightPlanService.planDelete({ id: planId });
+        closePlanDialog();
+        await loadPlansForActiveTab();
+        ElMessage.success("已删除飞行计划");
       } finally {
         detailActionSubmitting.value = false;
       }
@@ -1201,11 +1194,10 @@ async function submitPlan() {
 
   planSubmitting.value = true;
   try {
-    const res = isEditMode.value
-      ? await FlightPlanService.planUpdate(body)
-      : await FlightPlanService.planAdd(body);
-    if (res?.code !== 2000) {
-      return;
+    if (isEditMode.value) {
+      await FlightPlanService.planUpdate(body);
+    } else {
+      await FlightPlanService.planAdd(body);
     }
     activeScenarioKey.value = addForm.scenarioKey;
     const q = { type, current: 1, pageSize: 100 };

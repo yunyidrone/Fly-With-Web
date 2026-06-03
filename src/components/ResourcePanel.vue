@@ -237,13 +237,13 @@ function getDevicesForResource(key, name) {
   return STATIC_BOATS;
 }
 
-function normalizeResourceSourceList(res) {
-  const list = Array.isArray(res?.data)
-    ? res.data
-    : Array.isArray(res?.data?.records)
-      ? res.data.records
-      : Array.isArray(res?.data?.list)
-        ? res.data.list
+function normalizeResourceSourceList(data) {
+  const list = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.records)
+      ? data.records
+      : Array.isArray(data?.list)
+        ? data.list
         : [];
 
   return list
@@ -260,9 +260,8 @@ function normalizeResourceSourceList(res) {
 
 async function loadResourceSources() {
   try {
-    const res = await AccompanyingFlyService.getConfigSource({ type: 1 });
-    if (res?.code !== 2000) return;
-    const list = normalizeResourceSourceList(res);
+    const data = await AccompanyingFlyService.getConfigSource({ type: 1 }, { silent: true });
+    const list = normalizeResourceSourceList(data);
     if (list.length) {
       resourceSources.value = list;
       list.forEach((item) => {

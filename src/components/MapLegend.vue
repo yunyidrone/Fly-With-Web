@@ -148,8 +148,7 @@ const legendIconModules = import.meta.glob("../assets/images/db_*.png", {
   import: "default",
 });
 
-function normalizeLegendPayload(res) {
-  const data = res?.data;
+function normalizeLegendPayload(data) {
   const list = Array.isArray(data)
     ? data
     : Array.isArray(data?.records)
@@ -217,17 +216,16 @@ function buildLegendItemsFromSource(list, expectedType) {
 
 async function loadLegendItems() {
   try {
-    const [resourceRes, targetRes] = await Promise.all([
-      AccompanyingFlyService.getConfigSource({ type: 1 }),
-      AccompanyingFlyService.getConfigSource({ type: 2 }),
+    const [resourceData, targetData] = await Promise.all([
+      AccompanyingFlyService.getConfigSource({ type: 1 }, { silent: true }),
+      AccompanyingFlyService.getConfigSource({ type: 2 }, { silent: true }),
     ]);
-    if (resourceRes?.code !== 2000 || targetRes?.code !== 2000) return;
 
     const resourceItems = buildLegendItemsFromSource(
-      normalizeLegendPayload(resourceRes),
+      normalizeLegendPayload(resourceData),
       1,
     );
-    const targetItems = buildLegendItemsFromSource(normalizeLegendPayload(targetRes), 2);
+    const targetItems = buildLegendItemsFromSource(normalizeLegendPayload(targetData), 2);
     const nextItems = [...resourceItems, ...targetItems, ...STATIC_LEGEND_EXTRA_ITEMS];
     if (resourceItems.length || targetItems.length) {
       legendItems.value = nextItems.map((item) => ({ ...item }));

@@ -1,4 +1,4 @@
-import { request } from "@/utils/request.js";
+import { requestData } from "@/utils/request.js";
 
 export class AccompanyingFlyService {
   /**
@@ -11,7 +11,7 @@ export class AccompanyingFlyService {
       pageSize: 100,
       ...query,
     };
-    return request("/drone/pageQuery", { params }, "GET");
+    return requestData("/drone/pageQuery", { params }, "GET");
   }
 
   /**
@@ -19,14 +19,14 @@ export class AccompanyingFlyService {
    * @param {Record<string, any>} [query]
    */
   static async droneSuggestList(query = {}) {
-    return request("/drone/suggestList", { params: query }, "GET");
+    return requestData("/drone/suggestList", { params: query }, "GET");
   }
   /**
    * 无人机详情
    * @param {{id: string|number}} query
    */
   static async droneDetail(query) {
-    return request("/drone/detail", { params: query }, "GET");
+    return requestData("/drone/detail", { params: query }, "GET");
   }
   /**
    * 伴飞目标列表分页（数据多在 data.records，兼容 list / data 数组）
@@ -38,19 +38,19 @@ export class AccompanyingFlyService {
       pageSize: 100,
       ...query,
     };
-    return request("/target/pageQuery", { params }, "GET");
+    return requestData("/target/pageQuery", { params }, "GET");
   }
   /**
    * 开始伴飞
    */
   static async startFollow(params) {
-    return request("/target/startFollow", params, "POST", "application/json");
+    return requestData("/target/startFollow", params, "POST", "application/json");
   }
    /**
    * 停止伴飞
    */
   static async stopFollow(params) {
-    return request("/target/stopFollow", params, "POST", "application/json" );
+    return requestData("/target/stopFollow", params, "POST", "application/json");
   }
   /**
    * 一键起飞
@@ -73,9 +73,9 @@ export class AccompanyingFlyService {
   /**
    * 通用配置数据源
    * @param {Record<string, any>} [query] type 非必填（如伴随资源枚举传 1）
-   * @returns {Promise<{ code?: number, data?: Array<{ id?: string, type?: number, key?: string, value?: string, sort?: number }> }>}
+   * @param {{ silent?: boolean }} [options] silent 为 true 时不弹出全局失败 toast
    */
-  static async getConfigSource(query = {}) {
-    return request("/config/getSource", { params: query }, "GET");
+  static async getConfigSource(query = {}, options = {}) {
+    return requestData("/config/getSource", { params: query }, "GET", undefined, options);
   }
 }

@@ -455,12 +455,7 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
   async function fetchPlanList(query = {}) {
     plansFetchError.value = null;
     try {
-      const res = await FlightPlanService.planPageQuery(query);
-      if (res?.code !== 2000) {
-        plansFetchError.value = res?.message || "加载飞行计划失败";
-        return [];
-      }
-      const data = res?.data;
+      const data = await FlightPlanService.planPageQuery(query);
       const records = Array.isArray(data?.records)
         ? data.records
         : Array.isArray(data?.list)
@@ -532,9 +527,7 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
 
   async function fetchPlaceList(type) {
     try {
-      const res = await FlightPlanService.placeListQuery({ type });
-      if (res?.code !== 2000) return;
-      const data = res?.data;
+      const data = await FlightPlanService.placeListQuery({ type });
       const list = Array.isArray(data?.records)
         ? data.records
         : Array.isArray(data?.list)

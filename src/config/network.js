@@ -8,6 +8,8 @@
 
 /** @returns {string} */
 function resolveApiBaseURL() {
+  // 本地 dev server 走 Vite 代理，避免跨域
+  if (import.meta.env.DEV) return "/api/fly";
   const raw = import.meta.env.VITE_API_BASE_URL?.trim?.();
   if (!raw) return "/api";
   if (/^https?:\/\//i.test(raw)) return raw;

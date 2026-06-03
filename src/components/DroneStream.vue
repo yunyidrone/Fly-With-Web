@@ -389,21 +389,17 @@ const requestStopFollow = async () => {
   }
   isLoading.value = true;
   try {
-    const res = await AccompanyingFlyService.stopFollow({
+    await AccompanyingFlyService.stopFollow({
       id,
       droneId,
     });
-    if (res?.code === 2000) {
-      systemStore.setDroneStatus(0);
-      ElMessage.success("已结束伴飞");
-      emit("recall", { id, droneId });
-      return true;
-    }
-    ElMessage.warning(res?.message || "结束伴飞失败");
-    return false;
+    systemStore.setDroneStatus(0);
+    ElMessage.success("已结束伴飞");
+    emit("recall", { id, droneId });
+    return true;
   } catch (e) {
     console.warn(e);
-    ElMessage.error("结束伴飞失败");
+    ElMessage.error(e?.message || "结束伴飞失败");
     return false;
   } finally {
     isLoading.value = false;

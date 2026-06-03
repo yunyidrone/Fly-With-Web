@@ -263,9 +263,8 @@ const openDroneStream = async (device) => {
   if (!device?.id) return;
   const id = String(device.id);
   try {
-    const res = await AccompanyingFlyService.droneDetail({ id });
-    if (res?.code === 2000 && res?.data) {
-      const d = res.data;
+    const d = await AccompanyingFlyService.droneDetail({ id });
+    if (d) {
       streamDrone.value = {
         ...device,
         ...(typeof d === "object" ? d : {}),
