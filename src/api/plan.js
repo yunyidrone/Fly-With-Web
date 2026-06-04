@@ -8,7 +8,7 @@ export class FlightPlanService {
   static async planPageQuery(query = {}) {
     const params = {
       current: 1,
-      pageSize: 100,
+      pageSize: 9999,
       ...query,
     };
     return requestData("/plan/pageQuery", { params }, "GET");
@@ -16,7 +16,7 @@ export class FlightPlanService {
 
   /**
    * 新增飞行计划（JSON）
-   * @param {Record<string, any>} body type name place longitude latitude executeDate executeStartTime executeEndTime resourceConfig
+   * @param {Record<string, any>} body type name placeIds resourceConfig algorithmIds（逗号分隔）等
    */
   static async planAdd(body) {
     return requestData("/plan/add", body, "POST");
@@ -68,5 +68,29 @@ export class FlightPlanService {
    */
   static async planUpdate(body) {
     return requestData("/plan/update", body, "POST");
+  }
+
+  /**
+   * 一键召回无人机
+   * @param {{planId:string, droneId:string}} body
+   */
+  static async droneReturn(body) {
+    return requestData("/plan/droneReturn", body, "POST");
+  }
+
+  /**
+   * 计划告警数据（AI 事件）
+   * @param {{id:string|number}} params
+   */
+  static async planWarnData(params) {
+    return requestData("/plan/warnData", { params }, "GET");
+  }
+
+  /**
+   * 任务记录分页（执行中 + 执行完成）
+   * @param {Record<string, any>} params current pageSize startTime endTime
+   */
+  static async recordPageQuery(params = {}) {
+    return requestData("/plan/record/pageQuery", { params }, "GET");
   }
 }

@@ -7,6 +7,11 @@ export const PLAN_SCENARIOS = [
   { key: "security", title: "重点安保", icon: "ri-shield-line" },
 ];
 
+/** @type {Record<string, string>} */
+export const SCENARIO_TITLE_BY_KEY = Object.fromEntries(
+  PLAN_SCENARIOS.map((s) => [s.key, s.title]),
+);
+
 export const PLAN_EDITOR_TITLE_ID = "plan-editor-dialog-title";
 
 const PLAN_PICKER_Z_INDEX = 3600;

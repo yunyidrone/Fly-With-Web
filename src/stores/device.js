@@ -65,8 +65,10 @@ export function normalizeDroneRecord(raw) {
     id: id != null && id !== "" ? String(id) : stableFallbackId,
     name,
     sn: raw.sn ?? "",
+    mqttSn: String(raw.sn ?? raw.mqttSn ?? "").trim() || undefined,
     waylineId: raw.waylineId,
     streamUrl: raw.streamUrl,
+    playUrl: raw.playUrl ?? raw.play_url ?? "",
     longitude: raw.longitude,
     latitude: raw.latitude,
     lng:
@@ -390,7 +392,8 @@ export const useDeviceStore = defineStore("device", () => {
     if (!key) return false;
     const drone =
       drones.value.find((d) => String(d?.sn || "").trim() === key) ||
-      drones.value.find((d) => String(d?.mqttSn || "").trim() === key);
+      drones.value.find((d) => String(d?.mqttSn || "").trim() === key) ||
+      drones.value.find((d) => String(d?.id || "").trim() === key);
     if (!drone) {
       // if (!droneListRefreshPending.value) {
       //   droneListRefreshPending.value = true;

@@ -173,7 +173,6 @@ client.interceptors.request.use(
       lastRequestTime.delete(requestKey);
     }, throttleTime);
 
-    console.log("config", config);
     return config;
   },
   (error) => {
@@ -194,11 +193,12 @@ client.interceptors.response.use(
       ElMessage.warning("接口响应为空（常见于 HTTP 304 缓存），请勿对 JSON 列表接口做强缓存");
       return Promise.reject(new Error("EMPTY_OR_NOT_MODIFIED"));
     }
-    let { code, message, ...rest } = payload;
+    let { code, message, msg, ...rest } = payload;
+    const errorMsg = msg || message;
     const silent = response.config?.meta?.silent === true;
     // 只在错误时提示，成功时不弹出消息避免干扰用户
     if (!isApiSuccess(payload) && !silent) {
-      ElMessage.warning(message || "请求失败");
+      ElMessage.warning(errorMsg || "请求失败");
     }
     return response.data;
   },
@@ -207,7 +207,8 @@ client.interceptors.response.use(
       return new Promise(() => {});
     }
     // 统一处理 HTTP 错误
-    const errorMessage = error.response?.data?.message || error.message || "网络请求错误";
+    const bodyMsg = error.response?.data?.msg || error.response?.data?.message;
+    const errorMessage = bodyMsg || error.message || "网络请求错误";
     ElMessage.error(errorMessage);
     return Promise.reject(error);
   },
@@ -245,7 +246,7 @@ export async function request(url, data, method = "POST", ContentType, options =
 export async function requestOk(url, data, method = "POST", ContentType, options = {}) {
   const body = await request(url, data, method, ContentType, options);
   if (!isApiSuccess(body)) {
-    throw new ApiBusinessError(body?.message, body?.code, body);
+    throw new ApiBusinessError(body?.msg || body?.message, body?.code, body);
   }
   return body;
 }

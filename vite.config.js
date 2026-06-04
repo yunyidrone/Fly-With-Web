@@ -16,10 +16,10 @@ export default defineConfig(({ mode, command }) => {
   const isBuild = command === "build";
 
   return {
-    esbuild: {
-      // 仅 vite build 时移除 console；dev / preview 源里仍可正常打日志
-      drop: isBuild ? ["console", "debugger"] : [],
-    },
+    // esbuild: {
+    //   // 仅 vite build 时移除 console；dev / preview 源里仍可正常打日志
+    //   drop: isBuild ? ["console", "debugger"] : [],
+    // },
     plugins: [
       vue(),
       cesium(),

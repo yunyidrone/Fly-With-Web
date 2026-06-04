@@ -1,0 +1,69 @@
+/**
+ * Element Plus 随视口缩放（设计基准宽 1920px）
+ * 字号用 min() 设死上限不放大；组件尺寸继续随视口微调
+ */
+:root {
+  --app-ui-scale: clamp(0.85, calc(100vw / 1920), 0.95);
+
+  --el-font-size-extra-large: min(20px, calc(20px * var(--app-ui-scale)));
+  --el-font-size-large: min(18px, calc(18px * var(--app-ui-scale)));
+  --el-font-size-medium: min(16px, calc(16px * var(--app-ui-scale)));
+  --el-font-size-base: min(14px, calc(14px * var(--app-ui-scale)));
+  --el-font-size-small: min(13px, calc(13px * var(--app-ui-scale)));
+  --el-font-size-extra-small: min(12px, calc(12px * var(--app-ui-scale)));
+
+  --el-font-line-height-primary: min(24px, calc(24px * var(--app-ui-scale)));
+
+  --el-component-size-large: calc(40px * var(--app-ui-scale));
+  --el-component-size: calc(32px * var(--app-ui-scale));
+  --el-component-size-small: calc(24px * var(--app-ui-scale));
+}
+
+/* 未走 CSS 变量的组件文案兜底（含 teleport 到 body 的浮层） */
+.el-button,
+.el-input__inner,
+.el-textarea__inner,
+.el-select__wrapper,
+.el-select__placeholder,
+.el-select__selected-item,
+.el-form-item__label,
+.el-form-item__content,
+.el-radio__label,
+.el-table .cell,
+.el-pagination,
+.el-dialog__title,
+.el-dialog__body,
+.el-drawer__title,
+.el-drawer__body,
+.el-message-box,
+.el-message-box__title,
+.el-message-box__message,
+.el-message__content,
+.el-notification__title,
+.el-notification__content,
+.el-picker-panel,
+.el-date-picker__header-label,
+.el-picker-panel__content,
+.el-cascader-node__label,
+.el-tree-node__label,
+.el-dropdown-menu__item,
+.el-tabs__item,
+.el-breadcrumb__inner,
+.el-tag {
+  font-size: var(--el-font-size-base);
+}
+
+.el-table th.el-table__cell .cell {
+  font-size: var(--el-font-size-small);
+}
+
+.el-button--small,
+.el-input--small .el-input__inner,
+.el-table--small .cell {
+  font-size: var(--el-font-size-small);
+}
+
+.el-button--large,
+.el-input--large .el-input__inner {
+  font-size: var(--el-font-size-medium);
+}

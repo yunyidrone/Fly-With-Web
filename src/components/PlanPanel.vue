@@ -21,6 +21,15 @@
       <div class="plan-panel-content">
         <div class="plan-panel-body">
           <div class="flight-plan-board">
+            <div class="flight-plan-board__tasks">
+              <PlanActiveTaskCards
+                @monitor="openTaskMonitor"
+                @emergency-start="onActiveTaskEmergencyStart"
+                @cancel="onActiveTaskCancel"
+              />
+            </div>
+
+            <div class="flight-plan-board__list-area">
             <div class="scenario-tabs" role="tablist" aria-label="飞行计划场景">
               <button
                 v-for="s in scenarios"
@@ -130,9 +139,16 @@
               </div>
             </div>
 
-            <div class="btn-add-plan" @click="onAddPlan">
-              <i class="ri-add-circle-fill btn-add-plan__icon" aria-hidden="true" />
-              添加飞行计划
+            <div class="plan-footer-actions">
+              <button type="button" class="plan-footer-btn plan-footer-btn--primary" @click="onAddPlan">
+                <i class="ri-add-circle-fill plan-footer-btn__icon" aria-hidden="true" />
+                添加飞行计划
+              </button>
+              <button type="button" class="plan-footer-btn plan-footer-btn--secondary" @click="onHistoryTaskRecords">
+                <i class="ri-clipboard-line plan-footer-btn__icon" aria-hidden="true" />
+                历史任务记录
+              </button>
+            </div>
             </div>
           </div>
         </div>
@@ -146,11 +162,12 @@
       @changed="loadPlansForActiveTab"
       @scenario-sync="(key) => (activeScenarioKey = key)"
     />
+
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, watch, defineAsyncComponent } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { FlightPlanService } from "@/api/plan";
 import { useFlightPlanStore } from "@/stores/flightPlan.js";
@@ -162,9 +179,22 @@ import {
   normalizePlanLocationPaths,
 } from "@/config/flight-plan-locations.js";
 import { PLAN_SCENARIOS, TAB_TO_API_TYPE } from "@/components/plan-panel/plan-scenarios.js";
-import PlanEditorDialog from "@/components/plan-panel/PlanEditorDialog.vue";
+import {
+  canPlanEmergencyStart,
+  canPlanStopTask,
+  getPlanStatusNum,
+} from "@/utils/plan-task.js";
+import PlanActiveTaskCards from "@/components/plan-panel/PlanActiveTaskCards.vue";
+const PlanEditorDialog = defineAsyncComponent(() =>
+  import("@/components/plan-panel/PlanEditorDialog.vue"),
+);
 
-const emit = defineEmits(["start-area-draw", "view-area"]);
+const emit = defineEmits([
+  "start-area-draw",
+  "view-area",
+  "open-history-tasks",
+  "open-task-monitor",
+]);
 
 const props = defineProps({
   embedded: {
@@ -172,9 +202,6 @@ const props = defineProps({
     default: false,
   },
 });
-
-/** 侧栏嵌入式时：仅在用户点开「飞行计划」Tab 后再请求列表，避免首页初始化就打 /plan/pageQuery */
-const planListFetchEnabled = ref(!props.embedded);
 
 const expanded = ref(false);
 const flightPlanStore = useFlightPlanStore();
@@ -193,17 +220,41 @@ function fetchPlaceListForActiveTab() {
 }
 
 async function loadPlansForActiveTab() {
-  const type = TAB_TO_API_TYPE[activeScenarioKey.value];
-  if (!type) return;
   listLoading.value = true;
   try {
-    const q = { type, current: 1, pageSize: 100 };
+    const q = {};
     const name = planNameQuery.value.trim();
     if (name) q.name = name;
-    await flightPlanStore.fetchPlanList(q);
+    await flightPlanStore.fetchAllPlanList(q);
   } finally {
     listLoading.value = false;
   }
+}
+
+function onActiveTaskEmergencyStart(plan) {
+  if (!plan?.id) return;
+  requestPlanStartFollow(plan);
+}
+
+function onActiveTaskCancel(plan) {
+  if (!plan?.id) return;
+  const title = plan.subject || plan.locationLabel || "该飞行计划";
+  if (getPlanStatusNum(plan) === 1) {
+    requestPlanStopFollow(plan);
+    return;
+  }
+  ElMessageBox.confirm(`确定取消「${title}」？`, "停止任务", {
+    confirmButtonText: "停止任务",
+    cancelButtonText: "返回",
+    type: "warning",
+  })
+    .then(async () => {
+      await FlightPlanService.planDelete({ id: plan.id });
+      flightPlanStore.deletePlan(plan.id);
+      await loadPlansForActiveTab();
+      ElMessage.success("已停止任务");
+    })
+    .catch(() => {});
 }
 
 onMounted(() => {
@@ -212,14 +263,25 @@ onMounted(() => {
 });
 
 watch(activeScenarioKey, () => {
-  if (props.embedded && !planListFetchEnabled.value) return;
-  loadPlansForActiveTab();
+  fetchPlaceListForActiveTab();
 });
 
-/** 由父组件在左侧「飞行计划」Tab 被选中时调用 */
-function notifyPlanSidebarOpened() {
-  planListFetchEnabled.value = true;
-  loadPlansForActiveTab();
+/** 由父组件在左侧「飞行计划」Tab 被选中时调用（拉取全部计划并刷新任务卡片） */
+async function notifyPlanSidebarOpened() {
+  await loadPlansForActiveTab();
+}
+
+function openPlanView(planId) {
+  const plan = flightPlanStore.getPlanById(planId);
+  if (!plan) return;
+  activeScenarioKey.value = plan.scenarioKey || activeScenarioKey.value;
+  selectedRowKey.value = planId;
+  editorRef.value?.open("view", planId);
+}
+
+function openTaskMonitor(planId) {
+  if (!planId) return;
+  emit("open-task-monitor", planId);
 }
 
 const activeScenarioTitle = computed(
@@ -264,7 +326,7 @@ const displayRows = computed(() => {
     key: p.id,
     isPlaceholder: false,
     planId: p.id,
-    status: Number(p?.status),
+    status: getPlanStatusNum(p),
     title:
       p.subject ||
       p.locationLabel ||
@@ -273,8 +335,8 @@ const displayRows = computed(() => {
     subtitle:
       p.description ||
       `${formatPlanDateRange(p.flightDate, p.flightDateEnd)} ${p.timeStart}–${p.timeEnd} · ${p.droneLabel}`,
-    showEmergency: Number(p?.status) === 0 && i < 4,
-    showStop: Number(p?.status) !== 0 && i < 4,
+    showEmergency: canPlanEmergencyStart(p) && i < 4,
+    showStop: canPlanStopTask(p) && i < 4,
   }));
 });
 
@@ -340,6 +402,10 @@ function onAddPlan() {
   editorRef.value?.open("add");
 }
 
+function onHistoryTaskRecords() {
+  emit("open-history-tasks");
+}
+
 function onRowClick(row) {
   selectedRowKey.value = row.key;
   if (!row.planId) return;
@@ -372,6 +438,7 @@ function onStopTask(row) {
 
 defineExpose({
   notifyPlanSidebarOpened,
+  openPlanView,
   setDialogVisible: (v) => {
     editorVisible.value = !!v;
     if (v) editorRef.value?.open?.("add");
@@ -411,6 +478,16 @@ $fp-muted: rgba(255, 255, 255, 0.45);
 
     &.expanded {
       width: 100%;
+    }
+
+    /* 与无人设备一致：内容自然撑开，由侧栏 __body 统一滚动 */
+    .plan-panel-content {
+      display: block;
+    }
+
+    .plan-panel-content > .plan-panel-body {
+      overflow: visible;
+      min-height: auto;
     }
   }
 }
@@ -502,11 +579,31 @@ $fp-muted: rgba(255, 255, 255, 0.45);
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: min(520px, 55vh);
 }
 
-.plan-panel-wrapper--embedded .flight-plan-board {
-  max-height: min(560px, calc(100vh - 200px));
+.flight-plan-board__tasks:empty {
+  display: none;
+}
+
+.flight-plan-board__list-area {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 非嵌入式浮层：整体限高 + 内部滚动 */
+.plan-panel-wrapper:not(.plan-panel-wrapper--embedded) .flight-plan-board {
+  max-height: min(520px, 55vh);
+  overflow-y: auto;
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 2px;
+  }
 }
 
 .scenario-tabs {
@@ -584,27 +681,7 @@ background: #15191E;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  overflow-y: auto;
-  flex: 1;
-  min-height: 120px;
   padding-right: 2px;
-
-  &::-webkit-scrollbar {
-    width: 4px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 2px;
-
-    &:hover {
-      background: rgba(255, 255, 255, 0.25);
-    }
-  }
 }
 
 .plan-empty-state {
@@ -756,30 +833,54 @@ background: #15191E;
   }
 }
 
-.btn-add-plan {
+.plan-footer-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 10px 0;
+}
+
+.plan-footer-btn {
+  flex: 1;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 12px 16px;
-  margin-top: 2px;
-  font-family: "Segoe UI";
+  padding: 12px 14px;
+  border: none;
+  font-family: "Segoe UI", system-ui, sans-serif;
   font-size: 14px;
-  font-style: normal;
   font-weight: 600;
-  line-height: 20px; /* 142.857% */
-  color: $fp-text;
-  border-radius: 32px;
-  background: #25272B;
+  line-height: 20px;
+  color: #fff;
   border-radius: 32px;
   cursor: pointer;
-  margin: 0px 10px;
   transition:
-    border-color 0.15s,
+    filter 0.15s,
+    transform 0.1s,
     background 0.15s;
+
+  &:hover {
+    filter: brightness(1.06);
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
 }
 
-.btn-add-plan__icon {
+.plan-footer-btn--primary {
+  background: #3b6fd8;
+}
+
+.plan-footer-btn--secondary {
+  background: #25272b;
+}
+
+.plan-footer-btn__icon {
+  flex-shrink: 0;
   font-size: 18px;
   color: #fff;
 }

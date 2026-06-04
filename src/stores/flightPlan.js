@@ -3,6 +3,13 @@ import { reactive, ref, computed } from "vue";
 import { FlightPlanService } from "@/api/plan";
 import { unwrapApiList } from "@/utils/request.js";
 import {
+  isPlanExecuting,
+  isPlanUpcoming,
+  getPlanExecuteStartMs,
+  parsePlanStatusNum,
+  PLAN_STATUS_LABELS,
+} from "@/utils/plan-task.js";
+import {
   resolvePolygonRingByPath,
   resolveLocationLabelByPath,
   resolveLocationLabelsFromPaths,
@@ -114,7 +121,8 @@ export function normalizeFlightPlanRecord(raw) {
   const subject =
     String(raw?.subject ?? raw?.theme ?? name).trim() || name || "飞行计划";
 
-  const flightDate = raw?.flightDate ?? raw?.startDate ?? raw?.beginDate ?? "";
+  const flightDate =
+    raw?.executeDate ?? raw?.flightDate ?? raw?.startDate ?? raw?.beginDate ?? "";
   const flightDateEnd =
     raw?.flightDateEnd ??
     raw?.endDate ??
@@ -122,8 +130,12 @@ export function normalizeFlightPlanRecord(raw) {
     flightDate ??
     "";
 
-  const timeStart = toHm(raw?.timeStart ?? raw?.startTime ?? raw?.beginTime ?? "");
-  const timeEnd = toHm(raw?.timeEnd ?? raw?.endTime ?? raw?.finishTime ?? "");
+  const timeStart = toHm(
+    raw?.executeStartTime ?? raw?.timeStart ?? raw?.startTime ?? raw?.beginTime ?? "",
+  );
+  const timeEnd = toHm(
+    raw?.executeEndTime ?? raw?.timeEnd ?? raw?.endTime ?? raw?.finishTime ?? "",
+  );
 
   const resourceDroneCount =
     Number(raw?.resourceDroneCount ?? raw?.droneCount ?? 0) || 0;
@@ -132,8 +144,12 @@ export function normalizeFlightPlanRecord(raw) {
   const resourceBoatCount =
     Number(raw?.resourceBoatCount ?? raw?.boatCount ?? 0) || 0;
 
-  const statusText = String(raw?.statusText ?? raw?.status ?? "预备执行");
-  const status = Number(raw?.status);
+  const statusNum = parsePlanStatusNum(raw);
+  const statusText = String(
+    raw?.statusText ??
+      (statusNum != null ? PLAN_STATUS_LABELS[statusNum] : "") ??
+      "预备执行",
+  );
 
   const locationLabelRaw = String(
     raw?.locationLabel ?? raw?.location ?? raw?.areaName ?? "",
@@ -194,7 +210,7 @@ export function normalizeFlightPlanRecord(raw) {
     timeStart,
     timeEnd,
     droneLabel,
-    status: Number.isFinite(status) ? status : undefined,
+    status: statusNum,
     statusText,
     locationPaths: locationPaths.length ? locationPaths : [],
     locationPath: [...primaryPath],
@@ -247,6 +263,41 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
   const planListTotal = ref(0);
 
   const selectedPlanId = ref(null);
+
+  /** 驱动「即将执行」时间窗重算 */
+  const planTaskTick = ref(Date.now());
+  /** 用户关闭的全局即将执行提示 planId */
+  const dismissedUpcomingAlertIds = ref(/** @type {string[]} */ ([]));
+
+  let planTaskIntervalId = null;
+  let planListRefreshIntervalId = null;
+
+  const allPlansFlat = computed(() => [
+    ...plansByScenario.mountain,
+    ...plansByScenario.water,
+    ...plansByScenario.security,
+  ]);
+
+  const executingPlans = computed(() => {
+    void planTaskTick.value;
+    return allPlansFlat.value.filter(isPlanExecuting);
+  });
+
+  const upcomingPlans = computed(() => {
+    const now = planTaskTick.value;
+    return allPlansFlat.value
+      .filter((p) => isPlanUpcoming(p, now))
+      .sort(
+        (a, b) =>
+          (getPlanExecuteStartMs(a) ?? Number.MAX_SAFE_INTEGER) -
+          (getPlanExecuteStartMs(b) ?? Number.MAX_SAFE_INTEGER),
+      );
+  });
+
+  const upcomingAlertPlans = computed(() => {
+    const dismissed = new Set(dismissedUpcomingAlertIds.value);
+    return upcomingPlans.value.filter((p) => !dismissed.has(p.id));
+  });
 
   /** 接口地点数据版本号，用于触发 mergedLocationTreeData 重算 */
   const planLocationsVersion = ref(0);
@@ -453,6 +504,55 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
    * 分页查询飞行计划；带 type 时只刷新对应场景 Tab 的列表
    * @param {Record<string, any>} [query] type name current pageSize
    */
+  /** 拉取全部场景计划（不传 type） */
+  async function fetchAllPlanList(query = {}) {
+    return fetchPlanList({
+      current: 1,
+      pageSize: 9999,
+      ...query,
+    });
+  }
+
+  function dismissUpcomingAlert(planId) {
+    const id = String(planId);
+    if (!dismissedUpcomingAlertIds.value.includes(id)) {
+      dismissedUpcomingAlertIds.value = [...dismissedUpcomingAlertIds.value, id];
+    }
+  }
+
+  function startPlanTaskWatcher() {
+    if (planTaskIntervalId != null) return;
+    planTaskTick.value = Date.now();
+    // 仅本地重算「即将执行」30 分钟窗口，不调接口
+    planTaskIntervalId = setInterval(() => {
+      planTaskTick.value = Date.now();
+    }, 30000);
+    planListRefreshIntervalId = setInterval(() => {
+      fetchAllPlanList();
+    }, 5 * 60 * 1000);
+  }
+
+  function stopPlanTaskWatcher() {
+    if (planTaskIntervalId != null) {
+      clearInterval(planTaskIntervalId);
+      planTaskIntervalId = null;
+    }
+    if (planListRefreshIntervalId != null) {
+      clearInterval(planListRefreshIntervalId);
+      planListRefreshIntervalId = null;
+    }
+  }
+
+  /** 兼容列表项包一层 plan / planInfo */
+  function unwrapPlanListRow(row) {
+    if (!row || typeof row !== "object") return row;
+    const nested = row.plan ?? row.planInfo ?? row.planDetail;
+    if (nested && typeof nested === "object") {
+      return { ...nested, ...row };
+    }
+    return row;
+  }
+
   async function fetchPlanList(query = {}) {
     plansFetchError.value = null;
     try {
@@ -466,15 +566,17 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
           ? Number(query.type)
           : null;
 
-      const items = records.map((r) => normalizeFlightPlanRecord(r));
+      const items = records
+        .map((r) => normalizeFlightPlanRecord(unwrapPlanListRow(r)))
+        .filter((p) => p?.id);
 
       if (typeFilter >= 1 && typeFilter <= 3) {
         const sk = apiTypeToScenarioKey(typeFilter);
         plansByScenario[sk].splice(0, plansByScenario[sk].length, ...items);
       } else {
-        plansByScenario.mountain = [];
-        plansByScenario.water = [];
-        plansByScenario.security = [];
+        for (const key of Object.keys(plansByScenario)) {
+          plansByScenario[key].splice(0, plansByScenario[key].length);
+        }
         items.forEach((item) => {
           const list = plansByScenario[item.scenarioKey];
           if (list) list.push(item);
@@ -482,6 +584,7 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
       }
 
       plansLoadedFromApi.value = true;
+      planTaskTick.value = Date.now();
       return items;
     } catch (e) {
       plansFetchError.value = e?.message || String(e);
@@ -561,7 +664,16 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
     selectedPlanId,
     getPlanById,
     addPlan,
+    allPlansFlat,
+    executingPlans,
+    upcomingPlans,
+    upcomingAlertPlans,
+    planTaskTick,
     fetchPlanList,
+    fetchAllPlanList,
+    dismissUpcomingAlert,
+    startPlanTaskWatcher,
+    stopPlanTaskWatcher,
     fetchPlaceList,
     selectPlan,
     clearPlanHighlight,

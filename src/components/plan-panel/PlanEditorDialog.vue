@@ -128,6 +128,42 @@
               </section>
 
               <section class="plan-sec">
+                <button type="button" class="plan-sec__head" @click="toggleSection('algorithm')">
+                  <span class="plan-sec__head-text">算法选择</span>
+                  <i
+                    class="plan-sec__head-arrow ri-arrow-down-s-fill"
+                    :class="{ 'plan-sec__head-arrow--open': sectionOpen.algorithm }"
+                  />
+                </button>
+                <div v-show="sectionOpen.algorithm" class="plan-sec__body plan-sec__body--algorithms">
+                  <div v-if="isViewMode" class="plan-readonly-field">
+                    {{ viewAlgorithmText }}
+                  </div>
+                  <template v-else>
+                    <div v-if="algorithmListLoading" class="plan-algorithm-empty">加载中…</div>
+                    <div v-else-if="!algorithmList.length" class="plan-algorithm-empty">暂无可用算法</div>
+                    <el-checkbox-group
+                      v-else
+                      v-model="addForm.algorithmIds"
+                      class="plan-algorithm-group"
+                    >
+                      <div
+                        v-for="item in algorithmList"
+                        :key="item.algorithmId"
+                        class="plan-algorithm-row"
+                      >
+                        <el-checkbox :label="item.algorithmId" class="plan-algorithm-row__cb">
+                          <span class="plan-algorithm-row__text">
+                            {{ item.algorithmName || item.algorithmCode || item.algorithmId }}
+                          </span>
+                        </el-checkbox>
+                      </div>
+                    </el-checkbox-group>
+                  </template>
+                </div>
+              </section>
+
+              <section v-if="requiresScheduleFields" class="plan-sec">
                 <button type="button" class="plan-sec__head" @click="toggleSection('time')">
                   <span class="plan-sec__head-text">时间设定</span>
                   <i
@@ -172,7 +208,7 @@
                 </div>
               </section>
 
-              <section class="plan-sec">
+              <section v-if="requiresScheduleFields" class="plan-sec">
                 <button type="button" class="plan-sec__head" @click="toggleSection('date')">
                   <span class="plan-sec__head-text">实行日期</span>
                   <i
@@ -254,17 +290,17 @@
             <footer class="plan-editor-foot" :class="{ 'plan-editor-foot--view': isViewMode }">
               <template v-if="isViewMode">
                 <button
+                  v-if="canDetailEmergencyStart"
                   type="button"
                   class="plan-editor-btn plan-editor-btn--emergency"
-                  v-if="isCurrentPlanStopped"
                   :disabled="detailActionSubmitting"
                   @click="onDetailEmergencyStart"
                 >
                   紧急启动
                 </button>
                 <button
+                  v-else-if="canDetailStopTask"
                   type="button"
-                  v-else
                   class="plan-editor-btn plan-editor-btn--emergency"
                   :disabled="detailActionSubmitting"
                   @click="onDetailStop"
@@ -312,6 +348,8 @@
 import { ref, reactive, computed, nextTick, onMounted, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { FlightPlanService } from "@/api/plan";
+import { AlgorithmService } from "@/api/algorithm";
+import { unwrapApiList } from "@/utils/request.js";
 import { useFlightPlanStore } from "@/stores/flightPlan.js";
 import arrowRightPng from "@/assets/images/arrow_right.png";
 import MountainRescueIcon from "@/components/icons/MountainRescueIcon.vue";
@@ -328,6 +366,7 @@ import {
   planPickerPopperOptions,
 } from "@/components/plan-panel/plan-scenarios.js";
 import { usePlanEditorResources } from "@/composables/usePlanEditorResources.js";
+import { canPlanEmergencyStart, canPlanStopTask } from "@/utils/plan-task.js";
 
 const emit = defineEmits(["closed", "changed", "scenario-sync"]);
 
@@ -353,6 +392,52 @@ function fetchPlaceListForFormScenario() {
   if (type) flightPlanStore.fetchPlaceList(type);
 }
 
+const algorithmList = ref([]);
+const algorithmListLoading = ref(false);
+
+function normalizeAlgorithmItem(raw) {
+  const id = raw?.algorithmId ?? raw?.id;
+  if (id == null || id === "") return null;
+  return {
+    algorithmId: String(id),
+    algorithmCode: String(raw?.algorithmCode ?? "").trim(),
+    algorithmName: String(raw?.algorithmName ?? raw?.name ?? "").trim(),
+  };
+}
+
+async function loadAlgorithmList() {
+  if (algorithmListLoading.value) return;
+  algorithmListLoading.value = true;
+  try {
+    const data = await AlgorithmService.list();
+    algorithmList.value = unwrapApiList(data)
+      .map(normalizeAlgorithmItem)
+      .filter(Boolean);
+  } catch {
+    algorithmList.value = [];
+  } finally {
+    algorithmListLoading.value = false;
+  }
+}
+
+function parseAlgorithmIdsFromDetail(detail) {
+  const raw = detail?.algorithmIds ?? detail?.algorithmIdList ?? detail?.algorithms ?? [];
+  if (typeof raw === "string") {
+    return raw.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((v) => {
+      if (v == null) return "";
+      if (typeof v === "object") {
+        const id = v?.algorithmId ?? v?.id;
+        return id != null ? String(id) : "";
+      }
+      return String(v).trim();
+    })
+    .filter(Boolean);
+}
+
 onMounted(() => {
   loadResourceSourceDefs();
 });
@@ -368,9 +453,10 @@ const detailActionSubmitting = ref(false);
 const currentViewingPlan = computed(() =>
   flightPlanStore.getPlanById(viewingPlanId.value),
 );
-const isCurrentPlanStopped = computed(
-  () => Number(currentViewingPlan.value?.status) === 0,
+const canDetailEmergencyStart = computed(() =>
+  canPlanEmergencyStart(currentViewingPlan.value),
 );
+const canDetailStopTask = computed(() => canPlanStopTask(currentViewingPlan.value));
 
 const themeSectionTitle = computed(() => {
   const k = addForm.scenarioKey;
@@ -383,6 +469,9 @@ const planEditorTitle = computed(() =>
   planDialogMode.value === "view" ? "飞行计划详情" : planDialogMode.value === "edit" ? "编辑飞行计划" : "添加飞行计划",
 );
 
+/** 重点安保需填写实行日期与时间；山林救援、水上观察在添加/编辑/查看均不展示 */
+const requiresScheduleFields = computed(() => addForm.scenarioKey === "security");
+
 const locationTreeRef = ref(null);
 const locationTreeData = computed(() => flightPlanStore.mergedLocationTreeData);
 const locationTreeProps = { label: "label", children: "children", disabled: "disabled" };
@@ -390,6 +479,7 @@ const locationTreeProps = { label: "label", children: "children", disabled: "dis
 const sectionOpen = reactive({
   theme: true,
   location: true,
+  algorithm: true,
   time: true,
   date: true,
   resources: true,
@@ -482,6 +572,17 @@ const readonlyLocationTreeData = computed(() => {
   });
   return tree;
 });
+const viewAlgorithmText = computed(() => {
+  const ids = addForm.algorithmIds;
+  if (!ids || !ids.length) return "暂未选择算法";
+  return ids
+    .map((id) => {
+      const item = algorithmList.value.find((a) => a.algorithmId === id);
+      return item?.algorithmName || item?.algorithmCode || id;
+    })
+    .join("、");
+});
+
 const viewTimeText = computed(() => {
   const start = addForm.timeStart || "";
   const end = addForm.timeEnd || "";
@@ -506,13 +607,20 @@ const addForm = reactive({
   timeEnd: "",
   /** @type {string[]} [开始日期, 结束日期] YYYY-MM-DD */
   flightDate: "",
+  /** @type {string[]} 选中的 algorithmId */
+  algorithmIds: [],
   resourceCounts: {},
 });
 
-watch(() => addForm.scenarioKey, () => {
+watch(() => addForm.scenarioKey, (key) => {
   if (planDialogVisible.value) {
-    const type = TAB_TO_API_TYPE[addForm.scenarioKey];
+    const type = TAB_TO_API_TYPE[key];
     if (type) flightPlanStore.fetchPlaceList(type);
+  }
+  if (planDialogVisible.value && !isViewMode.value && key !== "security") {
+    addForm.timeStart = "";
+    addForm.timeEnd = "";
+    addForm.flightDate = "";
   }
 });
 
@@ -591,6 +699,7 @@ function resetPlanForm() {
   addForm.timeStart = "";
   addForm.timeEnd = "";
   addForm.flightDate = "";
+  addForm.algorithmIds = [];
   resetResourceCountersFromBaseline();
   nextTick(() => locationTreeRef.value?.setCheckedKeys([], false));
 }
@@ -624,6 +733,7 @@ function loadPlanDetailIntoForm(detail) {
   addForm.flightDate = detail?.executeDate ?? detail?.flightDate ?? "";
   addForm.timeStart = (detail?.executeStartTime ?? detail?.timeStart ?? "").slice(0, 5);
   addForm.timeEnd = (detail?.executeEndTime ?? detail?.timeEnd ?? "").slice(0, 5);
+  addForm.algorithmIds = parseAlgorithmIdsFromDetail(detail);
   addForm.resourceCounts = {};
   const rc = detail?.resourceConfig ?? detail?.resourceList;
   if (Array.isArray(rc)) {
@@ -649,6 +759,9 @@ function loadPlanDetailIntoForm(detail) {
 function showEditorDialog() {
   planDialogVisible.value = true;
   visible.value = true;
+  if (!algorithmList.value.length && !algorithmListLoading.value) {
+    loadAlgorithmList();
+  }
 }
 
 async function openPlanDialog(mode, planId = null) {
@@ -822,43 +935,51 @@ async function submitPlan() {
     return;
   }
 
-  const flightDate = addForm.flightDate;
-  if (!flightDate) {
-    ElMessage.warning("请选择实行日期");
-    return;
-  }
-
-  if (!addForm.timeStart || !addForm.timeEnd) {
-    ElMessage.warning("请填写实行开始时间与结束时间");
-    return;
-  }
-  const t0 = timeToMinutes(addForm.timeStart);
-  const t1 = timeToMinutes(addForm.timeEnd);
-  if (!Number.isFinite(t0) || !Number.isFinite(t1)) {
-    ElMessage.warning("时间格式无效");
-    return;
-  }
-  if (t1 <= t0) {
-    ElMessage.warning("结束时间须晚于开始时间");
-    return;
-  }
-
   const type = TAB_TO_API_TYPE[addForm.scenarioKey];
   if (!type) {
     ElMessage.error("未知计划场景类型");
     return;
   }
 
+  if (requiresScheduleFields.value) {
+    const flightDate = addForm.flightDate;
+    if (!flightDate) {
+      ElMessage.warning("请选择实行日期");
+      return;
+    }
+    if (!addForm.timeStart || !addForm.timeEnd) {
+      ElMessage.warning("请填写实行开始时间与结束时间");
+      return;
+    }
+    const t0 = timeToMinutes(addForm.timeStart);
+    const t1 = timeToMinutes(addForm.timeEnd);
+    if (!Number.isFinite(t0) || !Number.isFinite(t1)) {
+      ElMessage.warning("时间格式无效");
+      return;
+    }
+    if (t1 <= t0) {
+      ElMessage.warning("结束时间须晚于开始时间");
+      return;
+    }
+  }
+
   const body = {
     type,
     name: addForm.subject.trim(),
-    executeDate: String(flightDate).slice(0, 10),
-    executeStartTime: formatExecuteTimeForApi(addForm.timeStart),
-    executeEndTime: formatExecuteTimeForApi(addForm.timeEnd),
-    placeIds: placeIds.join(','),
+    placeIds: placeIds.join(","),
     resourceConfig: buildResourceConfigForApi(),
     description: addForm.description,
   };
+
+  if (requiresScheduleFields.value) {
+    body.executeDate = String(addForm.flightDate).slice(0, 10);
+    body.executeStartTime = formatExecuteTimeForApi(addForm.timeStart);
+    body.executeEndTime = formatExecuteTimeForApi(addForm.timeEnd);
+  }
+
+  if (addForm.algorithmIds.length) {
+    body.algorithmIds = addForm.algorithmIds.join(",");
+  }
 
   if (isEditMode.value) {
     body.id = viewingPlanId.value;
@@ -1121,6 +1242,80 @@ background: #1C222A;
   padding: 10px 12px;
   background: #03060A;
   margin-top: 5px;
+}
+
+.plan-sec__body--algorithms {
+  padding: 4px 12px 8px;
+  background: #03060a;
+  margin-top: 5px;
+  overflow: visible;
+}
+
+.plan-algorithm-group {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.plan-algorithm-row {
+  width: 100%;
+  min-height: 40px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.plan-algorithm-row__cb {
+  display: inline-flex !important;
+  align-items: center;
+  width: 100%;
+  height: auto !important;
+  min-height: 40px;
+  margin-right: 0 !important;
+  white-space: normal;
+}
+
+.plan-algorithm-row__text {
+  display: block;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.plan-algorithm-row :deep(.el-checkbox__label) {
+  display: inline-flex !important;
+  align-items: center;
+  flex: 1 1 auto;
+  width: auto !important;
+  min-width: 1px !important;
+  max-width: 100%;
+  height: auto !important;
+  min-height: 1em;
+  padding-left: 8px !important;
+  overflow: visible !important;
+  color: rgba(255, 255, 255, 0.88) !important;
+  font-size: 14px !important;
+  line-height: 1.4 !important;
+  white-space: normal;
+}
+
+.plan-algorithm-empty {
+  padding: 8px 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.plan-editor-modal .plan-algorithm-row__cb .el-checkbox__inner {
+  background-color: transparent;
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.plan-editor-modal .plan-algorithm-row__cb .el-checkbox__input.is-checked .el-checkbox__inner {
+  background-color: #3b6fd8;
+  border-color: #3b6fd8;
 }
 
 .plan-el-picker {
@@ -1605,6 +1800,29 @@ background: #1C222A;
   --el-disabled-text-color: rgba(255, 255, 255, 0.45);
 }
 
+/* 算法多选：避免 label 被 flex 压成 0，文案放在独立 span */
+.plan-editor-modal .plan-algorithm-row__cb {
+  --el-checkbox-text-color: rgba(255, 255, 255, 0.88);
+  --el-checkbox-checked-text-color: rgba(255, 255, 255, 0.95);
+  --el-checkbox-font-size: 14px;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.plan-editor-modal .plan-algorithm-row__cb .el-checkbox__label,
+.plan-editor-modal .plan-algorithm-row__text {
+  color: rgba(255, 255, 255, 0.88) !important;
+  font-size: 14px !important;
+}
+
+.plan-editor-modal .plan-algorithm-row__cb .el-checkbox__input.is-checked + .el-checkbox__label,
+.plan-editor-modal .plan-algorithm-group.is-disabled .plan-algorithm-row__text {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.plan-editor-modal .plan-algorithm-row__cb .el-checkbox__input.is-checked + .el-checkbox__label .plan-algorithm-row__text {
+  color: rgba(255, 255, 255, 0.95) !important;
+}
+
 .plan-editor-modal .plan-loc-tree.el-tree {
   --el-color-primary: #3b6fd8;
   --el-tree-node-hover-bg-color: rgba(255, 255, 255, 0.06);
@@ -1824,10 +2042,18 @@ background: #1C222A;
     color: rgba(255, 255, 255, 0.28);
   }
 
-  .el-date-table td.disabled .el-date-table-cell__text {
-    color: rgba(255, 255, 255, 0.2);
-    background: transparent;
-  }
+	  .el-date-table td.disabled {
+	    background-color: transparent !important;
+	  }
+
+	  .el-date-table td.disabled .el-date-table-cell {
+	    background: transparent !important;
+	  }
+
+	  .el-date-table td.disabled .el-date-table-cell__text {
+	    color: rgba(255, 255, 255, 0.35);
+	    background: transparent;
+	  }
 
   .el-date-table td.available:hover .el-date-table-cell__text {
     background: rgba(255, 255, 255, 0.1);

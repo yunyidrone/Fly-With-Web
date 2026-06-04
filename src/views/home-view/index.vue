@@ -20,26 +20,52 @@
     <!-- 顶部覆盖层 -->
     <HomeHeader v-show="!immersiveFlight" />
 
-    <!-- 左侧 Tab：无人设备 / 飞行计划 -->
-    <LeftSidebarTabs
+    <PlanUpcomingAlert
+      :visible="!immersiveFlight"
+      @view-allocation="onPlanViewAllocation"
+    />
+
+    <!-- 左侧 Tab + 历史任务记录（Tab 右侧，无遮罩） -->
+    <div
       v-show="!immersiveFlight"
-      ref="leftSidebarRef"
-      @select-tab="onLeftSidebarSelect"
+      class="home-left-dock"
+      :class="{ 'home-left-dock--history': planHistoryVisible }"
     >
-      <template #device>
-        <ResourcePanel
-          embedded
-          :stream-active-device-id="
-            droneStreamVisible && streamDrone?.id ? streamDrone.id : ''
-          "
-          @recall="(device) => mapRef?.recallDrone(device)"
-          @open-drone-stream="openDroneStream"
-        />
-      </template>
-      <template #plan>
-        <PlanPanel ref="planPanelRef" embedded @start-area-draw="onStartAreaDraw" @view-area="onViewArea" />
-      </template>
-    </LeftSidebarTabs>
+      <LeftSidebarTabs ref="leftSidebarRef" docked @select-tab="onLeftSidebarSelect">
+        <template #device>
+          <ResourcePanel
+            embedded
+            :stream-active-device-id="
+              droneStreamVisible && streamDrone?.id ? streamDrone.id : ''
+            "
+            @recall="(device) => mapRef?.recallDrone(device)"
+            @open-drone-stream="openDroneStream"
+          />
+        </template>
+        <template #plan>
+          <PlanPanel
+            ref="planPanelRef"
+            embedded
+            @start-area-draw="onStartAreaDraw"
+            @view-area="onViewArea"
+            @open-history-tasks="onOpenPlanHistory"
+            @open-task-monitor="onOpenTaskMonitor"
+          />
+        </template>
+      </LeftSidebarTabs>
+      <PlanHistoryPanel
+        v-model:visible="planHistoryVisible"
+        @quick-create="onPlanHistoryQuickCreate"
+        @deleted="onPlanHistoryChanged"
+      />
+    </div>
+
+    <PlanTaskMonitorView
+      v-model:visible="taskMonitorVisible"
+      :plan-id="taskMonitorPlanId"
+      :wide-left="planHistoryVisible"
+      @recall="onTaskMonitorRecall"
+    />
 
     <!-- 无人机视频：无全屏遮罩，仅固定卡片，不阻挡地图操作 -->
     <Teleport to="body">
@@ -67,7 +93,7 @@
               :head="streamDroneLive?.attitudeHead"
               :pitch="streamDroneLive?.attitudePitch"
               :roll="streamDroneLive?.attitudeRoll"
-              :status-label="streamStatusLabel"import
+              :status-label="streamStatusLabel"
               :escort-start-time="streamEscortStartTime"
               :companion-task-title="streamCompanionTaskTitle"
               :immersive-flight="immersiveFlight"
@@ -90,17 +116,21 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch, nextTick, defineAsyncComponent } from "vue";
+import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick, defineAsyncComponent } from "vue";
 import TiandituMap from "@/components/TiandituMap.vue";
 import HomeHeader from "@/components/HomeHeader.vue";
 import MapLegend from "@/components/MapLegend.vue";
 import LeftSidebarTabs from "@/components/LeftSidebarTabs.vue";
+import PlanUpcomingAlert from "@/components/plan-panel/PlanUpcomingAlert.vue";
+import PlanHistoryPanel from "@/components/plan-panel/PlanHistoryPanel.vue";
+import PlanTaskMonitorView from "@/components/plan-panel/PlanTaskMonitorView.vue";
 
 const PlanPanel = defineAsyncComponent(() => import("@/components/PlanPanel.vue"));
 // const AreaDrawPopup = defineAsyncComponent(() => import("@/components/AreaDrawPopup.vue"));
 const ResourcePanel = defineAsyncComponent(() => import("@/components/ResourcePanel.vue"));
 const DroneStream = defineAsyncComponent(() => import("@/components/DroneStream.vue"));
 import { MAP_CONFIG } from "@/config/app-config.js";
+import { ensureDroneOsdMqtt } from "@/composables/useDroneOsdMqtt.js";
 import { useDeviceStore } from "@/stores/device.js";
 import { useFlightPlanStore } from "@/stores/flightPlan.js";
 import { AccompanyingFlyService } from "@/api";
@@ -108,10 +138,37 @@ import { AccompanyingFlyService } from "@/api";
 const mapRef = ref(null);
 const leftSidebarRef = ref(null);
 const planPanelRef = ref(null);
+const planHistoryVisible = ref(false);
+const taskMonitorVisible = ref(false);
+const taskMonitorPlanId = ref("");
 
-function onLeftSidebarSelect(tab) {
+function onOpenPlanHistory() {
+  planHistoryVisible.value = true;
+  // leftSidebarRef.value?.selectTab?.("plan");
+}
+
+function onOpenTaskMonitor(planId) {
+  taskMonitorPlanId.value = String(planId || "");
+  taskMonitorVisible.value = true;
+  leftSidebarRef.value?.selectTab?.("plan");
+}
+
+async function onTaskMonitorRecall() {
+  await planPanelRef.value?.notifyPlanSidebarOpened?.();
+  await deviceStore.fetchDroneList();
+}
+
+async function onPlanHistoryQuickCreate() {
+  await planPanelRef.value?.notifyPlanSidebarOpened?.();
+}
+
+async function onPlanHistoryChanged() {
+  await planPanelRef.value?.notifyPlanSidebarOpened?.();
+}
+
+async function onLeftSidebarSelect(tab) {
   if (tab === "plan") {
-    planPanelRef.value?.notifyPlanSidebarOpened?.();
+    await planPanelRef.value?.notifyPlanSidebarOpened?.();
   }
 }
 const droneStreamVisible = ref(false);
@@ -168,13 +225,26 @@ function onViewArea(ring) {
   mapRef.value?.flyToRing?.(ring);
 }
 
+function onPlanViewAllocation(plan) {
+  onOpenTaskMonitor(plan?.id);
+}
+
 onMounted(() => {
+  ensureDroneOsdMqtt();
+  flightPlanStore.initCustomLocationTree();
+  flightPlanStore.fetchAllPlanList();
+  flightPlanStore.startPlanTaskWatcher();
+
   // 等地图完成首帧渲染后再拉数据，避免阻塞首次绘制
   const schedule = window.requestIdleCallback || ((fn) => setTimeout(fn, 0));
   schedule(() => {
     deviceStore.fetchDroneList();
     deviceStore.fetchTargetList();
   });
+});
+
+onUnmounted(() => {
+  flightPlanStore.stopPlanTaskWatcher();
 });
 
 watch(immersiveFlight, () => {
@@ -423,5 +493,31 @@ const closeDroneStream = () => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* 左侧 Tab 与历史记录横排；未开历史时仅占 Tab 宽度，不挡地图点击 */
+.home-left-dock {
+  position: fixed;
+  left: 24px;
+  top: 90px;
+  z-index: 100;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 12px;
+  width: fit-content;
+  max-width: calc(100vw - 48px);
+  max-height: calc(100vh - 110px);
+  box-sizing: border-box;
+  pointer-events: none;
+
+  > * {
+    pointer-events: auto;
+  }
+
+  &--history {
+    width: calc(100vw - 48px);
+    max-width: calc(100vw - 48px);
+  }
 }
 </style>

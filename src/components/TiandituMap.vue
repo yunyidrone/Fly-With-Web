@@ -243,6 +243,7 @@ import DefaultMapImg from "@/assets/images/img-map-default.png";
 import DefaultMapImg2 from "@/assets/images/img-map-default2.png";
 import axios from "axios";
 import { mqttService } from "@/utils/mqtt-service";
+import { ensureDroneOsdMqtt, onDroneOsdTelemetry } from "@/composables/useDroneOsdMqtt.js";
 import { cloneDeep, isEmpty } from "lodash-es";
 import { CameraFrustum } from "@/utils/cameraFrustum";
 import { CompanionFrustum } from "@/utils/companionFrustum";
@@ -382,44 +383,17 @@ async function submitStartFollow(targetId, droneSn, droneId) {
 function subscribeEscortDroneOsd() {
   if (subscribeEscortDroneOsd._subscribed) return;
   subscribeEscortDroneOsd._subscribed = true;
-  const topic = "thing/product/+/osd";
-  mqttService.subscribe(topic, (actualTopic, msg) => {
-    // 从 thing/product/{sn}/osd 中提取 SN
-    const sn = String(actualTopic?.split("/")[2] || "").trim();
-    if (!sn) return;
-    const payload = msg?.data ?? msg;
-    console.log('无人机 收到消息', sn, payload)
-    if (!payload || typeof payload !== "object") return;
-    const lng = toFiniteNumber(payload.longitude);
-    const lat = toFiniteNumber(payload.latitude);
-    const height = toFiniteNumber(payload.height);
-    const attitudeHead = toFiniteNumber(
-      payload.attitude_head ?? payload.attitudeHead ?? payload.head,
-    );
-    const attitudePitch = toFiniteNumber(
-      payload.attitude_pitch ?? payload.attitudePitch ?? payload.pitch,
-    );
-    const attitudeRoll = toFiniteNumber(
-      payload.attitude_roll ?? payload.attitudeRoll ?? payload.roll,
-    );
-    const batteryPercent = toFiniteNumber(
-      payload?.battery?.batteries?.[0]?.capacity_percent,
-    );
-    const distanceLimit = toFiniteNumber(
-      payload?.distance_limit_status?.distance_limit,
-    );
-    const telemetryUpdated = deviceStore.updateDroneTelemetryBySn(sn, {
-      battery: batteryPercent,
-      endurance: distanceLimit,
-      lng: Number.isFinite(lng) ? lng : undefined,
-      lat: Number.isFinite(lat) ? lat : undefined,
-      height: Number.isFinite(height) ? height : undefined,
-      attitudeHead: Number.isFinite(attitudeHead) ? attitudeHead : undefined,
-      attitudePitch: Number.isFinite(attitudePitch) ? attitudePitch : undefined,
-      attitudeRoll: Number.isFinite(attitudeRoll) ? attitudeRoll : undefined,
-    });
-    if (!telemetryUpdated) return;
-    if (Number.isFinite(lng) && Number.isFinite(lat) && Number.isFinite(height) && (lng !== 0 || lat !== 0)) {
+  ensureDroneOsdMqtt();
+  onDroneOsdTelemetry((sn, telemetry) => {
+    const lng = telemetry.lng;
+    const lat = telemetry.lat;
+    const height = telemetry.height;
+    if (
+      Number.isFinite(lng) &&
+      Number.isFinite(lat) &&
+      Number.isFinite(height) &&
+      (lng !== 0 || lat !== 0)
+    ) {
       updateDroneMapEntityBySn(sn, lng, lat, height);
     }
   });
@@ -3640,13 +3614,9 @@ function subscribeVehicleLocationTopics() {
  * @description: Initialize MQTT connection
  * @return {*}
  */
-const initialMqttConnect = () => {
-  mqttService.connect();
-
-  // 通配订阅：carBox/+/location 匹配所有车辆位置
+const initialMqttConnect = async () => {
+  await ensureDroneOsdMqtt();
   subscribeVehicleLocationTopics();
-
-  // 通配订阅：thing/product/+/osd 匹配所有无人机 OSD
   subscribeInitialDroneOsdTopics();
 };
 
@@ -4397,13 +4367,11 @@ onMounted(() => {
 
 onUnmounted(() => {
   mqttService.unsubscribe("carBox/+/location");
-  mqttService.unsubscribe("thing/product/+/osd");
   subscribeEscortDroneOsd._subscribed = false;
   targetOfficerEntities.forEach((entity) => {
     mainViewer?.entities?.remove(entity);
   });
   targetOfficerEntities.clear();
-  mqttService.destroy();
   clearLockdownMarkers();
   closePoliceVehiclePopup();
   vehicleManager.selectedDeviceId = null;

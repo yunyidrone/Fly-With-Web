@@ -2,7 +2,7 @@
  * 左侧 Tab：无人设备 / 飞行计划，内嵌 ResourcePanel、PlanPanel
 -->
 <template>
-  <aside class="left-sidebar-tabs">
+  <aside class="left-sidebar-tabs" :class="{ 'left-sidebar-tabs--docked': docked }">
     <div class="left-sidebar-tabs__head" role="tablist" aria-label="侧栏模块">
       <div
         class="btn-wrap"
@@ -68,6 +68,11 @@
 <script setup>
 import { ref } from "vue";
 
+defineProps({
+  /** 嵌入 home-left-dock 时参与 flex 布局，避免 fixed 与历史面板重叠 */
+  docked: { type: Boolean, default: false },
+});
+
 const emit = defineEmits(["select-tab"]);
 
 /** @type {import('vue').Ref<'device' | 'plan' | null>} */
@@ -83,7 +88,7 @@ function clearSelection() {
   activeTab.value = null;
 }
 
-defineExpose({ clearSelection });
+defineExpose({ clearSelection, selectTab });
 </script>
 
 <style lang="scss" scoped>
@@ -102,6 +107,16 @@ $sidebar-width: calc(#{$tab-btn-width} * 2 + #{$tab-head-gap});
   width: min($sidebar-width, calc(100vw - 48px));
   max-height: calc(100vh - 110px);
   box-sizing: border-box;
+
+  &--docked {
+    position: relative;
+    left: auto;
+    top: auto;
+    z-index: auto;
+    flex-shrink: 0;
+    width: $sidebar-width;
+    max-width: min($sidebar-width, calc(100vw - 48px));
+  }
 
   .btn-wrap {
     width: $tab-btn-width;
