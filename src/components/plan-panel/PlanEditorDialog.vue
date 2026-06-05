@@ -301,7 +301,7 @@
                 <button
                   v-else-if="canDetailStopTask"
                   type="button"
-                  class="plan-editor-btn plan-editor-btn--emergency"
+                  class="plan-editor-btn plan-editor-btn--danger"
                   :disabled="detailActionSubmitting"
                   @click="onDetailStop"
                 >
@@ -1755,14 +1755,16 @@ background: #1C222A;
 }
 
 .plan-editor-btn--danger {
-  border: 1px solid #ea375f;
-  background: transparent;
-  color: #ff6b8a;
+  border: 1px solid #FF4A4A;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #FF4A4A;
+  font-family: "Alibaba PuHuiTi 3.0", sans-serif;
+  font-size: 12px;
+  font-weight: 700;
 
   &:hover {
-    background: rgba(234, 55, 95, 0.15);
-    border-color: #ff4d6d;
-    color: #ff8fa8;
+    background: rgba(255, 74, 74, 0.1);
   }
 }
 

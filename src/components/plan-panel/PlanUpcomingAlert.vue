@@ -12,13 +12,26 @@
         class="plan-upcoming-alert"
         role="alert"
       >
-        <span class="plan-upcoming-alert__tag">【{{ scenarioTitle(plan) }}】</span>
+        <div class="plan-upcoming-alert__left">
+          <span class="plan-upcoming-alert__icon">
+            <MountainRescueIcon v-if="plan.scenarioKey === 'mountain'" :width="18" :height="18" />
+            <WaterObservationIcon v-else-if="plan.scenarioKey === 'water'" :width="18" :height="18" />
+            <SecurityProtectionIcon v-else-if="plan.scenarioKey === 'security'" :width="18" :height="18" />
+            <i v-else class="ri-flight-takeoff-line" />
+          </span>
+          <span class="plan-upcoming-alert__tag">{{ scenarioTitle(plan) }}</span>
+        </div>
+
+        <div class="plan-upcoming-alert__divider" aria-hidden="true" />
+
         <span class="plan-upcoming-alert__msg">
           {{ planLabel(plan) }} 即将自动开启执行
         </span>
-        <button type="button" class="plan-upcoming-alert__link" @click="onViewAllocation(plan)">
+
+        <button type="button" class="plan-upcoming-alert__btn" @click="onViewAllocation(plan)">
           查看分配
         </button>
+
         <button
           type="button"
           class="plan-upcoming-alert__close"
@@ -36,9 +49,11 @@
 import { computed } from "vue";
 import { useFlightPlanStore } from "@/stores/flightPlan.js";
 import { SCENARIO_TITLE_BY_KEY } from "@/components/plan-panel/plan-scenarios.js";
+import MountainRescueIcon from "@/components/icons/MountainRescueIcon.vue";
+import WaterObservationIcon from "@/components/icons/WaterObservationIcon.vue";
+import SecurityProtectionIcon from "@/components/icons/SecurityProtectionIcon.vue";
 
 defineProps({
-  /** 沉浸飞行等场景下由父级关闭展示（勿在 Teleport 根组件上用 v-show） */
   visible: { type: Boolean, default: true },
 });
 
@@ -64,7 +79,7 @@ function onViewAllocation(plan) {
 <style lang="scss" scoped>
 .plan-upcoming-alerts {
   position: fixed;
-  top: 88px;
+  top: 24px;
   left: 50%;
   z-index: 2600;
   display: flex;
@@ -83,43 +98,64 @@ function onViewAllocation(plan) {
 .plan-upcoming-alert {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 10px;
+  gap: 10px;
   width: 100%;
-  padding: 10px 14px 10px 18px;
-  border: 1px dashed #e85d5d;
-  border-radius: 999px;
-  background: rgba(255, 252, 252, 0.97);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  padding: 12px 18px;
+  border-radius: 30px;
+  background: rgba(3, 6, 10, 0.65);
+  backdrop-filter: blur(8px);
   font-size: 14px;
   line-height: 1.4;
-  color: #d93030;
+}
+
+.plan-upcoming-alert__left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.plan-upcoming-alert__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #558EFC;
 }
 
 .plan-upcoming-alert__tag {
   font-weight: 600;
   white-space: nowrap;
+  color: #558EFC;
+}
+
+.plan-upcoming-alert__divider {
+  width: 1px;
+  height: 20px;
+  background: #5C6169;
+  flex-shrink: 0;
 }
 
 .plan-upcoming-alert__msg {
   flex: 1;
   min-width: 120px;
+  color: #fff;
   font-weight: 500;
 }
 
-.plan-upcoming-alert__link {
-  padding: 0;
-  border: none;
-  background: none;
-  color: #3b6fd8;
+.plan-upcoming-alert__btn {
+  padding: 6px 18px;
+  border: 1px solid #558EFC;
+  border-radius: 24px;
+  background: #15191E;
+  color: #fff;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
-  text-decoration: underline;
   white-space: nowrap;
+  flex-shrink: 0;
 
   &:hover {
-    color: #5a8ae8;
+    background: rgba(85, 142, 252, 0.1);
   }
 }
 
@@ -127,20 +163,19 @@ function onViewAllocation(plan) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin-left: 2px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: none;
   border-radius: 50%;
   background: transparent;
-  color: #1a1a1a;
+  color: #fff;
   font-size: 18px;
   cursor: pointer;
   flex-shrink: 0;
 
   &:hover {
-    background: rgba(0, 0, 0, 0.06);
+    background: rgba(255, 255, 255, 0.1);
   }
 }
 </style>

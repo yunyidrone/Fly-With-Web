@@ -28,7 +28,9 @@
                 @cancel="onActiveTaskCancel"
               />
             </div>
+          </div>
 
+          <div class="flight-plan-board">
             <div class="flight-plan-board__list-area">
             <div class="scenario-tabs" role="tablist" aria-label="飞行计划场景">
               <button
@@ -117,7 +119,7 @@
                     <button
                       v-else-if="row.showStop"
                       type="button"
-                      class="btn-emergency-start"
+                      class="btn-cancel-task"
                       @click.stop="onStopTask(row)"
                     >
                       取消任务
@@ -495,10 +497,10 @@ $fp-muted: rgba(255, 255, 255, 0.45);
 .plan-panel-inner {
   display: flex;
   flex-direction: column;
-  border: 1px solid $fp-border;
+  
   border-radius: 10px;
   overflow: hidden;
-  background: $fp-bg;
+  // background: $fp-bg;
 }
 
 .plan-panel-toggle {
@@ -562,7 +564,7 @@ $fp-muted: rgba(255, 255, 255, 0.45);
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows 0.3s ease;
-  background: $fp-bg;
+  // background: $fp-bg;
 
   .plan-panel-wrapper.expanded & {
     grid-template-rows: 1fr;
@@ -571,6 +573,9 @@ $fp-muted: rgba(255, 255, 255, 0.45);
   > .plan-panel-body {
     overflow: hidden;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
 }
 
@@ -579,6 +584,14 @@ $fp-muted: rgba(255, 255, 255, 0.45);
   display: flex;
   flex-direction: column;
   gap: 12px;
+  border-radius: 6px;
+border: 1px solid #30363B;
+background: rgba(3, 6, 10, 0.65);
+}
+
+.flight-plan-board--active {
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .flight-plan-board__tasks:empty {
@@ -830,6 +843,24 @@ background: #15191E;
 
   &:active {
     transform: scale(0.98);
+  }
+}
+
+.btn-cancel-task {
+  padding: 6px 10px;
+  border: 1px solid #FF4A4A;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #FF4A4A;
+  font-family: "Alibaba PuHuiTi 3.0", sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+
+  &:hover {
+    background: rgba(255, 74, 74, 0.1);
   }
 }
 

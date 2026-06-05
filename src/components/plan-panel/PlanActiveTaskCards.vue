@@ -4,6 +4,8 @@
       v-for="item in executingItems"
       :key="`run-${item.planId}`"
       class="pat-card"
+      :class="{ 'pat-card--selected': selectedId === item.planId }"
+      @click="selectedId = item.planId"
     >
       <header class="pat-card__head">
         <span class="pat-card__head-left">
@@ -11,7 +13,7 @@
         </span>
         <span class="pat-card__status pat-card__status--running">
           <i class="pat-card__status-dot" aria-hidden="true" />
-          正在执行任务
+          执行中
         </span>
       </header>
       <div class="pat-card__body" @click="emit('monitor', item.planId)">
@@ -25,10 +27,13 @@
           <p v-for="(line, idx) in item.bodyLines" :key="idx" class="pat-card__line">
             {{ line }}
           </p>
+          <p class="pat-card__line" :class="item.hasWarn ? 'pat-card__warn' : 'pat-card__no-warn'">
+            {{ item.warnLine }}
+          </p>
         </div>
       </div>
       <footer class="pat-card__foot">
-        <button type="button" class="pat-btn pat-btn--full" @click="emit('cancel', item.plan)">
+        <button type="button" class="pat-btn pat-btn--full pat-btn--danger-text" @click="emit('cancel', item.plan)">
           取消任务
         </button>
       </footer>
@@ -38,6 +43,8 @@
       v-for="item in upcomingItems"
       :key="`up-${item.planId}`"
       class="pat-card"
+      :class="{ 'pat-card--selected': selectedId === item.planId }"
+      @click="selectedId = item.planId"
     >
       <header class="pat-card__head">
         <span class="pat-card__head-left">
@@ -94,6 +101,7 @@ import {
 const emit = defineEmits(["monitor", "emergency-start", "cancel"]);
 
 const flightPlanStore = useFlightPlanStore();
+const selectedId = ref(null);
 
 const hasUpcomingPlans = computed(() => flightPlanStore.upcomingPlans.length > 0);
 const countdownNow = usePlanCountdownNow(hasUpcomingPlans);
@@ -153,14 +161,13 @@ function buildBodyLine(plan, useEnd = false) {
 function mapExecuting(plan) {
   const lines = [buildBodyLine(plan, false)];
 
-  // 第二行优先展示最新 AI 事件（类型 + 时间）
   const warnInfo = warnDataMap.value[plan.id];
+  let warnLine = "暂无AI事件";
+  let hasWarn = false;
   if (warnInfo?.latestEvent) {
     const ev = warnInfo.latestEvent;
-    lines.push(`${ev.warnType} ${formatWarnTime(ev.eventTime)}`);
-  } else if (plan.timeEnd && plan.flightDate) {
-    const endLine = buildBodyLine(plan, true);
-    if (endLine !== lines[0]) lines.push(endLine);
+    warnLine = `【new】${ev.name} ${formatWarnTime(ev.alarmTime)}`;
+    hasWarn = true;
   }
 
   return {
@@ -170,6 +177,8 @@ function mapExecuting(plan) {
     scenarioTitle: SCENARIO_TITLE_BY_KEY[plan.scenarioKey] || "飞行计划",
     startModeLabel: resolvePlanStartModeLabel(plan),
     bodyLines: lines.slice(0, 2),
+    warnLine,
+    hasWarn,
   };
 }
 
@@ -202,10 +211,29 @@ const hasTasks = computed(
 }
 
 .pat-card {
-  border-radius: 8px;
-  background: #1e1e1e;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  position: relative;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
   overflow: hidden;
+  cursor: pointer;
+}
+
+.pat-card--selected {
+  background: linear-gradient(
+    90deg,
+    rgba(73, 101, 201, 0.32) 0%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+
+  &::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: #4965c9;
+  }
 }
 
 .pat-card__head {
@@ -214,7 +242,6 @@ const hasTasks = computed(
   justify-content: space-between;
   gap: 8px;
   padding: 10px 12px 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .pat-card__head-left {
@@ -250,11 +277,11 @@ const hasTasks = computed(
 }
 
 .pat-card__status--running {
-  color: #4cd964;
+  color: #73EC8D;
 
   .pat-card__status-dot {
-    background: #4cd964;
-    box-shadow: 0 0 6px rgba(76, 217, 100, 0.6);
+    background: #73EC8D;
+    box-shadow: 0 0 6px rgba(115, 236, 141, 0.6);
   }
 }
 
@@ -304,8 +331,17 @@ const hasTasks = computed(
   word-break: break-all;
 }
 
+.pat-card__warn {
+  color: #FFD24A;
+}
+
+.pat-card__no-warn {
+  color: rgba(255, 255, 255, 0.35);
+}
+
 .pat-card__foot {
   display: flex;
+  justify-content: flex-end;
   padding: 0 12px 12px;
   gap: 8px;
 
@@ -315,35 +351,46 @@ const hasTasks = computed(
 }
 
 .pat-btn {
-  height: 36px;
-  border-radius: 6px;
-  border: 1px solid #3b6fd8;
-  background: transparent;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
+  height: 28px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 999px;
+  background: #e6f455;
+  color: #1a1a1a;
+  font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
   transition:
-    background 0.15s,
-    border-color 0.15s;
+    filter 0.15s,
+    transform 0.1s;
 
   &:hover {
-    background: rgba(59, 111, 216, 0.12);
+    filter: brightness(1.05);
   }
 
-  &--full {
-    flex: 1;
-    width: 100%;
+  &:active {
+    transform: scale(0.98);
   }
 
+  &--full,
   &--half {
-    flex: 1;
-    min-width: 0;
+    width: auto;
   }
 
   &--danger-text {
-    color: #ff5c5c;
-    border-color: #3b6fd8;
+    border: 1px solid #FF4A4A;
+    border-radius: 28px;
+    background: rgba(255, 255, 255, 0.04);
+    color: #FF4A4A;
+    font-family: "Alibaba PuHuiTi 3.0", sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+
+    &:hover {
+      filter: none;
+      background: rgba(255, 74, 74, 0.1);
+    }
   }
 }
 </style>
