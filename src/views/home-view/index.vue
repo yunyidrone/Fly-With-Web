@@ -7,7 +7,7 @@
 <template>
   <div class="page-wrapper" :class="{ 'immersive-flight': immersiveFlight }">
     <!-- 全屏地图（图例叠在地图区域内，沉浸分屏时随左半屏地图居中） -->
-    <div class="map-container" @click="onMapAreaClick">
+    <!-- <div class="map-container" @click="onMapAreaClick">
       <TiandituMap ref="mapRef" @open-drone-stream="openDroneStream" />
       <div v-show="!immersiveFlight" class="map-legend-host">
         <MapLegend
@@ -15,7 +15,7 @@
           @toggle="(e) => mapRef?.toggleLayerVisibility(e)"
         />
       </div>
-    </div>
+    </div> -->
 
     <!-- 顶部覆盖层 -->
     <HomeHeader v-show="!immersiveFlight" />

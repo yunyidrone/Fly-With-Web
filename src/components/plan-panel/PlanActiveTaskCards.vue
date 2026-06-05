@@ -29,7 +29,7 @@
       </div>
       <footer class="pat-card__foot">
         <button type="button" class="pat-btn pat-btn--full" @click="emit('cancel', item.plan)">
-          停止任务
+          取消任务
         </button>
       </footer>
     </article>
@@ -64,7 +64,7 @@
           紧急启动
         </button>
         <button type="button" class="pat-btn pat-btn--half pat-btn--danger-text" @click="emit('cancel', item.plan)">
-          停止任务
+          取消任务
         </button>
       </footer>
     </article>

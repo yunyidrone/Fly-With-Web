@@ -120,7 +120,7 @@
                       class="btn-emergency-start"
                       @click.stop="onStopTask(row)"
                     >
-                      停止任务
+                      取消任务
                     </button>
                   </div>
                 </div>
@@ -243,8 +243,8 @@ function onActiveTaskCancel(plan) {
     requestPlanStopFollow(plan);
     return;
   }
-  ElMessageBox.confirm(`确定取消「${title}」？`, "停止任务", {
-    confirmButtonText: "停止任务",
+  ElMessageBox.confirm(`确定取消「${title}」？`, "取消任务", {
+    confirmButtonText: "取消任务",
     cancelButtonText: "返回",
     type: "warning",
   })
@@ -252,7 +252,7 @@ function onActiveTaskCancel(plan) {
       await FlightPlanService.planDelete({ id: plan.id });
       flightPlanStore.deletePlan(plan.id);
       await loadPlansForActiveTab();
-      ElMessage.success("已停止任务");
+      ElMessage.success("已取消任务");
     })
     .catch(() => {});
 }
@@ -380,7 +380,7 @@ function requestPlanStopFollow(plan) {
   if (!plan?.id) return;
   if (listActionSubmitting.value) return;
   const title = plan.subject || plan.locationLabel || "该飞行计划";
-  ElMessageBox.confirm(`确定停止「${title}」任务？`, "停止任务确认", {
+  ElMessageBox.confirm(`确定停止「${title}」任务？`, "取消任务确认", {
     confirmButtonText: "停止",
     cancelButtonText: "取消",
     type: "warning",

@@ -305,7 +305,7 @@
                   :disabled="detailActionSubmitting"
                   @click="onDetailStop"
                 >
-                  停止任务
+                  取消任务
                 </button>
                 <!-- <button
                   type="button"
@@ -860,7 +860,7 @@ function requestPlanStopFollow(plan) {
   if (!plan?.id) return;
   if (detailActionSubmitting.value) return;
   const title = plan.subject || plan.locationLabel || "该飞行计划";
-  ElMessageBox.confirm(`确定停止「${title}」任务？`, "停止任务确认", {
+  ElMessageBox.confirm(`确定停止「${title}」任务？`, "取消任务确认", {
     confirmButtonText: "停止",
     cancelButtonText: "取消",
     type: "warning",

@@ -10,6 +10,32 @@
         aria-label="任务监控"
       >
         <div v-loading="loading" class="plan-task-monitor__inner">
+          <header v-if="planScenarioTitle && cells.length" class="plan-task-monitor__plan-head">
+            <div class="plan-task-monitor__plan-head-left">
+              <span v-if="planScenarioKey === 'mountain'" class="plan-task-monitor__plan-icon" aria-hidden="true">
+                <MountainRescueIcon :width="18" :height="18" />
+              </span>
+              <span v-else-if="planScenarioKey === 'water'" class="plan-task-monitor__plan-icon" aria-hidden="true">
+                <WaterObservationIcon :width="18" :height="18" />
+              </span>
+              <span v-else-if="planScenarioKey === 'security'" class="plan-task-monitor__plan-icon" aria-hidden="true">
+                <SecurityProtectionIcon :width="18" :height="18" />
+              </span>
+              <i v-else class="ri-shield-check-line plan-task-monitor__plan-icon-fallback" aria-hidden="true" />
+              <span class="plan-task-monitor__plan-type">{{ planScenarioTitle }}</span>
+              <span class="plan-task-monitor__plan-sep" aria-hidden="true">|</span>
+              <span class="plan-task-monitor__plan-mode">{{ planStartModeLabel }}</span>
+            </div>
+            <div class="plan-task-monitor__plan-head-right">
+              <span class="plan-task-monitor__plan-status">
+                <i class="plan-task-monitor__plan-status-dot" aria-hidden="true" />
+                执行中
+              </span>
+              <button type="button" class="plan-task-monitor__plan-close" aria-label="关闭" @click="close">
+                <i class="ri-close-line" />
+              </button>
+            </div>
+          </header>
           <p v-if="errorText" class="plan-task-monitor__error">{{ errorText }}</p>
           <p v-else-if="!cells.length && !loading" class="plan-task-monitor__error">
             暂无 planAlgorithmDataDTO 伴飞数据
@@ -39,9 +65,6 @@
             />
           </div>
         </div>
-        <footer class="plan-task-monitor__exit-wrap">
-          <button type="button" class="plan-task-monitor__exit" @click="close">退出查看</button>
-        </footer>
       </div>
     </Transition>
   </Teleport>
@@ -54,7 +77,13 @@ import { FlightPlanService } from "@/api/plan.js";
 import { AccompanyingFlyService } from "@/api/index.js";
 import { useDeviceStore } from "@/stores/device.js";
 import { normalizeDroneRecord } from "@/stores/device.js";
+import { useFlightPlanStore, normalizeFlightPlanRecord } from "@/stores/flightPlan.js";
 import PlanTaskMonitorDroneCell from "@/components/plan-panel/PlanTaskMonitorDroneCell.vue";
+import MountainRescueIcon from "@/components/icons/MountainRescueIcon.vue";
+import WaterObservationIcon from "@/components/icons/WaterObservationIcon.vue";
+import SecurityProtectionIcon from "@/components/icons/SecurityProtectionIcon.vue";
+import { SCENARIO_TITLE_BY_KEY } from "@/components/plan-panel/plan-scenarios.js";
+import { resolvePlanStartModeLabel } from "@/utils/plan-task.js";
 import {
   unwrapPlanAlgorithmDataList,
   normalizePlanAlgorithmSlot,
@@ -80,12 +109,30 @@ const props = defineProps({
 const emit = defineEmits(["exit", "recall"]);
 
 const deviceStore = useDeviceStore();
+const flightPlanStore = useFlightPlanStore();
 const loading = ref(false);
 const errorText = ref("");
 /** @type {import('vue').Ref<Array<Record<string, any>>>} */
 const cells = ref([]);
 const hiddenKeys = ref(new Set());
 const recallLoadingKey = ref("");
+const planScenarioKey = ref("");
+const planStartModeLabel = ref("");
+
+const planScenarioTitle = computed(
+  () => SCENARIO_TITLE_BY_KEY[planScenarioKey.value] || "飞行计划",
+);
+
+function applyPlanMetaFromSources(planId, detail) {
+  const id = String(planId || "").trim();
+  const fromStore =
+    flightPlanStore.executingPlans.find((p) => p.id === id) ||
+    flightPlanStore.upcomingPlans.find((p) => p.id === id) ||
+    null;
+  const normalized = fromStore || normalizeFlightPlanRecord(detail || {});
+  planScenarioKey.value = normalized.scenarioKey || "";
+  planStartModeLabel.value = resolvePlanStartModeLabel(normalized);
+}
 
 const gridMode = computed(() => {
   const n = cells.value.length;
@@ -186,6 +233,7 @@ async function loadMonitorData() {
     ]);
     const droneEventsMap = warnData ? normalizeWarnDataToDroneEvents(warnData) : {};
     const ctx = buildPlanMonitorContext(detail || {});
+    applyPlanMetaFromSources(planId, detail);
     const slots = unwrapPlanAlgorithmDataList(detail)
       .map((raw, index) => normalizePlanAlgorithmSlot(raw, index))
       .slice(0, 4);
@@ -263,6 +311,8 @@ watch(
     if (!v) {
       cells.value = [];
       errorText.value = "";
+      planScenarioKey.value = "";
+      planStartModeLabel.value = "";
     }
   },
 );
@@ -293,8 +343,95 @@ watch(
 .plan-task-monitor__inner {
   flex: 1;
   min-height: 0;
-  // padding: 12px;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+}
+
+.plan-task-monitor__plan-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(30, 30, 30, 0.92);
+}
+
+.plan-task-monitor__plan-head-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.plan-task-monitor__plan-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  color: #4a9eff;
+}
+
+.plan-task-monitor__plan-icon-fallback {
+  font-size: 18px;
+  color: #4a9eff;
+}
+
+.plan-task-monitor__plan-type,
+.plan-task-monitor__plan-mode {
+  white-space: nowrap;
+}
+
+.plan-task-monitor__plan-sep {
+  margin: 0 6px;
+  color: rgba(255, 255, 255, 0.28);
+  font-weight: 400;
+}
+
+.plan-task-monitor__plan-head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.plan-task-monitor__plan-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4cd964;
+  white-space: nowrap;
+}
+
+.plan-task-monitor__plan-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4cd964;
+  box-shadow: 0 0 6px rgba(76, 217, 100, 0.55);
+}
+
+.plan-task-monitor__plan-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 18px;
+  cursor: pointer;
+
+  &:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+  }
 }
 
 .plan-task-monitor__error {
@@ -307,7 +444,7 @@ watch(
 .plan-task-monitor__grid {
   display: grid;
   gap: 10px;
-  height: 100%;
+  flex: 1;
   min-height: 0;
 
   &--1 {
@@ -323,32 +460,6 @@ watch(
   &--4 {
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr 1fr;
-  }
-}
-
-.plan-task-monitor__exit-wrap {
-  flex-shrink: 0;
-  display: flex;
-  justify-content: center;
-  padding: 10px 16px 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  border: 1px solid #30363b;
-  background: rgba(3, 6, 10, 0.92);
-  backdrop-filter: blur(8px);
-}
-
-.plan-task-monitor__exit {
-  border: none;
-  background: none;
-  color: #ff5c5c;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 4px 12px;
-
-  &:hover {
-    text-decoration: underline;
   }
 }
 

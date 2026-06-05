@@ -82,7 +82,7 @@ export function canPlanEmergencyStart(plan) {
   return getPlanStatusNum(plan) !== 1;
 }
 
-/** 执行中：可停止任务 */
+/** 执行中：可取消任务 */
 export function canPlanStopTask(plan) {
   return getPlanStatusNum(plan) === 1;
 }

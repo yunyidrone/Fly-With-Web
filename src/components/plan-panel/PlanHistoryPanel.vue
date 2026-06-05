@@ -1,25 +1,33 @@
 <template>
-  <section v-if="visible" class="history-panel" aria-label="执行任务记录">
+  <section v-if="visible" class="history-panel" aria-label="历史任务记录">
     <header class="history-panel__head">
-      <button type="button" class="history-panel__close" aria-label="关闭" @click="closePanel">
-        <i class="ri-close-line" />
-      </button>
-      <h2 class="history-panel__title">执行任务记录</h2>
-      <div class="history-panel__filters">
-        <span class="history-panel__filter-label">选择开始日期：</span>
-        <el-date-picker
-          v-model="startDate"
-          class="history-panel__date"
-          type="date"
-          placeholder="选择日期"
-          value-format="YYYY-MM-DD"
-          format="YYYY-MM-DD"
-          :clearable="true"
-          :disabled-date="disabledHistoryDate"
-          teleported
-          popper-class="plan-editor-picker-popper"
-        />
-        <button type="button" class="history-panel__reset" @click="onResetDate">重置</button>
+      <div class="history-panel__head-bar">
+        <img :src="tableJlPng" class="history-panel__title-icon" alt="" aria-hidden="true" />
+        <div class="history-panel__title-group">
+          <h2 class="history-panel__title">历史任务记录</h2>
+          <span class="history-panel__title-divider" aria-hidden="true" />
+          <p class="history-panel__subtitle">仅显示30日的数据，数据范围之外需要去平台端查看</p>
+        </div>
+        <div class="history-panel__head-actions">
+          <el-date-picker
+            v-model="dateRange"
+            class="history-panel__date"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            value-format="YYYY-MM-DD"
+            format="YYYY-MM-DD"
+            :clearable="true"
+            :disabled-date="disabledHistoryDate"
+            teleported
+            popper-class="plan-editor-picker-popper"
+          />
+          <button type="button" class="history-panel__reset" @click="onResetDate">重置</button>
+          <button type="button" class="history-panel__close" aria-label="关闭" @click="closePanel">
+            <img :src="tableClosePng" class="history-panel__close-icon" alt="" aria-hidden="true" />
+          </button>
+        </div>
       </div>
     </header>
 
@@ -64,12 +72,12 @@
         <el-table-column prop="scenarioTitle" label="场景类型" min-width="80" />
         <el-table-column prop="subject" label="安保主题" min-width="120" show-overflow-tooltip />
         <el-table-column prop="locationLabel" label="地点选择" min-width="120" show-overflow-tooltip />
-        <el-table-column label="实施时间" min-width="160" show-overflow-tooltip>
+        <el-table-column label="实施时间" width="130" show-overflow-tooltip>
           <template #default="{ row }">
             {{ formatExecuteTimeRange(row) }}
           </template>
         </el-table-column>
-        <el-table-column label="所需资源" min-width="120" show-overflow-tooltip>
+        <el-table-column label="所需资源" width="100" show-overflow-tooltip>
           <template #default="{ row }">
             <el-popover
               v-if="row.resourceText !== '—'"
@@ -102,11 +110,11 @@
           </template>
         </el-table-column>
         <el-table-column prop="warnCount" label="AI事件总数" width="125" align="center" />
-        <el-table-column label="开始时间" min-width="130" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.executeStartTime || "—" }}</template>
+        <el-table-column label="开始时间" width="130" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.startTime || "—" }}</template>
         </el-table-column>
-        <el-table-column label="结束时间" min-width="130" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.executeEndTime || "—" }}</template>
+        <el-table-column label="结束时间" width="130" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.endTime || "—" }}</template>
         </el-table-column>
         <el-table-column prop="startModeLabel" label="开始方式" width="105" />
         <el-table-column label="操作" fixed="right">
@@ -133,25 +141,25 @@
 <script setup>
 import { ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
+
 import { FlightPlanService } from "@/api/plan.js";
 import { unwrapApiList } from "@/utils/request.js";
 import { normalizeWarnDataToFlatEvents } from "@/utils/plan-algorithm-data.js";
 import { SCENARIO_TITLE_BY_KEY } from "@/components/plan-panel/plan-scenarios.js";
 import PlanHistoryQuickScheduleDialog from "@/components/plan-panel/PlanHistoryQuickScheduleDialog.vue";
+import tableJlPng from "@/assets/images/table_jl.png";
+import tableClosePng from "@/assets/images/table_close.png";
 import {
   buildQuickCreateBody,
   historyQuickCreateNeedsSchedule,
 } from "@/utils/plan-history-quick-create.js";
-import {
-  getTodayYmd,
-  isDateInHistoryRange,
-} from "@/utils/plan-history.js";
+import { getTodayYmd, isDateInHistoryRange } from "@/utils/plan-history.js";
 
 const visible = defineModel("visible", { type: Boolean, default: false });
 
 const emit = defineEmits(["quick-create", "deleted"]);
 
-const startDate = ref(getTodayYmd());
+const dateRange = ref([getTodayYmd(), getTodayYmd()]);
 const loading = ref(false);
 const records = ref([]);
 const quickScheduleVisible = ref(false);
@@ -163,15 +171,22 @@ const warnDataCache = ref({});
 
 const tableHeaderStyle = {
   background: "#1c222a",
-  color: "rgba(255,255,255,0.75)",
-  fontWeight: "600",
-  borderColor: "#30363b",
+  color: "rgba(255, 255, 255, 0.85)",
+  fontFamily: "Roboto, sans-serif",
+  fontSize: "14px",
+  fontWeight: "500",
+  lineHeight: "22px",
+  borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
 };
 
 const tableCellStyle = {
-  background: "#03060a",
-  color: "rgba(255,255,255,0.88)",
-  borderColor: "#25272b",
+  background: "transparent",
+  color: "rgba(255, 255, 255, 0.85)",
+  fontFamily: "Roboto, sans-serif",
+  fontSize: "14px",
+  fontWeight: "400",
+  lineHeight: "22px",
+  borderColor: "rgba(255, 255, 255, 0.08)",
 };
 
 function disabledHistoryDate(date) {
@@ -251,8 +266,9 @@ function planToRecord(p) {
     resourceText: formatResourceText(p),
     resourceInfo: Array.isArray(p.resourceInfo) ? p.resourceInfo : [],
     aiEventCount: p.warnCount || 0,
-    executeStartTime: p.executeStartTime || "",
-    executeEndTime: p.executeEndTime || "",
+    warnCount: p.warnCount || 0,
+    startTime: p.startTime || "",
+    endTime: p.endTime || "",
     timeStart: toHm(p.executeStartTime),
     timeEnd: toHm(p.executeEndTime),
     startModeLabel: startTypeLabel(p.startType),
@@ -266,15 +282,15 @@ function closePanel() {
 }
 
 function onResetDate() {
-  startDate.value = getTodayYmd();
+  dateRange.value = [getTodayYmd(), getTodayYmd()];
 }
 
 function buildTimeRange() {
-  const date = startDate.value;
-  if (date) {
+  const range = dateRange.value;
+  if (range && Array.isArray(range) && range.length === 2 && range[0] && range[1]) {
     return {
-      startTime: `${date} 00:00:00`,
-      endTime: `${date} 23:59:59`,
+      startTime: `${range[0]} 00:00:00`,
+      endTime: `${range[1]} 23:59:59`,
     };
   }
   // 未选择日期时，查询近 30 天
@@ -399,7 +415,7 @@ async function onExpandChange(row) {
 }
 
 watch(
-  () => [visible.value, startDate.value],
+  () => [visible.value, dateRange.value],
   ([v]) => {
     if (v) loadRecords();
   },
@@ -414,101 +430,142 @@ watch(
   flex-direction: column;
   max-height: calc(100vh - 110px);
   border: 1px solid #30363b;
-  border-radius: 10px;
-  background: #0d1117;
-  overflow: hidden;
+  border-radius: 6px;
+  background: rgba(3, 6, 10, 0.65);
+  padding: 10px;
 }
 
 .history-panel__head {
+  flex-shrink: 0;
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.history-panel__head-bar {
   display: flex;
   align-items: center;
-  position: relative;
-  gap: 12px;
-  flex-shrink: 0;
-  padding: 14px 16px;
-  border-bottom: 1px solid #30363b;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 6px;
   background: #1c222a;
 }
 
+.history-panel__title-icon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.history-panel__title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.history-panel__title {
+  margin: 0;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  height: 18px;
+  color: #fff;
+  font-family: "HarmonyOS Sans SC", sans-serif;
+  font-size: 18px;
+  font-style: normal;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.history-panel__title-divider {
+  flex-shrink: 0;
+  align-self: center;
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.history-panel__subtitle {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  height: 18px;
+  color: rgba(255, 255, 255, 0.65);
+  font-family: "HarmonyOS Sans SC", sans-serif;
+  font-size: 18px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-panel__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 .history-panel__close {
+  flex-shrink: 0;
   width: 32px;
   height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 20px;
   cursor: pointer;
+  padding: 0;
 
   &:hover {
     background: rgba(255, 255, 255, 0.08);
-    color: #fff;
   }
 }
 
-.history-panel__title {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #fff;
-  white-space: nowrap;
-}
-
-.history-panel__filters {
-  display: flex;
-  align-items: center;
-  margin-left: auto;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.history-panel__filter-label {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.65);
-  white-space: nowrap;
+.history-panel__close-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  display: block;
 }
 
 .history-panel__date {
-  width: 148px;
+  width: 260px;
 }
 
 .history-panel__reset {
   height: 32px;
   padding: 0 14px;
-  border: 1px solid #3b6fd8;
-  border-radius: 4px;
-  background: transparent;
-  color: #fff;
-  font-size: 13px;
+  border: 1px solid #558EFC;
+  border-radius: 2px;
+  background: #15191E;
+  color: rgba(255, 255, 255, 0.85);
+  font-family: Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
   cursor: pointer;
 
   &:hover {
-    background: rgba(59, 111, 216, 0.15);
+    background: rgba(85, 142, 252, 0.1);
   }
-}
-
-.history-panel__mock-tip {
-  flex-shrink: 0;
-  margin: 0;
-  padding: 8px 14px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: rgba(255, 200, 120, 0.95);
-  background: rgba(255, 160, 60, 0.1);
-  border-bottom: 1px solid rgba(255, 160, 60, 0.25);
 }
 
 .history-panel__body {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 12px 14px 16px;
+  padding: 0 0 12px;
 
   &::-webkit-scrollbar {
     width: 6px;
@@ -527,27 +584,51 @@ watch(
       background: rgba(255, 255, 255, 0.25);
     }
   }
+
+  :deep(.el-loading-mask) {
+    background-color: rgba(3, 6, 10, 0.7);
+  }
+
+  :deep(.el-loading-spinner .circular) {
+    circle {
+      stroke: rgba(255, 255, 255, 0.55);
+    }
+
+    .path {
+      stroke: #1890ff;
+    }
+  }
 }
 
 .history-table {
   width: 100%;
-  font-size: var(--el-font-size-small);
-  --el-table-bg-color: #03060a;
-  --el-table-tr-bg-color: #03060a;
+  font-family: Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 22px;
+  --el-table-bg-color: transparent;
+  --el-table-tr-bg-color: transparent;
   --el-table-header-bg-color: #1c222a;
   --el-table-row-hover-bg-color: rgba(255, 255, 255, 0.04);
-  --el-table-border-color: #30363b;
+  --el-table-border-color: rgba(255, 255, 255, 0.08);
+  --el-table-text-color: rgba(255, 255, 255, 0.85);
+  --el-table-header-text-color: rgba(255, 255, 255, 0.85);
 }
 
 .history-events {
-  padding: 8px 8px 8px 48px;
-  background: #15191e;
+  padding: 8px 12px 8px 48px;
+  background: #1c222a;
 }
 
 .history-events-empty {
-  padding: 12px 48px;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px 0;
+  font-family: Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  color: rgba(255, 255, 255, 0.45);
 }
 
 .history-event-row {
@@ -557,8 +638,11 @@ watch(
   align-items: center;
   padding: 8px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.82);
+  font-family: Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  color: rgba(255, 255, 255, 0.85);
 
   &:last-child {
     border-bottom: none;
@@ -583,52 +667,115 @@ watch(
 }
 
 .history-op {
-  margin: 0 4px 0 0;
+  margin: 0 8px 0 0;
   padding: 0;
   border: none;
   background: none;
-  font-size: 12px;
+  font-family: Roboto, sans-serif;
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 22px;
+  color: var(--Primary-6, #1890ff);
   cursor: pointer;
   white-space: nowrap;
 
-  &--primary {
-    color: #6b9fff;
-
-    &:hover {
-      text-decoration: underline;
-    }
+  &:last-child {
+    margin-right: 0;
   }
 
+  &:hover {
+    opacity: 0.85;
+  }
+
+  &--primary,
   &--danger {
-    color: #ff6b6b;
-
-    &:hover {
-      text-decoration: underline;
-    }
+    color: var(--Primary-6, #1890ff);
   }
 }
 
-:deep(.history-panel__date .el-input__wrapper) {
-  height: 36px;
-  background: #03060a;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+:deep(.history-table.el-table) {
+  background: transparent;
 }
 
-:deep(.history-panel__date .el-input__inner) {
-  color: #fff;
+:deep(.history-table .el-table__inner-wrapper::before) {
+  display: none;
 }
 
-:deep(.el-table__expanded-cell) {
-  background: #15191e !important;
+:deep(.history-table .el-table__empty-block) {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+
+:deep(.history-table .el-table__empty-text) {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+:deep(.history-table th.el-table__cell) {
+  background: #1c222a !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+  font-family: Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+:deep(.history-table td.el-table__cell) {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+  font-family: Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  border-bottom: none !important;
+}
+
+:deep(.history-table .el-table__body tr:hover > td.el-table__cell) {
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+:deep(.history-table .el-table__expanded-cell) {
+  background: #1c222a !important;
   padding: 0 !important;
 }
 
+:deep(.history-table .el-table__expanded-cell.el-table__cell) {
+  background: #1c222a !important;
+}
+
+:deep(.history-table .el-table__expand-icon) {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 14px;
+}
+
+:deep(.history-panel__date.el-date-editor--daterange) {
+  height: 32px;
+  border-radius: 2px;
+  border: 1px solid #558EFC;
+  background: #15191E;
+  box-shadow: none;
+}
+
+:deep(.history-panel__date .el-range-input) {
+  color: rgba(255, 255, 255, 0.85);
+  font-family: Roboto, sans-serif;
+  font-size: 14px;
+  background: transparent;
+}
+
+:deep(.history-panel__date .el-range-separator) {
+  color: rgba(255, 255, 255, 0.55);
+}
+
 .history-resource-link {
-  color: #6b9fff;
+  color: var(--Primary-6, #1890ff);
   cursor: pointer;
 
   &:hover {
-    text-decoration: underline;
+    opacity: 0.85;
   }
 }
 </style>
