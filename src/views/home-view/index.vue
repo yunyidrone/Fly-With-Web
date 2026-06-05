@@ -143,11 +143,14 @@ const taskMonitorVisible = ref(false);
 const taskMonitorPlanId = ref("");
 
 function onOpenPlanHistory() {
+  taskMonitorVisible.value = false;
+  closeDroneStream();
   planHistoryVisible.value = true;
-  // leftSidebarRef.value?.selectTab?.("plan");
 }
 
 function onOpenTaskMonitor(planId) {
+  planHistoryVisible.value = false;
+  closeDroneStream();
   taskMonitorPlanId.value = String(planId || "");
   taskMonitorVisible.value = true;
 }
@@ -330,6 +333,8 @@ const streamCompanionTaskTitle = computed(() => {
 
 const openDroneStream = async (device) => {
   if (!device?.id) return;
+  planHistoryVisible.value = false;
+  taskMonitorVisible.value = false;
   const id = String(device.id);
   try {
     const d = await AccompanyingFlyService.droneDetail({ id });

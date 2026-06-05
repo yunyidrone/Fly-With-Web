@@ -241,7 +241,7 @@ const hasTasks = computed(
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 12px 8px;
+  padding: 10px 12px;
 }
 
 .pat-card__head-left {
@@ -298,7 +298,7 @@ const hasTasks = computed(
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 0 12px;
   cursor: pointer;
 }
 

@@ -819,6 +819,9 @@ background: #15191E;
       border-color: rgba(255, 255, 255, 0.12);
     }
   }
+  &:last-child {
+    margin-bottom: 10px;
+  }
 }
 
 .plan-row-card--selected {
