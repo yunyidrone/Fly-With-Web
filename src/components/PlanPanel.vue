@@ -20,7 +20,7 @@
 
       <div class="plan-panel-content">
         <div class="plan-panel-body">
-          <div class="flight-plan-board">
+          <div v-if="hasActiveTasks" class="flight-plan-board flight-plan-board--active">
             <div class="flight-plan-board__tasks">
               <PlanActiveTaskCards
                 @monitor="openTaskMonitor"
@@ -30,7 +30,7 @@
             </div>
           </div>
 
-          <div class="flight-plan-board">
+          <div class="flight-plan-board flight-plan-board--list">
             <div class="flight-plan-board__list-area">
             <div class="scenario-tabs" role="tablist" aria-label="飞行计划场景">
               <button
@@ -140,18 +140,18 @@
                 </template>
               </div>
             </div>
+            </div>
 
-            <div class="plan-footer-actions">
-              <button type="button" class="plan-footer-btn plan-footer-btn--primary" @click="onAddPlan">
-                <i class="ri-add-circle-fill plan-footer-btn__icon" aria-hidden="true" />
-                添加飞行计划
-              </button>
-              <button type="button" class="plan-footer-btn plan-footer-btn--secondary" @click="onHistoryTaskRecords">
-                <i class="ri-clipboard-line plan-footer-btn__icon" aria-hidden="true" />
-                历史任务记录
-              </button>
-            </div>
-            </div>
+          <div v-show="expanded || embedded" class="plan-footer-actions">
+            <button type="button" class="plan-footer-btn plan-footer-btn--primary" @click="onAddPlan">
+              <i class="ri-add-circle-fill plan-footer-btn__icon" aria-hidden="true" />
+              添加飞行计划
+            </button>
+            <button type="button" class="plan-footer-btn plan-footer-btn--secondary" @click="onHistoryTaskRecords">
+              <img :src="tableJlPng" class="plan-footer-btn__icon" alt="" aria-hidden="true" />
+              历史任务记录
+            </button>
+          </div>
           </div>
         </div>
       </div>
@@ -176,6 +176,7 @@ import { useFlightPlanStore } from "@/stores/flightPlan.js";
 import MountainRescueIcon from "@/components/icons/MountainRescueIcon.vue";
 import WaterObservationIcon from "@/components/icons/WaterObservationIcon.vue";
 import SecurityProtectionIcon from "@/components/icons/SecurityProtectionIcon.vue";
+import tableJlPng from "@/assets/images/table_jl.png";
 import {
   resolveLocationLabelsFromPaths,
   normalizePlanLocationPaths,
@@ -207,6 +208,9 @@ const props = defineProps({
 
 const expanded = ref(false);
 const flightPlanStore = useFlightPlanStore();
+const hasActiveTasks = computed(
+  () => flightPlanStore.executingPlans.length > 0 || flightPlanStore.upcomingPlans.length > 0,
+);
 const activeScenarioKey = ref("mountain");
 const selectedRowKey = ref("");
 
@@ -476,20 +480,82 @@ $fp-muted: rgba(255, 255, 255, 0.45);
     bottom: auto;
     z-index: auto;
     width: 100%;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
     transition: none;
 
     &.expanded {
       width: 100%;
     }
 
-    /* 与无人设备一致：内容自然撑开，由侧栏 __body 统一滚动 */
+    .plan-panel-inner {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: visible;
+    }
+
     .plan-panel-content {
-      display: block;
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
 
     .plan-panel-content > .plan-panel-body {
-      overflow: visible;
-      min-height: auto;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .flight-plan-board--active {
+      flex-shrink: 0;
+      max-height: 60%;
+      overflow-y: auto;
+
+      &::-webkit-scrollbar {
+        width: 4px;
+      }
+
+      &::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 2px;
+      }
+    }
+
+    .flight-plan-board--list {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 1fr auto;
+      gap: 0;
+    }
+
+    .flight-plan-board__list-area {
+      min-height: 0;
+      overflow-y: auto;
+
+      &::-webkit-scrollbar {
+        width: 4px;
+      }
+
+      &::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 2px;
+      }
+    }
+
+    .plan-footer-actions {
+      padding: 10px 12px;
+      border-radius: 0 0 6px 6px;
+      border-top: 1px solid #30363B;
+      background: #03060A;
     }
   }
 }
@@ -589,24 +655,21 @@ border: 1px solid #30363B;
 background: rgba(3, 6, 10, 0.65);
 }
 
-.flight-plan-board--active {
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.04);
-}
-
 .flight-plan-board__tasks:empty {
   display: none;
+}
+
+.flight-plan-board--list {
+  flex: 1;
+  min-height: 0;
 }
 
 .flight-plan-board__list-area {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-/* 非嵌入式浮层：整体限高 + 内部滚动 */
-.plan-panel-wrapper:not(.plan-panel-wrapper--embedded) .flight-plan-board {
-  max-height: min(520px, 55vh);
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
 
   &::-webkit-scrollbar {
@@ -617,6 +680,14 @@ background: rgba(3, 6, 10, 0.65);
     background: rgba(255, 255, 255, 0.15);
     border-radius: 2px;
   }
+  gap: 12px;
+  flex: 1;
+  
+}
+
+/* 非嵌入式浮层：整体限高 */
+.plan-panel-wrapper:not(.plan-panel-wrapper--embedded) .flight-plan-board--list {
+  max-height: min(520px, 55vh);
 }
 
 .scenario-tabs {
@@ -694,7 +765,6 @@ background: #15191E;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding-right: 2px;
 }
 
 .plan-empty-state {
@@ -735,7 +805,7 @@ background: #15191E;
   gap: 10px;
   padding: 8px 16px;
   border-radius: 8px;
-  background: $fp-surface;
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid transparent;
   cursor: default;
   transition:
@@ -869,7 +939,12 @@ background: #15191E;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 2px 10px 0;
+  margin: 0 -12px -14px;
+  padding: 10px 14px;
+  border-radius: 0 0 6px 6px;
+  border-top: 1px solid #30363B;
+  background: #03060A;
+  z-index: 1;
 }
 
 .plan-footer-btn {
@@ -903,7 +978,7 @@ background: #15191E;
 }
 
 .plan-footer-btn--primary {
-  background: #3b6fd8;
+  background: linear-gradient(117deg, #3A7ABF 2.56%, #3660C9 37.11%, #5368C9 70.41%, #36C7C2 118.58%);
 }
 
 .plan-footer-btn--secondary {
@@ -911,6 +986,9 @@ background: #15191E;
 }
 
 .plan-footer-btn__icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
   flex-shrink: 0;
   font-size: 18px;
   color: #fff;

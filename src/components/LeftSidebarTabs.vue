@@ -46,7 +46,11 @@
       class="left-sidebar-tabs__divider"
       aria-hidden="true"
     />
-    <div v-show="activeTab != null" class="left-sidebar-tabs__body">
+    <div
+      v-show="activeTab != null"
+      class="left-sidebar-tabs__body"
+      :class="{ 'left-sidebar-tabs__body--inner-scroll': activeTab === 'plan' }"
+    >
       <div
         v-show="activeTab === 'device'"
         class="left-sidebar-tabs__pane"
@@ -116,6 +120,8 @@ $sidebar-width: calc(#{$tab-btn-width} * 2 + #{$tab-head-gap});
     flex-shrink: 0;
     width: $sidebar-width;
     max-width: min($sidebar-width, calc(100vw - 48px));
+    height: 100%;
+    max-height: 100%;
   }
 
   .btn-wrap {
@@ -228,12 +234,27 @@ $sidebar-width: calc(#{$tab-btn-width} * 2 + #{$tab-head-gap});
     &::-webkit-scrollbar-thumb:hover {
       background: rgba(255, 255, 255, 0.25);
     }
+
+    /* 飞行计划：由 PlanPanel 内部滚动，底部操作栏固定在侧栏底 */
+    &--inner-scroll {
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
   }
 
   &__pane {
     min-height: 0;
     width: 100%;
     box-sizing: border-box;
+  }
+
+  &__body--inner-scroll &__pane {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 }
 </style>
