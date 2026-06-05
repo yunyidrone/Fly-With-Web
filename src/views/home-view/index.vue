@@ -150,7 +150,6 @@ function onOpenPlanHistory() {
 function onOpenTaskMonitor(planId) {
   taskMonitorPlanId.value = String(planId || "");
   taskMonitorVisible.value = true;
-  leftSidebarRef.value?.selectTab?.("plan");
 }
 
 async function onTaskMonitorRecall() {

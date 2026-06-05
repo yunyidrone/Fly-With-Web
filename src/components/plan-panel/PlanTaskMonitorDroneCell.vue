@@ -2,9 +2,9 @@
   <article class="ptm-cell" :class="{ 'ptm-cell--collapsed': hidden }">
     <header class="ptm-cell__subhead">
       <div class="ptm-cell__drone-title">
-        <i class="ri-flight-takeoff-line ptm-cell__drone-icon" aria-hidden="true" />
+        <img :src="sjWrjPng" class="ptm-cell__drone-icon" alt="" aria-hidden="true" />
         <span class="ptm-cell__drone-name">
-          {{ display.name }}<template v-if="display.id">{{ display.id }}</template>
+          {{ display.name }}<template v-if="display.id">【ID：{{ display.id }}】</template>
         </span>
       </div>
       <button
@@ -61,7 +61,7 @@
             <img :src="arrowRightPng" alt="" class="ptm-cell__chev" width="16" height="16" aria-hidden="true" />
             {{ perspectiveVideoText }}
           </span>
-          <div class="ptm-cell__view-switch" role="group" aria-label="视角切换">
+          <!-- <div class="ptm-cell__view-switch" role="group" aria-label="视角切换">
             <button
               type="button"
               class="ptm-cell__view-tile"
@@ -86,7 +86,7 @@
               </span>
               <span class="ptm-cell__view-label">机场视角</span>
             </button>
-          </div>
+          </div> -->
         </div>
         <button type="button" class="ptm-cell__shot-btn" aria-label="截图" @click.stop>
           <span class="ptm-cell__shot-icon-frame">
@@ -106,15 +106,17 @@
       </div>
 
       <div class="ptm-cell__info">
-        <p class="ptm-cell__route">航线信息：{{ routeLabel || "—" }}</p>
+        <p class="ptm-cell__route">航线信息：系统设定</p>
         <ul class="ptm-cell__ai-list">
-          <li v-for="(ev, idx) in aiEventSlots" :key="idx" class="ptm-cell__ai-line">
-            <span class="ptm-cell__ai-k">ai事件：</span>
-            <template v-if="ev">
+          <template v-if="hasAiEvents">
+            <li v-for="(ev, idx) in aiEventSlots" :key="idx" class="ptm-cell__ai-line" v-show="ev">
+              <span class="ptm-cell__ai-k">ai事件：</span>
               {{ ev.warnType }}
               <span v-if="ev.eventTime" class="ptm-cell__ai-time">{{ ev.eventTime }}</span>
-            </template>
-            <template v-else>—</template>
+            </li>
+          </template>
+          <li v-else class="ptm-cell__ai-line">
+            <span class="ptm-cell__ai-k">AI事件：</span>暂无AI事件
           </li>
         </ul>
       </div>
@@ -171,6 +173,8 @@ const emit = defineEmits(["recall", "toggle-visible"]);
 
 const AI_EVENT_SLOT_COUNT = 5;
 
+const hasAiEvents = computed(() => (props.events || []).length > 0);
+
 const aiEventSlots = computed(() => {
   const list = (props.events || []).slice(0, AI_EVENT_SLOT_COUNT);
   return Array.from({ length: AI_EVENT_SLOT_COUNT }, (_, i) => list[i] || null);
@@ -194,8 +198,9 @@ const liveDrone = useLiveDroneTelemetry(
 
 function pickNumber(...values) {
   for (const v of values) {
+    if (v == null) continue;
     const n = Number(v);
-    if (Number.isFinite(n)) return n;
+    if (Number.isFinite(n) && n !== 0) return n;
   }
   return null;
 }
@@ -258,12 +263,14 @@ const perspectiveVideoText = computed(() =>
 );
 
 function formatCoord(v) {
+  if (v == null) return "—";
   const n = Number(v);
   if (!Number.isFinite(n)) return "—";
   return n.toFixed(2);
 }
 
 function formatAngle(v) {
+  if (v == null) return "—";
   const n = Number(v);
   if (!Number.isFinite(n)) return "—";
   return `${n.toFixed(0)}°`;
@@ -290,9 +297,9 @@ async function enterVideoFullscreen() {
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  background: #1a1f26;
+  border: 1px solid #30363B;
+  border-radius: 6px;
+  background: rgba(3, 6, 10, 0.65);
   overflow: hidden;
 
   &--collapsed {
@@ -306,9 +313,10 @@ async function enterVideoFullscreen() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
   padding: 10px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  background: #1C222A;
+  margin: 10px 10px 0 10px;
 }
 
 .ptm-cell__drone-title {
@@ -322,9 +330,10 @@ async function enterVideoFullscreen() {
 }
 
 .ptm-cell__drone-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
   flex-shrink: 0;
-  font-size: 18px;
-  color: rgba(255, 255, 255, 0.75);
 }
 
 .ptm-cell__drone-name {
@@ -359,7 +368,7 @@ async function enterVideoFullscreen() {
 }
 
 .ptm-cell__telemetry {
-  padding: 10px 12px 0;
+  padding: 8px 10px 0;
 
   &--compact {
     padding-bottom: 10px;
@@ -370,7 +379,7 @@ async function enterVideoFullscreen() {
   display: flex;
   align-items: stretch;
   justify-content: space-between;
-  gap: 8px;
+  gap: 4px;
   margin-bottom: 8px;
   font-size: 13px;
 
@@ -578,11 +587,15 @@ async function enterVideoFullscreen() {
 
 .ptm-cell__route {
   margin: 0 0 4px;
+  padding: 6px 10px;
+  border-radius: 2px 2px 0 0;
+  background: #1C222A;
 }
 
 .ptm-cell__ai-list {
   margin: 0;
   padding: 0;
+  padding-left: 10px;
   list-style: none;
   min-height: calc(5 * 1.55em);
 }

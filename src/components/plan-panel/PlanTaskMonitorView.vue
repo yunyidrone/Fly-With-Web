@@ -9,33 +9,40 @@
         aria-modal="true"
         aria-label="任务监控"
       >
-        <div v-loading="loading" class="plan-task-monitor__inner">
-          <header v-if="planScenarioTitle && cells.length" class="plan-task-monitor__plan-head">
-            <div class="plan-task-monitor__plan-head-left">
-              <span v-if="planScenarioKey === 'mountain'" class="plan-task-monitor__plan-icon" aria-hidden="true">
-                <MountainRescueIcon :width="18" :height="18" />
-              </span>
-              <span v-else-if="planScenarioKey === 'water'" class="plan-task-monitor__plan-icon" aria-hidden="true">
-                <WaterObservationIcon :width="18" :height="18" />
-              </span>
-              <span v-else-if="planScenarioKey === 'security'" class="plan-task-monitor__plan-icon" aria-hidden="true">
-                <SecurityProtectionIcon :width="18" :height="18" />
-              </span>
-              <i v-else class="ri-shield-check-line plan-task-monitor__plan-icon-fallback" aria-hidden="true" />
-              <span class="plan-task-monitor__plan-type">{{ planScenarioTitle }}</span>
-              <span class="plan-task-monitor__plan-sep" aria-hidden="true">|</span>
-              <span class="plan-task-monitor__plan-mode">{{ planStartModeLabel }}</span>
-            </div>
-            <div class="plan-task-monitor__plan-head-right">
-              <span class="plan-task-monitor__plan-status">
-                <i class="plan-task-monitor__plan-status-dot" aria-hidden="true" />
-                执行中
-              </span>
-              <button type="button" class="plan-task-monitor__plan-close" aria-label="关闭" @click="close">
-                <i class="ri-close-line" />
-              </button>
-            </div>
-          </header>
+        <div
+          v-loading="loading"
+          element-loading-text="正在加载中"
+          class="plan-task-monitor__inner"
+        >
+          
+          <div v-if="planScenarioTitle && cells.length" class="plan-task-monitor__head-wrap">
+            <header class="plan-task-monitor__plan-head">
+              <div class="plan-task-monitor__plan-head-left">
+                <span v-if="planScenarioKey === 'mountain'" class="plan-task-monitor__plan-icon" aria-hidden="true">
+                  <MountainRescueIcon :width="18" :height="18" />
+                </span>
+                <span v-else-if="planScenarioKey === 'water'" class="plan-task-monitor__plan-icon" aria-hidden="true">
+                  <WaterObservationIcon :width="18" :height="18" />
+                </span>
+                <span v-else-if="planScenarioKey === 'security'" class="plan-task-monitor__plan-icon" aria-hidden="true">
+                  <SecurityProtectionIcon :width="18" :height="18" />
+                </span>
+                <i v-else class="ri-shield-check-line plan-task-monitor__plan-icon-fallback" aria-hidden="true" />
+                <span class="plan-task-monitor__plan-type">{{ planScenarioTitle }}</span>
+                <span class="plan-task-monitor__plan-sep" aria-hidden="true">|</span>
+                <span class="plan-task-monitor__plan-mode">{{ planStartModeLabel }}</span>
+              </div>
+              <div class="plan-task-monitor__plan-head-right">
+                <span class="plan-task-monitor__plan-status">
+                  <i class="plan-task-monitor__plan-status-dot" aria-hidden="true" />
+                  执行中
+                </span>
+                <button type="button" class="plan-task-monitor__plan-close" aria-label="关闭" @click="close">
+                  <img :src="tableClosePng" class="plan-task-monitor__close-icon" alt="" aria-hidden="true" />
+                </button>
+              </div>
+            </header>
+          </div>
           <p v-if="errorText" class="plan-task-monitor__error">{{ errorText }}</p>
           <p v-else-if="!cells.length && !loading" class="plan-task-monitor__error">
             暂无 planAlgorithmDataDTO 伴飞数据
@@ -84,6 +91,7 @@ import WaterObservationIcon from "@/components/icons/WaterObservationIcon.vue";
 import SecurityProtectionIcon from "@/components/icons/SecurityProtectionIcon.vue";
 import { SCENARIO_TITLE_BY_KEY } from "@/components/plan-panel/plan-scenarios.js";
 import { resolvePlanStartModeLabel } from "@/utils/plan-task.js";
+import tableClosePng from "@/assets/images/table_close.png";
 import {
   unwrapPlanAlgorithmDataList,
   normalizePlanAlgorithmSlot,
@@ -226,7 +234,6 @@ async function loadMonitorData() {
   hiddenKeys.value = new Set();
   await ensureDroneOsdMqtt();
   try {
-    await deviceStore.fetchDroneList();
     const [detail, warnData] = await Promise.all([
       FlightPlanService.planDetail({ id: planId }),
       FlightPlanService.planWarnData({ id: planId }).catch(() => null),
@@ -346,19 +353,43 @@ watch(
   display: flex;
   flex-direction: column;
   overflow: hidden;
+
+  :deep(.el-loading-mask) {
+    background-color: rgba(3, 6, 10, 0.7);
+  }
+
+  :deep(.el-loading-spinner .circular) {
+    circle {
+      stroke: rgba(255, 255, 255, 0.55);
+    }
+
+    .path {
+      stroke: #1890ff;
+    }
+  }
+
+  :deep(.el-loading-text) {
+    color: rgba(255, 255, 255, 0.65);
+  }
+}
+
+.plan-task-monitor__head-wrap {
+  flex-shrink: 0;
+  margin-bottom: 1px;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #30363B;
+  background: rgba(3, 6, 10, 0.65);
 }
 
 .plan-task-monitor__plan-head {
-  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
   padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(30, 30, 30, 0.92);
+  border-radius: 6px;
+  background: #1C222A;
 }
 
 .plan-task-monitor__plan-head-left {
@@ -374,19 +405,21 @@ watch(
 .plan-task-monitor__plan-icon {
   flex-shrink: 0;
   display: inline-flex;
-  color: #4a9eff;
+  color: #fff;
 }
 
 .plan-task-monitor__plan-icon-fallback {
   font-size: 18px;
-  color: #4a9eff;
+  color: #fff;
 }
 
 .plan-task-monitor__plan-type,
 .plan-task-monitor__plan-mode {
   white-space: nowrap;
 }
-
+.plan-task-monitor__plan-mode{
+  color: rgba(255, 255, 255, 0.65);
+}
 .plan-task-monitor__plan-sep {
   margin: 0 6px;
   color: rgba(255, 255, 255, 0.28);
@@ -421,17 +454,24 @@ watch(
 .plan-task-monitor__plan-close {
   width: 28px;
   height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.65);
-  font-size: 18px;
   cursor: pointer;
 
   &:hover {
-    color: #fff;
     background: rgba(255, 255, 255, 0.08);
   }
+}
+
+.plan-task-monitor__close-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  display: block;
 }
 
 .plan-task-monitor__error {

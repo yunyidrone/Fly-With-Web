@@ -575,7 +575,7 @@ $fp-muted: rgba(255, 255, 255, 0.45);
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    // gap: 10px;
   }
 }
 
