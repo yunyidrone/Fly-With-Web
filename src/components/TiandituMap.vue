@@ -1623,6 +1623,7 @@ const initDeferredViewerFeatures = (viewer) => {
 const initViewer = () => {
   // initialize cesium Viewer
   mainViewer = new Cesium.Viewer("cesiumContainer", {
+    resolutionScale: window.devicePixelRatio || 1,
     sceneMode: Cesium.SceneMode.SCENE3D,
     shouldAnimate: true,
     sceneModePicker: false,
@@ -1645,10 +1646,17 @@ const initViewer = () => {
         antialias: true,
         // 这里的配置有时在初始化参数中，有时需要手动在scene设置
       },
+      msaaSamples: 4, 
     },
   });
 
   mainViewer.scene.logarithmicDepthBuffer = true;
+
+  // 修复标注图标锯齿问题
+  // if (mainViewer.scene.postProcessStages) {
+  //   mainViewer.scene.postProcessStages.fxaa.enabled = false;
+  // }
+
   // 关闭大气/雾效，避免整体偏色（发紫/发蓝）。
   mainViewer.scene.skyAtmosphere.show = false;
   mainViewer.scene.fog.enabled = false;

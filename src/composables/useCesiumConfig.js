@@ -43,6 +43,7 @@ export const getTdtLayerProvider = (layerCode) => {
  */
 export const getViewerDefaultOptions = (isMainViewer = true) => {
   const commonOptions = {
+    resolutionScale: window.devicePixelRatio || 1,
     sceneMode: Cesium.SceneMode.SCENE3D,
     shouldAnimate: true,
     sceneModePicker: false,
