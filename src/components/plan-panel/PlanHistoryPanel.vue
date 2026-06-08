@@ -143,6 +143,19 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <div v-if="total > pageSize" class="history-pagination">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :total="total"
+          :page-sizes="[10, 20, 50, 100]"
+          layout="total, sizes, prev, pager, next"
+          background
+          popper-class="history-pagination-popper"
+          @change="loadRecords"
+        />
+      </div>
     </div>
 
     <PlanHistoryQuickScheduleDialog
@@ -187,6 +200,9 @@ const scenarioTypeOptions = PLAN_SCENARIOS.map((s) => ({
 }));
 const loading = ref(false);
 const records = ref([]);
+const currentPage = ref(1);
+const pageSize = ref(10);
+const total = ref(0);
 const quickScheduleVisible = ref(false);
 /** @type {import('vue').Ref<Record<string, any> | null>} */
 const quickCreateRow = ref(null);
@@ -340,8 +356,8 @@ async function loadRecords() {
   try {
     const range = buildTimeRange();
     const query = {
-      current: 1,
-      pageSize: 200,
+      current: currentPage.value,
+      pageSize: pageSize.value,
       ...range,
     };
     if (scenarioType.value != null && scenarioType.value !== "") {
@@ -349,6 +365,7 @@ async function loadRecords() {
     }
     const data = await FlightPlanService.recordPageQuery(query);
     const list = unwrapApiList(data);
+    total.value = data?.total ?? data?.data?.total ?? list.length;
     records.value = list.map(planToRecord).filter((r) => r.id);
   } catch (e) {
     console.error("[PlanHistory] loadRecords failed:", e);
@@ -416,7 +433,12 @@ function onDeleteRecord(row) {
     .then(async () => {
       try {
         await FlightPlanService.planDelete({ id: planId });
+        total.value = Math.max(0, total.value - 1);
         records.value = records.value.filter((r) => r.id !== row.id);
+        if (records.value.length === 0 && currentPage.value > 1) {
+          currentPage.value--;
+          loadRecords();
+        }
         ElMessage.success("已删除计划");
         emit("deleted", row);
       } catch (e) {
@@ -447,7 +469,10 @@ async function onExpandChange(row) {
 watch(
   () => [visible.value, dateRange.value, scenarioType.value],
   ([v]) => {
-    if (v) loadRecords();
+    if (v) {
+      currentPage.value = 1;
+      loadRecords();
+    }
   },
 );
 </script>
@@ -825,6 +850,83 @@ watch(
   }
 }
 
+.history-pagination {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 4px;
+
+  :deep(.el-pagination__total) {
+    color: #fff !important;
+  }
+
+  // Page size select
+  :deep(.el-pagination__sizes) {
+    .el-select__wrapper {
+      // min-height: 32px !important;
+      // border-radius: 2px !important;
+      border: 1px solid rgba(255, 255, 255, 0.15) !important;
+      background: #15191e !important;
+      box-shadow: none !important;
+    }
+
+    .el-select__placeholder,
+    .el-select__selected-item {
+      color: rgba(255, 255, 255, 0.85) !important;
+    }
+
+    .el-select__caret {
+      color: rgba(255, 255, 255, 0.55) !important;
+    }
+  }
+
+  // Prev / Next buttons
+  :deep(.btn-prev),
+  :deep(.btn-next) {
+    // min-width: 32px !important;
+    // height: 32px !important;
+    border-radius: 2px !important;
+    border: 1px solid #558efc !important;
+    background: #15191e !important;
+    color: rgba(255, 255, 255, 0.85) !important;
+  }
+
+  :deep(.btn-prev:hover:not(:disabled)),
+  :deep(.btn-next:hover:not(:disabled)) {
+    color: #fff !important;
+    background: rgba(85, 142, 252, 0.15) !important;
+  }
+
+  :deep(.btn-prev:disabled),
+  :deep(.btn-next:disabled) {
+    color: rgba(255, 255, 255, 0.25) !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+    background: #15191e !important;
+  }
+
+  // Page numbers
+  :deep(.el-pager li) {
+    // min-width: 32px !important;
+    // height: 32px !important;
+    border-radius: 2px !important;
+    border: 1px solid #558efc !important;
+    background: #15191e !important;
+    color: rgba(255, 255, 255, 0.85) !important;
+    font-weight: 400 !important;
+    line-height: 30px !important;
+  }
+
+  :deep(.el-pager li:hover:not(.is-active):not(.is-disabled)) {
+    color: #fff !important;
+    background: rgba(85, 142, 252, 0.15) !important;
+  }
+
+  :deep(.el-pager li.is-active) {
+    background: #1890ff !important;
+    border-color: #1890ff !important;
+    color: #fff !important;
+  }
+}
+
 .history-resource-link {
   color: var(--Primary-6, #1890ff);
   cursor: pointer;
@@ -836,6 +938,33 @@ watch(
 </style>
 
 <style lang="scss">
+.history-pagination-popper.el-popper {
+  --el-bg-color-overlay: #1a1f28;
+  --el-fill-color-blank: #15191e;
+  --el-text-color-regular: rgba(255, 255, 255, 0.88);
+  --el-border-color-light: rgba(255, 255, 255, 0.12);
+  background: #1a1f28 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+
+  .el-select-dropdown__item {
+    color: rgba(255, 255, 255, 0.88);
+
+    &.is-hovering,
+    &:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    &.is-selected {
+      color: #558efc;
+    }
+  }
+
+  .el-popper__arrow::before {
+    background: #1a1f28 !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+  }
+}
+
 .history-panel__scenario-popper.el-popper {
   --el-bg-color-overlay: #1a1f28;
   --el-fill-color-blank: #15191e;
