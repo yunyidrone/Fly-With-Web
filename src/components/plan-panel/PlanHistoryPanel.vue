@@ -23,7 +23,22 @@
             teleported
             popper-class="plan-editor-picker-popper"
           />
-          <button type="button" class="history-panel__reset" @click="onResetDate">重置</button>
+          <el-select
+            v-model="scenarioType"
+            class="history-panel__scenario"
+            placeholder="全部场景"
+            clearable
+            teleported
+            popper-class="history-panel__scenario-popper"
+          >
+            <el-option
+              v-for="opt in scenarioTypeOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+          <button type="button" class="history-panel__reset" @click="onResetFilters">重置</button>
           <button type="button" class="history-panel__close" aria-label="关闭" @click="closePanel">
             <img :src="tableClosePng" class="history-panel__close-icon" alt="" aria-hidden="true" />
           </button>
@@ -145,7 +160,11 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { FlightPlanService } from "@/api/plan.js";
 import { unwrapApiList } from "@/utils/request.js";
 import { normalizeWarnDataToFlatEvents } from "@/utils/plan-algorithm-data.js";
-import { SCENARIO_TITLE_BY_KEY } from "@/components/plan-panel/plan-scenarios.js";
+import {
+  PLAN_SCENARIOS,
+  SCENARIO_TITLE_BY_KEY,
+  TAB_TO_API_TYPE,
+} from "@/components/plan-panel/plan-scenarios.js";
 import PlanHistoryQuickScheduleDialog from "@/components/plan-panel/PlanHistoryQuickScheduleDialog.vue";
 import tableJlPng from "@/assets/images/table_jl.png";
 import tableClosePng from "@/assets/images/table_close.png";
@@ -160,6 +179,12 @@ const visible = defineModel("visible", { type: Boolean, default: false });
 const emit = defineEmits(["quick-create", "deleted"]);
 
 const dateRange = ref([getTodayYmd(), getTodayYmd()]);
+/** @type {import('vue').Ref<number | null>} 1山林救援 2水上观察 3重点安保 */
+const scenarioType = ref(null);
+const scenarioTypeOptions = PLAN_SCENARIOS.map((s) => ({
+  value: TAB_TO_API_TYPE[s.key],
+  label: s.title,
+}));
 const loading = ref(false);
 const records = ref([]);
 const quickScheduleVisible = ref(false);
@@ -281,8 +306,9 @@ function closePanel() {
   visible.value = false;
 }
 
-function onResetDate() {
+function onResetFilters() {
   dateRange.value = [getTodayYmd(), getTodayYmd()];
+  scenarioType.value = null;
 }
 
 function buildTimeRange() {
@@ -313,11 +339,15 @@ async function loadRecords() {
   loading.value = true;
   try {
     const range = buildTimeRange();
-    const data = await FlightPlanService.recordPageQuery({
+    const query = {
       current: 1,
       pageSize: 200,
       ...range,
-    });
+    };
+    if (scenarioType.value != null && scenarioType.value !== "") {
+      query.type = scenarioType.value;
+    }
+    const data = await FlightPlanService.recordPageQuery(query);
     const list = unwrapApiList(data);
     records.value = list.map(planToRecord).filter((r) => r.id);
   } catch (e) {
@@ -415,7 +445,7 @@ async function onExpandChange(row) {
 }
 
 watch(
-  () => [visible.value, dateRange.value],
+  () => [visible.value, dateRange.value, scenarioType.value],
   ([v]) => {
     if (v) loadRecords();
   },
@@ -541,6 +571,10 @@ watch(
 
 .history-panel__date {
   width: 260px;
+}
+
+.history-panel__scenario {
+  width: 140px;
 }
 
 .history-panel__reset {
@@ -770,6 +804,27 @@ watch(
   color: rgba(255, 255, 255, 0.55);
 }
 
+:deep(.history-panel__scenario.el-select) {
+  .el-select__wrapper {
+    min-height: 32px;
+    border-radius: 2px;
+    border: 1px solid #558efc;
+    background: #15191e;
+    box-shadow: none;
+  }
+
+  .el-select__placeholder,
+  .el-select__selected-item {
+    color: rgba(255, 255, 255, 0.85);
+    font-family: Roboto, sans-serif;
+    font-size: 14px;
+  }
+
+  .el-select__caret {
+    color: rgba(255, 255, 255, 0.55);
+  }
+}
+
 .history-resource-link {
   color: var(--Primary-6, #1890ff);
   cursor: pointer;
@@ -781,6 +836,34 @@ watch(
 </style>
 
 <style lang="scss">
+.history-panel__scenario-popper.el-popper {
+  --el-bg-color-overlay: #1a1f28;
+  --el-fill-color-blank: #15191e;
+  --el-text-color-regular: rgba(255, 255, 255, 0.88);
+  --el-border-color-light: rgba(255, 255, 255, 0.12);
+  background: #1a1f28 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+
+  .el-select-dropdown__item {
+    color: rgba(255, 255, 255, 0.88);
+
+    &.is-hovering,
+    &:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    &.is-selected {
+      color: #6b9fff;
+      font-weight: 600;
+    }
+  }
+
+  .el-popper__arrow::before {
+    background: #1a1f28 !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+  }
+}
+
 .history-resource-popover {
   background: #1c222a !important;
   border: 1px solid #30363b !important;

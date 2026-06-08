@@ -141,11 +141,11 @@ export function formatPlanDateTimeLine(date, time) {
  */
 export function resolvePlanStartModeLabel(plan) {
   const raw = plan?.raw ?? plan;
-  const t = raw?.startType ?? raw?.startWay ?? raw?.launchType ?? raw?.followStartType;
-  if (t === 1 || t === "1" || t === "emergency" || raw?.emergencyStart === 1) {
+  const t = raw?.startType;
+  if (t === 1 || t === "1") {
     return "紧急启动";
   }
-  if (t === 2 || t === "2" || t === "scheduled" || t === "onTime") {
+  if (t === 2 || t === "2") {
     return "按时启动";
   }
   if (Number(plan?.status) === 1 && raw?.actualStartTime) {

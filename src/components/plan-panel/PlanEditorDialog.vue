@@ -142,8 +142,18 @@
                   <template v-else>
                     <div v-if="algorithmListLoading" class="plan-algorithm-empty">加载中…</div>
                     <div v-else-if="!algorithmList.length" class="plan-algorithm-empty">暂无可用算法</div>
+                    <template v-else>
+                    <div class="plan-algorithm-toolbar">
+                      <el-checkbox
+                        :model-value="isAllAlgorithmsSelected"
+                        :indeterminate="isAlgorithmsIndeterminate"
+                        class="plan-algorithm-row__cb plan-algorithm-select-all"
+                        @change="onToggleAllAlgorithms"
+                      >
+                        <span class="plan-algorithm-row__text">一键勾选</span>
+                      </el-checkbox>
+                    </div>
                     <el-checkbox-group
-                      v-else
                       v-model="addForm.algorithmIds"
                       class="plan-algorithm-group"
                     >
@@ -159,6 +169,7 @@
                         </el-checkbox>
                       </div>
                     </el-checkbox-group>
+                    </template>
                   </template>
                 </div>
               </section>
@@ -585,6 +596,27 @@ const readonlyLocationTreeData = computed(() => {
   });
   return tree;
 });
+const allAlgorithmIds = computed(() =>
+  algorithmList.value.map((item) => item.algorithmId),
+);
+
+const isAllAlgorithmsSelected = computed(() => {
+  const all = allAlgorithmIds.value;
+  if (!all.length) return false;
+  const selected = new Set(addForm.algorithmIds);
+  return all.every((id) => selected.has(id));
+});
+
+const isAlgorithmsIndeterminate = computed(() => {
+  const total = allAlgorithmIds.value.length;
+  const selected = addForm.algorithmIds.length;
+  return selected > 0 && selected < total;
+});
+
+function onToggleAllAlgorithms(checked) {
+  addForm.algorithmIds = checked ? [...allAlgorithmIds.value] : [];
+}
+
 const viewAlgorithmText = computed(() => {
   const ids = addForm.algorithmIds;
   if (!ids || !ids.length) return "暂未选择算法";
@@ -1264,6 +1296,18 @@ background: #1C222A;
   background: #03060a;
   margin-top: 5px;
   overflow: visible;
+}
+
+.plan-algorithm-toolbar {
+  width: 100%;
+  min-height: 40px;
+  margin-bottom: 4px;
+  // border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.plan-algorithm-select-all .plan-algorithm-row__text {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .plan-algorithm-group {

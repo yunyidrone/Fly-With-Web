@@ -754,8 +754,15 @@ let dronePositionProp = new Cesium.SampledPositionProperty();
 const VEHICLE_HIGHLIGHT_COLOR = Cesium.Color.fromCssColorString("#ffcc00");
 const VEHICLE_NORMAL_PATH_COLOR =
   Cesium.Color.fromCssColorString("#00eeee");
+const OFFICER_NORMAL_PATH_COLOR =
+  Cesium.Color.fromCssColorString("#66ccff");
 const VEHICLE_LABEL_COLOR = Cesium.Color.fromCssColorString("#5794DF");
 const DRONE_LABEL_COLOR = Cesium.Color.fromCssColorString("#0EF2F2");
+
+function resolveTargetType(target) {
+  const type = Number(target?.type);
+  return Number.isFinite(type) ? type : 1;
+}
 
 const getVehicleDeviceIdFromEntity = (entity) => {
   const propDeviceId = entity?.properties?.deviceId;
@@ -1021,6 +1028,119 @@ const vehicleManager = {
   },
 };
 
+// 警员目标管理（billboard + 采样位置 + 轨迹，与 vehicleManager 分离）
+const officerManager = {
+  officers: new Map(),
+
+  createOfficer(viewer, deviceId, labelText = deviceId) {
+    if (this.officers.has(deviceId)) {
+      return this.officers.get(deviceId);
+    }
+
+    const positionProp = new Cesium.SampledPositionProperty();
+    positionProp.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+    positionProp.backwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+    positionProp.setInterpolationOptions({
+      interpolationDegree: 1,
+      interpolationAlgorithm: Cesium.HermitePolynomialApproximation,
+    });
+
+    const defaultPathMaterial = new Cesium.PolylineGlowMaterialProperty({
+      glowPower: 0.2,
+      taperPower: 0.7,
+      color: OFFICER_NORMAL_PATH_COLOR,
+    });
+
+    const entity = viewer.entities.add({
+      availability: new Cesium.TimeIntervalCollection([
+        new Cesium.TimeInterval({
+          start: viewer.clock.startTime,
+          stop: Cesium.JulianDate.fromIso8601("9999-12-31T23:59:59Z"),
+        }),
+      ]),
+      position: positionProp,
+      properties: {
+        deviceId,
+        deviceName: labelText || deviceId,
+        targetType: 2,
+      },
+      billboard: {
+        image: dtJyPng,
+        width: 34,
+        height: 34,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: labelText || deviceId,
+        font: "14px sans-serif",
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new Cesium.Cartesian2(0, -38),
+        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      path: {
+        show: routeLayerVisible,
+        width: 4,
+        material: defaultPathMaterial,
+        leadTime: 0,
+        trailTime: 999999,
+      },
+      show: targetLayerVisibility.officer,
+    });
+
+    this.officers.set(deviceId, {
+      entity,
+      positionProp,
+      lastPosition: null,
+      defaultPathMaterial,
+    });
+    return this.officers.get(deviceId);
+  },
+
+  updateOfficerPosition(deviceId, longitude, latitude, height = 0) {
+    const officer = this.officers.get(deviceId);
+    if (!officer) return;
+
+    const currentTime = mainViewer.clock.currentTime;
+    const newPosition = Cesium.Cartesian3.fromDegrees(
+      longitude,
+      latitude,
+      height,
+    );
+    officer.positionProp.addSample(currentTime, newPosition);
+    officer.lastPosition = { longitude, latitude, height };
+  },
+
+  updateOfficerLabel(deviceId, labelText) {
+    const officer = this.officers.get(deviceId);
+    if (!officer?.entity?.label) return;
+    officer.entity.label.text = labelText || deviceId;
+    if (officer.entity.properties?.deviceName) {
+      officer.entity.properties.deviceName = labelText || deviceId;
+    }
+  },
+
+  removeOfficer(deviceId) {
+    const officer = this.officers.get(deviceId);
+    if (!officer) return;
+    mainViewer?.entities?.remove(officer.entity);
+    this.officers.delete(deviceId);
+  },
+
+  clearAll() {
+    this.officers.forEach((officer) => {
+      mainViewer?.entities?.remove(officer.entity);
+    });
+    this.officers.clear();
+  },
+};
+
 // 多无人机测试管理器
 const droneTestManager = {
   drones: new Map(),
@@ -1283,7 +1403,6 @@ const viewerLoadCount = ref(0);
 
 // 定义展示模式：'model' 代表车，'point' 代表立体圆点
 const vehicleDisplayMode = ref("model");
-const targetOfficerEntities = new Map();
 const targetLayerVisibility = reactive({
   policeCar: true,
   officer: false,
@@ -3434,32 +3553,68 @@ const handleCarBoxMessage = (topic, data) => {
       target.lat = latitude;
       target.lng = longitude;
     }
-    const vehicle = vehicleManager.createVehicle(
-      mainViewer,
-      deviceId,
-      target?.name || deviceId,
-    );
-    vehicleManager.updateVehicleLabel(deviceId, target?.name || deviceId);
-    vehicleManager.updateVehiclePosition(deviceId, longitude, latitude, 0);
+    const label = target?.name || deviceId;
+    const targetType = resolveTargetType(target);
 
-    if (isFirstPoint) {
-      mainViewer.trackedEntity = vehicle.entity;
-      isLockMode.value = true;
-      switchTrackedView(mainViewer, vehicle.entity, false);
-      isPitch2D.value = false;
-      isFirstPoint = false;
+    if (targetType === 2) {
+      vehicleManager.removeVehicle(deviceId);
+      officerManager.createOfficer(mainViewer, deviceId, label);
+      officerManager.updateOfficerLabel(deviceId, label);
+      officerManager.updateOfficerPosition(deviceId, longitude, latitude, 0);
+
+      if (isFirstPoint) {
+        const officer = officerManager.officers.get(deviceId);
+        if (officer?.entity) {
+          mainViewer.trackedEntity = officer.entity;
+          isLockMode.value = true;
+          switchTrackedView(mainViewer, officer.entity, false);
+          isPitch2D.value = false;
+          isFirstPoint = false;
+        }
+      }
+    } else if (targetType === 3) {
+      vehicleManager.removeVehicle(deviceId);
+      officerManager.removeOfficer(deviceId);
+    } else {
+      officerManager.removeOfficer(deviceId);
+      const vehicle = vehicleManager.createVehicle(
+        mainViewer,
+        deviceId,
+        label,
+      );
+      vehicleManager.updateVehicleLabel(deviceId, label);
+      vehicleManager.updateVehiclePosition(deviceId, longitude, latitude, 0);
+
+      if (isFirstPoint) {
+        mainViewer.trackedEntity = vehicle.entity;
+        isLockMode.value = true;
+        switchTrackedView(mainViewer, vehicle.entity, false);
+        isPitch2D.value = false;
+        isFirstPoint = false;
+      }
     }
   }
 
   if (alarmFlag && alarmFlag !== 0) {
-    const vehicle = vehicleManager.vehicles.get(deviceId);
-    if (vehicle?.entity) {
-      mainViewer.trackedEntity = vehicle.entity;
-      isLockMode.value = true;
-      switchTrackedView(mainViewer, vehicle.entity, false);
-      isPitch2D.value = false;
+    const targetType = resolveTargetType(target);
+    if (targetType === 2) {
+      const officer = officerManager.officers.get(deviceId);
+      if (officer?.entity) {
+        mainViewer.trackedEntity = officer.entity;
+        isLockMode.value = true;
+        switchTrackedView(mainViewer, officer.entity, false);
+        isPitch2D.value = false;
+      }
+    } else {
+      const vehicle = vehicleManager.vehicles.get(deviceId);
+      if (vehicle?.entity) {
+        mainViewer.trackedEntity = vehicle.entity;
+        isLockMode.value = true;
+        switchTrackedView(mainViewer, vehicle.entity, false);
+        isPitch2D.value = false;
+      }
+      lockToVehicle(deviceId);
     }
-    lockToVehicle(deviceId);
     const devicePosition = {
       longitude,
       latitude,
@@ -3493,49 +3648,23 @@ function syncStoreDevicesToMap() {
     const targetType = Number(target.type);
     if (targetType === 2) {
       activeOfficerIds.add(id);
-      let officer = targetOfficerEntities.get(id);
-      const position = Cesium.Cartesian3.fromDegrees(lng, lat, 0);
-      if (!officer) {
-        officer = mainViewer.entities.add({
-          position,
-          properties: {
-            deviceId: id,
-            deviceName: label,
-            targetType: 2,
-          },
-          billboard: {
-            image: dtJyPng,
-            width: 34,
-            height: 34,
-            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-            heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          },
-          label: {
-            text: label,
-            font: "14px sans-serif",
-            fillColor: Cesium.Color.WHITE,
-            outlineColor: Cesium.Color.BLACK,
-            outlineWidth: 2,
-            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-            pixelOffset: new Cesium.Cartesian2(0, -38),
-            heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          },
-          show: targetLayerVisibility.officer,
-        });
-        targetOfficerEntities.set(id, officer);
-      } else {
-        officer.position = position;
-        officer.label.text = label;
-        if (officer.properties?.deviceName) officer.properties.deviceName = label;
-        officer.show = targetLayerVisibility.officer;
-      }
+      vehicleManager.removeVehicle(id);
+      officerManager.createOfficer(mainViewer, id, label);
+      officerManager.updateOfficerLabel(id, label);
+      officerManager.updateOfficerPosition(id, lng, lat, 0);
+      const officer = officerManager.officers.get(id);
+      if (officer?.entity) officer.entity.show = targetLayerVisibility.officer;
+      return;
+    }
+
+    if (targetType === 3) {
+      vehicleManager.removeVehicle(id);
+      officerManager.removeOfficer(id);
       return;
     }
 
     if (targetType === 1 || !Number.isFinite(targetType)) {
+      officerManager.removeOfficer(id);
       vehicleManager.createVehicle(mainViewer, id, label);
       vehicleManager.updateVehicleLabel(id, label);
       vehicleManager.updateVehiclePosition(id, lng, lat, 0);
@@ -3544,10 +3673,9 @@ function syncStoreDevicesToMap() {
     }
   });
 
-  Array.from(targetOfficerEntities.entries()).forEach(([id, entity]) => {
+  Array.from(officerManager.officers.keys()).forEach((id) => {
     if (!activeOfficerIds.has(id)) {
-      mainViewer.entities.remove(entity);
-      targetOfficerEntities.delete(id);
+      officerManager.removeOfficer(id);
     }
   });
 
@@ -4268,6 +4396,9 @@ const toggleLayerVisibility = ({ key, active }) => {
       vehicleManager.vehicles.forEach((vehicle) => {
         if (vehicle.entity?.path) vehicle.entity.path.show = active;
       });
+      officerManager.officers.forEach((officer) => {
+        if (officer.entity?.path) officer.entity.path.show = active;
+      });
       droneTestManager.drones.forEach((drone) => {
         if (drone.entity?.path) drone.entity.path.show = active;
       });
@@ -4276,8 +4407,8 @@ const toggleLayerVisibility = ({ key, active }) => {
       break;
     case "officer":
       targetLayerVisibility.officer = active;
-      targetOfficerEntities.forEach((entity) => {
-        if (entity) entity.show = active;
+      officerManager.officers.forEach((officer) => {
+        if (officer.entity) officer.entity.show = active;
       });
       break;
   }
@@ -4368,10 +4499,7 @@ onMounted(() => {
 onUnmounted(() => {
   mqttService.unsubscribe("carBox/+/location");
   subscribeEscortDroneOsd._subscribed = false;
-  targetOfficerEntities.forEach((entity) => {
-    mainViewer?.entities?.remove(entity);
-  });
-  targetOfficerEntities.clear();
+  officerManager.clearAll();
   clearLockdownMarkers();
   closePoliceVehiclePopup();
   vehicleManager.selectedDeviceId = null;

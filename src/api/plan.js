@@ -88,7 +88,7 @@ export class FlightPlanService {
 
   /**
    * 任务记录分页（执行中 + 执行完成）
-   * @param {Record<string, any>} params current pageSize startTime endTime
+   * @param {Record<string, any>} params current pageSize startTime endTime type: 1山林救援 2水上观察 3重点安保
    */
   static async recordPageQuery(params = {}) {
     return requestData("/plan/record/pageQuery", { params }, "GET");

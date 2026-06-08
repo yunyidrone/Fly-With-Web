@@ -14,7 +14,7 @@
         <p v-if="recordSubject" class="history-quick-dialog__subject">{{ recordSubject }}</p>
         <div class="history-quick-dialog__fields">
           <label class="history-quick-field">
-            <span class="history-quick-field__label">实行日期</span>
+            <span class="history-quick-field__label">实施日期</span>
             <el-date-picker
               v-model="form.executeDate"
               class="history-quick-field__picker"
