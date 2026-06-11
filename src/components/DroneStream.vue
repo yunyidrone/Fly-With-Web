@@ -128,6 +128,24 @@
             <span class="view-tile__label">机场视角</span>
           </button>
         </div> -->
+        <div v-if="aiPlayUrl" class="video-source-toggle">
+          <button
+            type="button"
+            class="source-opt"
+            :class="{ 'source-opt--active': streamSource === 'raw' }"
+            @click="streamSource = 'raw'"
+          >
+            原始流
+          </button>
+          <button
+            type="button"
+            class="source-opt"
+            :class="{ 'source-opt--active': streamSource === 'ai' }"
+            @click="streamSource = 'ai'"
+          >
+            AI 流
+          </button>
+        </div>
       </div>
       <button
         type="button"
@@ -183,7 +201,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from "vue";
+import { ref, onMounted, onUnmounted, computed, watch } from "vue";
 import { useSystemStore } from "@/stores/index.js";
 import { AccompanyingFlyService } from "@/api";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -213,6 +231,8 @@ const props = defineProps({
   /** 设备级拉流地址（接口 streamUrl），为空时用环境变量 VIDEO_CONFIG */
   streamUrl: { type: String, default: "" },
   playUrl: { type: String, default: "" },
+  /** 算法 AI 结果流地址 */
+  aiPlayUrl: { type: String, default: "" },
   /** 伴飞目标 id，用于 stopFollow 的 id 参数 */
   targetDeviceId: { type: String, default: "" },
   lng: { type: [Number, String], default: undefined },
@@ -229,10 +249,13 @@ let pc;
 const systemStore = useSystemStore();
 const videoPlayerRef = ref(null);
 const videoWrapRef = ref(null);
+const streamSource = ref("raw");
+
 const resolvedStreamUrl = computed(() => {
-  console.log('测试数据', props.playUrl)
-  const u = props.playUrl;
-  return u || VIDEO_CONFIG.streamUrl;
+  if (streamSource.value === "ai" && props.aiPlayUrl) {
+    return props.aiPlayUrl;
+  }
+  return props.playUrl || VIDEO_CONFIG.streamUrl;
 });
 const isLoading = ref(false);
 const viewMode = ref("drone");
@@ -318,6 +341,7 @@ async function tryAutoPlayVideo() {
 }
 
 const initPlayVideo = async () => {
+  console.log('视频流地址', resolvedStreamUrl.value)
   if (!resolvedStreamUrl.value || !videoPlayerRef.value) return;
   pc = new RTCPeerConnection({
     iceServers: [{ urls: "stun:stun.aliyungf.com:3478" }],
@@ -451,6 +475,21 @@ const handleRecall = async () => {
 };
 
 onMounted(() => {
+  initPlayVideo();
+});
+
+watch(resolvedStreamUrl, () => {
+  // 切换播放源时关闭旧连接，重新拉流
+  try {
+    if (pc) {
+      pc.getSenders?.()?.forEach((s) => s.track?.stop());
+      pc.close();
+    }
+  } catch (_) {}
+  pc = null;
+  if (videoPlayerRef.value) {
+    videoPlayerRef.value.srcObject = null;
+  }
   initPlayVideo();
 });
 
@@ -659,6 +698,35 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+.video-source-toggle {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  pointer-events: auto;
+}
+
+.source-opt {
+  padding: 4px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 2px;
+  background: transparent;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.75;
+  pointer-events: auto;
+  transition: opacity 0.18s ease, border-color 0.18s ease;
+
+  &:hover {
+    opacity: 0.88;
+  }
+
+  &--active {
+    opacity: 1;
+    border-color: #fff;
+  }
+}
+
 .video-wrap {
   position: relative;
   flex: 1;
@@ -684,7 +752,8 @@ onUnmounted(() => {
   pointer-events: none;
 
   .perspective-hint,
-  .video-view-switch {
+  .video-view-switch,
+  .video-source-toggle {
     pointer-events: auto;
   }
 }

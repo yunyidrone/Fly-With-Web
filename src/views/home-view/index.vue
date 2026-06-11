@@ -84,6 +84,7 @@
               :drone-name="streamDroneLive?.name"
               :stream-url="streamDroneLive?.streamUrl"
               :playUrl="streamDroneLive?.playUrl"
+              :ai-play-url="streamDroneLive?.aiPlayUrl"
               :target-device-id="streamTargetId"
               :target-device-label="streamTargetLabel"
               :battery="streamDroneLive?.battery"
