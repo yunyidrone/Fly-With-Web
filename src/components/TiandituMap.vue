@@ -49,7 +49,7 @@
           <LocationOff48Filled size="18px" color="#4d4d4d" v-else />
         </button>
       </el-tooltip> -->
-      <!-- <el-tooltip
+      <el-tooltip
         effect="dark"
         :content="vehicleDisplayMode === 'model' ? '切换为点' : '切换为车'"
         placement="left"
@@ -62,7 +62,7 @@
           />
           <RiCarFill size="18px" color="#4d4d4d" v-else />
         </button>
-      </el-tooltip> -->
+      </el-tooltip>
       <!-- <el-tooltip
         effect="dark"
         :content="isLockMode ? '取消锁定模式' : '切换为锁定模式'"
@@ -918,24 +918,7 @@ const vehicleManager = {
           return lastValidOrientation;
         }
       }, false),
-      model: {
-        uri: "/models/car.glb",
-        minimumPixelSize: 32,
-        maximumScale: 200,
-        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
-        nodeTransformations: {
-          root: new Cesium.NodeTransformationProperty({
-            rotation: new Cesium.CallbackProperty(() => {
-              const hpr = new Cesium.HeadingPitchRoll(
-                Cesium.Math.toRadians(180),
-                0,
-                0,
-              );
-              return Cesium.Quaternion.fromHeadingPitchRoll(hpr);
-            }, false),
-          }),
-        },
-      },
+      ...getVehicleShapeGraphics(),
       path: {
         show: routeLayerVisible,
         width: 5,
@@ -1461,10 +1444,77 @@ const mapSwitchStyle = computed(() => {
 // get Tianditu Key by random
 const getTDT_TK = () => TK_LIST[Math.floor(Math.random() * TK_LIST.length)];
 
+const getVehicleModelRotation = () =>
+  new Cesium.CallbackProperty(() => {
+    const hpr = new Cesium.HeadingPitchRoll(
+      Cesium.Math.toRadians(180),
+      0,
+      0,
+    );
+    return Cesium.Quaternion.fromHeadingPitchRoll(hpr);
+  }, false);
+
+const getVehicleShapeGraphics = () => ({
+  model: {
+    uri: "/models/car.glb",
+    minimumPixelSize: 32,
+    maximumScale: 200,
+    show: new Cesium.CallbackProperty(
+      () => vehicleDisplayMode.value === "model",
+      false,
+    ),
+    heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+    nodeTransformations: {
+      root: new Cesium.NodeTransformationProperty({
+        rotation: getVehicleModelRotation(),
+      }),
+    },
+  },
+  point: {
+    pixelSize: 12,
+    color: Cesium.Color.BLUE,
+    outlineColor: Cesium.Color.WHITE,
+    outlineWidth: 2,
+    show: new Cesium.CallbackProperty(
+      () => vehicleDisplayMode.value === "point",
+      false,
+    ),
+    heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+    disableDepthTestDistance: Number.POSITIVE_INFINITY,
+  },
+});
+
+const patchVehicleDisplayGraphics = (entity) => {
+  if (!entity?.model) return;
+
+  if (!(entity.model.show instanceof Cesium.CallbackProperty)) {
+    entity.model.show = new Cesium.CallbackProperty(
+      () => vehicleDisplayMode.value === "model",
+      false,
+    );
+  }
+
+  if (entity.ellipsoid) {
+    entity.ellipsoid.show = false;
+  }
+
+  if (!entity.point) {
+    entity.point = getVehicleShapeGraphics().point;
+  }
+};
+
 // 切换展示模式
 const toggleDisplayMode = () => {
   vehicleDisplayMode.value =
     vehicleDisplayMode.value === "model" ? "point" : "model";
+
+  if (carEntity) {
+    patchVehicleDisplayGraphics(carEntity);
+  }
+  vehicleManager.vehicles.forEach(({ entity }) => {
+    patchVehicleDisplayGraphics(entity);
+  });
+  mainViewer?.scene?.requestRender?.();
 };
 
 /**
@@ -2003,58 +2053,7 @@ const createDynamicVehicle = (viewer) => {
       }
     }, false),
 
-    // 车辆模型形态
-    model: {
-      uri: "/models/car.glb",
-      // 无论相机多高，模型在屏幕上至少保持 64 像素大，不会消失
-      minimumPixelSize: 32,
-      // 限制最大缩放比例，防止拉近时车变得巨大无比（可选）
-      maximumScale: 200,
-      // 动态显示逻辑
-      show: new Cesium.CallbackProperty(
-        () => vehicleDisplayMode.value === "model",
-        false,
-      ),
-      heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
-      nodeTransformations: {
-        root: new Cesium.NodeTransformationProperty({
-          rotation: new Cesium.CallbackProperty(() => {
-            const hpr = new Cesium.HeadingPitchRoll(
-              Cesium.Math.toRadians(180),
-              0,
-              0,
-            );
-            return Cesium.Quaternion.fromHeadingPitchRoll(hpr);
-          }, false),
-        }),
-      },
-    },
-
-    // 立体圆点形态（使用球体 ellipsoid）
-    ellipsoid: {
-      radii: new Cesium.Cartesian3(1.0, 1.0, 1.0), // 物理大小：5米半径
-      material: Cesium.Color.BLUE,
-      outline: false,
-      outlineColor: Cesium.Color.WHITE,
-      // 动态显示逻辑
-      show: new Cesium.CallbackProperty(
-        () => vehicleDisplayMode.value === "point",
-        false,
-      ),
-      heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
-      nodeTransformations: {
-        root: new Cesium.NodeTransformationProperty({
-          rotation: new Cesium.CallbackProperty(() => {
-            const hpr = new Cesium.HeadingPitchRoll(
-              Cesium.Math.toRadians(180),
-              0,
-              0,
-            );
-            return Cesium.Quaternion.fromHeadingPitchRoll(hpr);
-          }, false),
-        }),
-      },
-    },
+    ...getVehicleShapeGraphics(),
     // cylinder: {
     //   length: 1.0, // 高度（厚度）1米
     //   topRadius: 1.0, // 半径 2米
@@ -4596,6 +4595,7 @@ onUnmounted(() => {
     height: 30px;
     background-color: #ffffff;
     color: #4e4e4e;
+    pointer-events: auto;
     line-height: 30px;
     font-size: 14px;
     font-weight: bold;
