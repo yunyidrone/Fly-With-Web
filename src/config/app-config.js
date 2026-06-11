@@ -63,4 +63,15 @@ export const MAP_CONFIG = {
   droneHeight: 150,
   carSpeed: 30,
   scopeRatio: 0.5,
+  /** 地图默认观察高度（米） */
+  mapDefaultRange: 800,
+  /** 视野高度可接受区间（米） */
+  viewRangeMin: 300,
+  viewRangeMax: 12000,
+  /** 锁定跟随时相机与车辆的距离（米） */
+  vehicleFollowRange2D: 1200,
+  vehicleFollowRange3D: 500,
+  /** 车辆 glb 在屏幕上的显示约束 */
+  vehicleModelMinPixelSize: 32,
+  vehicleModelMaxScale: 64,
 };

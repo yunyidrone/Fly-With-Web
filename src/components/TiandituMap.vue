@@ -63,7 +63,7 @@
           <RiCarFill size="18px" color="#4d4d4d" v-else />
         </button>
       </el-tooltip>
-      <!-- <el-tooltip
+      <el-tooltip
         effect="dark"
         :content="isLockMode ? '取消锁定模式' : '切换为锁定模式'"
         placement="left"
@@ -72,7 +72,7 @@
           <ScanObject20Filled size="18px" color="#4d4d4d" v-if="!isLockMode" />
           <ScanDisabled size="18px" color="#4d4d4d" v-else />
         </button>
-      </el-tooltip> -->
+      </el-tooltip>
       <div class="group-controls">
         <el-tooltip effect="dark" content="放大地图" placement="left">
           <button @click="zoomIn">
@@ -1345,6 +1345,8 @@ let routeMarkers = [];
 let verticalLines = [];
 // Record the point is first or not
 let isFirstPoint = true;
+// 当前持续跟随的车辆 deviceId（伴飞时保持居中）
+let followedVehicleDeviceId = null;
 // Record the next point index
 let runPointIndex = 0;
 // Record the time of the last path point for car
@@ -1457,8 +1459,8 @@ const getVehicleModelRotation = () =>
 const getVehicleShapeGraphics = () => ({
   model: {
     uri: "/models/car.glb",
-    minimumPixelSize: 32,
-    maximumScale: 200,
+    minimumPixelSize: MAP_CONFIG.vehicleModelMinPixelSize,
+    maximumScale: MAP_CONFIG.vehicleModelMaxScale,
     show: new Cesium.CallbackProperty(
       () => vehicleDisplayMode.value === "model",
       false,
@@ -1734,16 +1736,16 @@ const initViewer = () => {
   // 首屏只加载影像底图，标注层/矢量层延后或按需加载。
   satelliteLayer = createMainImageryLayer("img_w", { blueTint: true });
 
-  // set original degree
+  // 初始视角：destination 直接表示相机位置（高度 mapDefaultRange 米）
   mainViewer.camera.setView({
     destination: Cesium.Cartesian3.fromDegrees(
       DEFAULT_CENTER.lng,
       DEFAULT_CENTER.lat,
-      1000,
+      MAP_CONFIG.mapDefaultRange,
     ),
     orientation: {
-      heading: Cesium.Math.toRadians(0), // 正北
-      pitch: Cesium.Math.toRadians(-90), // -90度垂直,因为默认是2D地图
+      heading: Cesium.Math.toRadians(0),
+      pitch: Cesium.Math.toRadians(-90),
       roll: 0,
     },
   });
@@ -1764,79 +1766,174 @@ const initViewer = () => {
 };
 
 /**
- * @description: switch 2D and 3D pitch
- * @return {*}
+ * @description: 取当前视口中心对应的地表点，用于切换 2D/3D 时保持视野不跑飞
  */
-const toggleSceneMode = () => {
-  const hasCar =
-    carEntity && carEntity.position.getValue(mainViewer.clock.currentTime);
-  isPitch2D.value = !isPitch2D.value;
-  // Switch camera pitch angle
-  switchGlobalView(mainViewer, isPitch2D.value);
-  switchGlobalView(subViewer, isPitch2D.value);
-  if (hasCar) {
-    // Switch tracking offset
-    switchTrackedView(mainViewer, carEntity, isPitch2D.value);
-    switchTrackedView(subViewer, isPitch2D.value);
+const pickGlobeCenter = (viewer) => {
+  if (!viewer?.scene?.canvas) return undefined;
+
+  const { clientWidth, clientHeight } = viewer.scene.canvas;
+  const windowPosition = new Cesium.Cartesian2(
+    clientWidth / 2,
+    clientHeight / 2,
+  );
+
+  let cartesian;
+  if (viewer.scene.mode === Cesium.SceneMode.SCENE3D) {
+    const ray = viewer.camera.getPickRay(windowPosition);
+    cartesian = ray ? viewer.scene.globe.pick(ray, viewer.scene) : undefined;
   }
+  if (!Cesium.defined(cartesian)) {
+    cartesian = viewer.camera.pickEllipsoid(
+      windowPosition,
+      viewer.scene.globe.ellipsoid,
+    );
+  }
+  if (!Cesium.defined(cartesian)) {
+    const carto = viewer.camera.positionCartographic;
+    cartesian = Cesium.Cartesian3.fromRadians(
+      carto.longitude,
+      carto.latitude,
+      0,
+    );
+  }
+  return cartesian;
 };
 
-/**
- * @description: switch camera pitch angle
- * @param {*} viewer
- * @param {*} to2D
- * @return {*}
- */
-const switchGlobalView = (viewer, to2D) => {
-  viewer.trackedEntity = undefined;
-  isLockMode.value = false;
+/** 读取当前相机层级，切换 2D/3D 时原样保留，不做重算 */
+const getPreservedCameraRange = (viewer) => {
+  const height = viewer?.camera?.positionCartographic?.height;
+  if (Number.isFinite(height) && height > 50 && height < 50000) {
+    return height;
+  }
 
-  const targetPitch = to2D ? -90 : -45;
-  viewer.camera.flyTo({
-    destination: viewer.camera.position,
-    orientation: {
-      heading: viewer.camera.heading,
-      pitch: Cesium.Math.toRadians(targetPitch),
-      roll: 0,
-    },
-    duration: 1.0,
+  const center = pickGlobeCenter(viewer);
+  if (Cesium.defined(center)) {
+    const distance = Cesium.Cartesian3.distance(viewer.camera.position, center);
+    if (Number.isFinite(distance) && distance > 50 && distance < 50000) {
+      return distance;
+    }
+  }
+
+  return MAP_CONFIG.mapDefaultRange;
+};
+
+const resolveViewFocusCenter = (viewer, focusEntity) => {
+  if (focusEntity?.position) {
+    const entityCenter = focusEntity.position.getValue(viewer.clock.currentTime);
+    if (Cesium.defined(entityCenter)) {
+      return entityCenter;
+    }
+  }
+
+  const picked = pickGlobeCenter(viewer);
+  if (Cesium.defined(picked)) {
+    return picked;
+  }
+
+  const carto = viewer.camera.positionCartographic;
+  return Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, 0);
+};
+
+const bakeCameraFromLookAt = (viewer) => {
+  const destination = Cesium.Cartesian3.clone(
+    viewer.camera.positionWC || viewer.camera.position,
+  );
+  const direction = Cesium.Cartesian3.clone(
+    viewer.camera.directionWC || viewer.camera.direction,
+  );
+  const up = Cesium.Cartesian3.clone(viewer.camera.upWC || viewer.camera.up);
+
+  viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+  viewer.camera.setView({
+    destination,
+    orientation: { direction, up },
   });
 };
 
+const applyPitchOnlyView = (viewer, center, range, to2D, heading) => {
+  if (!viewer || viewer.isDestroyed?.() || !Cesium.defined(center)) return;
+
+  const resolvedRange =
+    Number.isFinite(range) && range > 50 ? range : MAP_CONFIG.mapDefaultRange;
+  const resolvedHeading = Cesium.defined(heading)
+    ? heading
+    : viewer.camera.heading;
+  const pitch = Cesium.Math.toRadians(to2D ? -90 : -45);
+
+  viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+  viewer.camera.lookAt(
+    center,
+    new Cesium.HeadingPitchRange(resolvedHeading, pitch, resolvedRange),
+  );
+  bakeCameraFromLookAt(viewer);
+};
+
 /**
- * @description: Switch tracking offset
- * @param {*} viewer
- * @param {*} carEntity
- * @param {*} to2D
+ * @description: switch 2D and 3D pitch（仅改俯仰角，不改变缩放层级）
  * @return {*}
  */
-const switchTrackedView = (viewer, carEntity, to2D) => {
-  if (!viewer.trackedEntity) return;
+const toggleSceneMode = () => {
+  if (!mainViewer || mainViewer.isDestroyed?.()) return;
 
-  const center = viewer.trackedEntity.position.getValue(
-    viewer.clock.currentTime,
+  const preservedRange = getPreservedCameraRange(mainViewer);
+  const preservedHeading = mainViewer.camera.heading;
+
+  let focusEntity = null;
+  if (isLockMode.value) {
+    focusEntity =
+      mainViewer.trackedEntity ||
+      vehicleManager.vehicles.get(followedVehicleDeviceId)?.entity;
+    if (focusEntity) {
+      mainViewer.trackedEntity = focusEntity;
+    }
+  }
+
+  const focusCenter = resolveViewFocusCenter(mainViewer, focusEntity);
+
+  isPitch2D.value = !isPitch2D.value;
+  const to2D = isPitch2D.value;
+
+  applyPitchOnlyView(
+    mainViewer,
+    focusCenter,
+    preservedRange,
+    to2D,
+    preservedHeading,
   );
-  if (!center) return;
 
-  if (to2D) {
-    viewer.camera.lookAt(
-      center,
-      new Cesium.HeadingPitchRange(
-        viewer.camera.heading,
-        Cesium.Math.toRadians(-90),
-        800,
-      ),
-    );
-  } else {
-    viewer.camera.lookAt(
-      center,
-      new Cesium.HeadingPitchRange(
-        viewer.camera.heading,
-        Cesium.Math.toRadians(-45),
-        200,
-      ),
+  if (subViewer && !subViewer.isDestroyed?.()) {
+    applyPitchOnlyView(
+      subViewer,
+      resolveViewFocusCenter(subViewer, null),
+      getPreservedCameraRange(subViewer),
+      to2D,
+      subViewer.camera.heading,
     );
   }
+};
+
+/**
+ * @description: Switch tracking offset（首次锁车时使用配置距离；pitch 切换请走 toggleSceneMode）
+ * @param {*} viewer
+ * @param {*} targetEntity
+ * @param {*} to2D
+ * @param {{ preserveRange?: number }} options
+ * @return {*}
+ */
+const switchTrackedView = (viewer, targetEntity, to2D, { preserveRange } = {}) => {
+  if (!viewer || viewer.isDestroyed?.()) return;
+
+  const entity = targetEntity || viewer.trackedEntity;
+  if (!entity?.position) return;
+
+  const center = entity.position.getValue(viewer.clock.currentTime);
+  if (!Cesium.defined(center)) return;
+
+  const range =
+    preserveRange ??
+    (to2D ? MAP_CONFIG.vehicleFollowRange2D : MAP_CONFIG.vehicleFollowRange3D);
+
+  applyPitchOnlyView(viewer, center, range, to2D, viewer.camera.heading);
 };
 
 /**
@@ -1885,6 +1982,59 @@ const switchMapMode = (mode) => {
       vectorMarkLayer.show = mapConfigForm.value.showMapRoadNet;
     currentMode.value = "normal";
   }
+};
+
+/**
+ * @description: 锁定相机跟随车辆，使车辆保持在视野中心
+ */
+const followVehicleEntity = (entity, deviceId, { force3D = false } = {}) => {
+  if (!mainViewer || mainViewer.isDestroyed?.() || !entity) return;
+
+  if (deviceId != null) {
+    followedVehicleDeviceId = String(deviceId);
+  }
+  if (force3D) {
+    isPitch2D.value = false;
+  }
+
+  const entityChanged = mainViewer.trackedEntity !== entity;
+  mainViewer.trackedEntity = entity;
+  isLockMode.value = true;
+
+  if (entityChanged || force3D) {
+    switchTrackedView(mainViewer, entity, isPitch2D.value);
+  }
+};
+
+const releaseVehicleFollow = () => {
+  isLockMode.value = false;
+  if (mainViewer && !mainViewer.isDestroyed?.()) {
+    mainViewer.trackedEntity = undefined;
+  }
+};
+
+const resolveFollowVehicleTarget = () => {
+  const deviceId =
+    vehicleManager.selectedDeviceId ||
+    followedVehicleDeviceId ||
+    vehicleManager.getAllVehicles()[0] ||
+    null;
+
+  if (deviceId) {
+    const vehicle = vehicleManager.vehicles.get(String(deviceId));
+    if (vehicle?.entity) {
+      return { entity: vehicle.entity, deviceId: String(deviceId) };
+    }
+  }
+
+  if (
+    carEntity &&
+    carEntity.position?.getValue?.(mainViewer?.clock?.currentTime)
+  ) {
+    return { entity: carEntity, deviceId: followedVehicleDeviceId };
+  }
+
+  return null;
 };
 
 /**
@@ -2446,31 +2596,18 @@ const calcFovByFocalLength = (focalLength, aspect = 16 / 9) => {
  * @return {*}
  */
 const toggleLockMode = () => {
-  isLockMode.value = !isLockMode.value;
   if (isLockMode.value) {
-    // 优先锁定 vehicleManager 中的车辆：选中 > 第一个 > 旧 carEntity
-    let targetEntity = null;
-    const vehiclesArr = Array.from(vehicleManager.vehicles.values());
-    if (vehicleManager.selectedDeviceId) {
-      const selected = vehicleManager.vehicles.get(vehicleManager.selectedDeviceId);
-      if (selected?.entity) targetEntity = selected.entity;
-    }
-    if (!targetEntity && vehiclesArr.length > 0) {
-      targetEntity = vehiclesArr[0].entity;
-    }
-    if (!targetEntity && carEntity) {
-      targetEntity = carEntity;
-    }
-    if (targetEntity) {
-      mainViewer.trackedEntity = targetEntity;
-      switchTrackedView(mainViewer, targetEntity, false);
-      isPitch2D.value = false;
-    }
-  } else {
-    if (mainViewer.trackedEntity) {
-      mainViewer.trackedEntity = undefined;
-    }
+    releaseVehicleFollow();
+    return;
   }
+
+  const target = resolveFollowVehicleTarget();
+  if (!target?.entity) {
+    ElMessage.warning("暂无可跟随的车辆");
+    return;
+  }
+
+  followVehicleEntity(target.entity, target.deviceId, { force3D: true });
 };
 
 /**
@@ -2970,6 +3107,7 @@ const clearRunningRoute = () => {
 
   // 重置初始状态
   isFirstPoint = true;
+  followedVehicleDeviceId = null;
   isLockMode.value = false;
   mainViewer.trackedEntity = undefined;
 
@@ -3439,23 +3577,8 @@ async function requestRouteFromTDT(startLng, startLat, endLng, endLat) {
  */
 const lockToVehicle = (deviceId) => {
   const vehicle = vehicleManager.vehicles.get(deviceId);
-  if (vehicle && vehicle.entity) {
-    mainViewer.trackedEntity = vehicle.entity;
-    isLockMode.value = true;
-    switchTrackedView(mainViewer, vehicle.entity, false);
-    isPitch2D.value = false;
-
-    const center = vehicle.entity.position.getValue(mainViewer.clock.currentTime);
-    if (center) {
-      mainViewer.camera.lookAt(
-        center,
-        new Cesium.HeadingPitchRange(
-          mainViewer.camera.heading,
-          Cesium.Math.toRadians(-45),
-          300,
-        ),
-      );
-    }
+  if (vehicle?.entity) {
+    followVehicleEntity(vehicle.entity, deviceId, { force3D: true });
 
     console.log(`🔒 已锁定到车辆: ${deviceId}`);
     ElMessage.success(`已锁定到车辆 ${deviceId}`);
@@ -3594,13 +3717,11 @@ const handleCarBoxMessage = (topic, data) => {
       );
       vehicleManager.updateVehicleLabel(deviceId, label);
       vehicleManager.updateVehiclePosition(deviceId, longitude, latitude, 0);
-
       if (isFirstPoint) {
-        mainViewer.trackedEntity = vehicle.entity;
-        isLockMode.value = true;
-        switchTrackedView(mainViewer, vehicle.entity, false);
-        isPitch2D.value = false;
+        followVehicleEntity(vehicle.entity, deviceId, { force3D: true });
         isFirstPoint = false;
+      } else if (isLockMode.value) {
+        followVehicleEntity(vehicle.entity, deviceId);
       }
     }
   }
@@ -3616,13 +3737,6 @@ const handleCarBoxMessage = (topic, data) => {
         isPitch2D.value = false;
       }
     } else {
-      const vehicle = vehicleManager.vehicles.get(deviceId);
-      if (vehicle?.entity) {
-        mainViewer.trackedEntity = vehicle.entity;
-        isLockMode.value = true;
-        switchTrackedView(mainViewer, vehicle.entity, false);
-        isPitch2D.value = false;
-      }
       lockToVehicle(deviceId);
     }
     const devicePosition = {
@@ -4244,17 +4358,18 @@ const syncCamera = (subViewer, mainViewer) => {
   });
 };
 
-// 鼠标点击地图时就取消视图锁定，恢复平移操作
+// 拖动地图时解除锁定，按钮状态通过 isLockMode 同步
+let manualUnlockHandler = null;
 const initManualUnlock = (viewer) => {
-  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  if (manualUnlockHandler) {
+    manualUnlockHandler.destroy();
+    manualUnlockHandler = null;
+  }
 
-  // 监听左键按下（开始平移）
-  handler.setInputAction(() => {
-    if (viewer.trackedEntity) {
-      console.log("检测到手动操作，自动解除跟随");
-      viewer.trackedEntity = undefined;
-      isLockMode.value = false;
-    }
+  manualUnlockHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  manualUnlockHandler.setInputAction(() => {
+    if (!isLockMode.value) return;
+    releaseVehicleFollow();
   }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
 };
 
@@ -4524,6 +4639,10 @@ onUnmounted(() => {
   if (handler) {
     handler.destroy();
     handler = null;
+  }
+  if (manualUnlockHandler) {
+    manualUnlockHandler.destroy();
+    manualUnlockHandler = null;
   }
   // 清理车辆点击事件处理器
   cleanupVehicleClickHandler();
