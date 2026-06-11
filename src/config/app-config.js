@@ -57,7 +57,8 @@ export const TIANDITU_CONFIG = {
 // 地图默认配置
 // ==========================================
 export const MAP_CONFIG = {
-  defaultCenter: { lng: 121.427, lat: 28.6528 },
+  // defaultCenter: { lng: 121.427, lat: 28.6528 },
+  defaultCenter: { lng: 121.205390, lat: 28.624480 }, // 澄江封控点
   maxLevel: 18,
   droneHeight: 150,
   carSpeed: 30,

@@ -231,6 +231,11 @@ function onPlanViewAllocation(plan) {
   onOpenTaskMonitor(plan?.id);
 }
 
+/** 无人机列表轮询间隔（毫秒），用于刷新设备在线/离线/伴飞状态 */
+const DRONE_LIST_POLL_INTERVAL = 10000;
+
+let droneListTimer = null;
+
 onMounted(() => {
   ensureDroneOsdMqtt();
   flightPlanStore.initCustomLocationTree();
@@ -243,10 +248,19 @@ onMounted(() => {
     deviceStore.fetchDroneList();
     deviceStore.fetchTargetList();
   });
+
+  // 每 10 秒刷新无人机列表状态（合并策略保留 MQTT 动态字段）
+  droneListTimer = setInterval(() => {
+    deviceStore.fetchDroneList();
+  }, DRONE_LIST_POLL_INTERVAL);
 });
 
 onUnmounted(() => {
   flightPlanStore.stopPlanTaskWatcher();
+  if (droneListTimer) {
+    clearInterval(droneListTimer);
+    droneListTimer = null;
+  }
 });
 
 watch(immersiveFlight, () => {

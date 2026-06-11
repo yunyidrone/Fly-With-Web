@@ -27,6 +27,9 @@
           <div class="datetime-block__time">{{ timeStr }}</div>
           <div class="datetime-block__date">{{ dateStr }}</div>
         </div>
+        <button type="button" class="reload-btn" title="重新加载页面" @click="handleReload">
+          <i class="ri-refresh-line" />
+        </button>
       </div>
     </div>
   </header>
@@ -50,6 +53,10 @@ const tick = () => {
   timeStr.value = `${h}:${min}:${s}`;
   dateStr.value = `${y}-${m}-${d}`;
 };
+
+function handleReload() {
+  window.location.reload();
+}
 
 onMounted(() => {
   tick();
@@ -143,6 +150,25 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.reload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 24px;
+  cursor: pointer;
+
+  &:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+  }
 }
 
 /* 右侧用户图占位 56×56 */

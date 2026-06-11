@@ -373,6 +373,9 @@ async function submitStartFollow(targetId, droneSn, droneId) {
     droneTestManager.clearDroneTrajectory(entityKey);
     await deviceStore.fetchDroneList();
     ElMessage.success(`已下发伴飞指令：${targetId}`);
+    if (escortDrone) {
+      emit("open-drone-stream", escortDrone);
+    }
     return true;
   } catch (e) {
     ElMessage.error(e?.message || "下发伴飞指令失败");

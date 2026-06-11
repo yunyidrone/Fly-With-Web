@@ -107,7 +107,9 @@
                 <div class="device-card__meta">
                   <span>{{ device.commOk ? "在线" : "离线" }}</span>
                   <span class="device-card__meta-sep">|</span>
-                  <span>ID：{{ formatDeviceListId(device) }}</span>
+                  <span>SN：{{ device.sn || "—" }}</span>
+                  <span class="device-card__meta-sep">|</span>
+                  <span>ID：{{ device.id || "—" }}</span>
                   <span class="device-card__meta-sep">|</span>
                   <span>电量：{{ formatDeviceBattery(device) }}</span>
                   <!-- <span class="device-card__meta-sep">|</span> -->
@@ -306,21 +308,6 @@ const handleDeviceCardClick = (panel, device) => {
   if (!isDroneResource(panel?.key, panel?.emptyResourceName)) return;
   emit("open-drone-stream", device);
 };
-
-/** 列表里 ID：优先展示 SN，否则从 id 里取可读片段 */
-function formatDeviceListId(device) {
-  const sn = device?.sn?.trim?.();
-  if (sn) return sn;
-  const raw = device?.id;
-  if (raw == null || raw === "") return "—";
-  const id = String(raw);
-  const nums = id.match(/\d+/g);
-  if (nums?.length) {
-    const n = parseInt(nums[nums.length - 1], 10);
-    return Number.isFinite(n) ? String(n) : nums[nums.length - 1];
-  }
-  return id;
-}
 
 function formatDeviceBattery(device) {
   const b = device?.battery;
