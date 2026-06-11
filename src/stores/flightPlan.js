@@ -266,6 +266,8 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
 
   /** 驱动「即将执行」时间窗重算 */
   const planTaskTick = ref(Date.now());
+  /** 本轮刷新后由「执行中」变为「已完成」的计划 ID 列表 */
+  const justCompletedPlanIds = ref([]);
   /** 用户关闭的全局即将执行提示 planId */
   const dismissedUpcomingAlertIds = ref(/** @type {string[]} */ ([]));
 
@@ -520,6 +522,9 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
     }
   }
 
+  /** 计划列表轮询间隔（毫秒），用于刷新执行中/即将执行状态 */
+  const PLAN_LIST_REFRESH_INTERVAL = 10000;
+
   function startPlanTaskWatcher() {
     if (planTaskIntervalId != null) return;
     planTaskTick.value = Date.now();
@@ -529,7 +534,7 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
     }, 30000);
     planListRefreshIntervalId = setInterval(() => {
       fetchAllPlanList();
-    }, 5 * 60 * 1000);
+    }, PLAN_LIST_REFRESH_INTERVAL);
   }
 
   function stopPlanTaskWatcher() {
@@ -555,6 +560,8 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
 
   async function fetchPlanList(query = {}) {
     plansFetchError.value = null;
+    // 刷新前记录当前正在执行的任务 ID，用于对比是否已完成
+    const prevExecutingIds = new Set(executingPlans.value.map((p) => p.id));
     try {
       const data = await FlightPlanService.planPageQuery(query);
       const records = unwrapApiList(data);
@@ -585,6 +592,11 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
 
       plansLoadedFromApi.value = true;
       planTaskTick.value = Date.now();
+
+      // 检测由「执行中」变为「已完成」的任务
+      const nowExecutingIds = new Set(executingPlans.value.map((p) => p.id));
+      justCompletedPlanIds.value = [...prevExecutingIds].filter((id) => !nowExecutingIds.has(id));
+
       return items;
     } catch (e) {
       plansFetchError.value = e?.message || String(e);
@@ -669,6 +681,7 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
     upcomingPlans,
     upcomingAlertPlans,
     planTaskTick,
+    justCompletedPlanIds,
     fetchPlanList,
     fetchAllPlanList,
     dismissUpcomingAlert,

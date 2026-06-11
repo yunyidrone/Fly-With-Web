@@ -117,6 +117,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick, defineAsyncComponent } from "vue";
+import { ElMessage } from "element-plus";
 import TiandituMap from "@/components/TiandituMap.vue";
 import HomeHeader from "@/components/HomeHeader.vue";
 import MapLegend from "@/components/MapLegend.vue";
@@ -262,6 +263,34 @@ onUnmounted(() => {
     droneListTimer = null;
   }
 });
+
+// 监听任务完成：仅当前正在监控的任务完成时，先提示再关闭弹窗
+watch(
+  () => flightPlanStore.justCompletedPlanIds,
+  (ids) => {
+    if (!ids || ids.length === 0) return;
+    if (taskMonitorVisible.value && ids.includes(taskMonitorPlanId.value)) {
+      ElMessage.info("任务已经完成，即将主动关闭监控");
+      setTimeout(() => {
+        taskMonitorVisible.value = false;
+      }, 2000);
+    }
+  },
+);
+
+// 监听无人机伴飞结束：当前展示的无人机结束伴飞时，提示并关闭视频
+watch(
+  () => deviceStore.justStoppedEscortDroneIds,
+  (ids) => {
+    if (!ids || ids.length === 0) return;
+    if (droneStreamVisible.value && streamDrone.value?.id && ids.includes(streamDrone.value.id)) {
+      ElMessage.info("任务已经完成，即将主动关闭监控");
+      setTimeout(() => {
+        closeDroneStream();
+      }, 2000);
+    }
+  },
+);
 
 watch(immersiveFlight, () => {
   nextTick(() => {

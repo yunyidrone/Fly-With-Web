@@ -171,6 +171,8 @@ export const useDeviceStore = defineStore("device", () => {
   const dronesLoadedFromApi = ref(false);
   /** 最近一次拉列表错误信息 */
   const dronesFetchError = ref(null);
+  /** 本轮刷新后由「伴飞中」变为非伴飞状态的无人机 ID 列表 */
+  const justStoppedEscortDroneIds = ref([]);
   /** 伴飞目标列表是否已从接口加载过至少一次 */
   const targetsLoadedFromApi = ref(false);
   /** 最近一次拉伴飞目标列表错误 */
@@ -222,6 +224,10 @@ export const useDeviceStore = defineStore("device", () => {
    */
   async function fetchDroneList(query) {
     dronesFetchError.value = null;
+    // 刷新前记录当前伴飞中的无人机 ID
+    const prevEscortingIds = new Set(
+      drones.value.filter((d) => d.isEscorting).map((d) => d.id),
+    );
     try {
       const data = await AccompanyingFlyService.droneList(query);
       const records = unwrapApiList(data);
@@ -306,6 +312,11 @@ export const useDeviceStore = defineStore("device", () => {
       });
 
       drones.value = merged;
+
+      // 检测由「伴飞中」变为非伴飞的无人机
+      const nowEscortingIds = new Set(merged.filter((d) => d.isEscorting).map((d) => d.id));
+      justStoppedEscortDroneIds.value = [...prevEscortingIds].filter((id) => !nowEscortingIds.has(id));
+
       dronesLoadedFromApi.value = true;
       testActive.value = false;
       return drones.value;
@@ -458,6 +469,7 @@ export const useDeviceStore = defineStore("device", () => {
     activeDrones,
     escortingDrones,
     standbyDrones,
+    justStoppedEscortDroneIds,
     initTestDevices,
     clearTestDevices,
     fetchDroneList,
