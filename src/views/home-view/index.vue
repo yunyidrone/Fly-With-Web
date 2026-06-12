@@ -256,8 +256,11 @@ onMounted(() => {
   });
 
   // 每 10 秒刷新无人机列表状态（合并策略保留 MQTT 动态字段）
-  droneListTimer = setInterval(() => {
-    deviceStore.fetchDroneList();
+  droneListTimer = setInterval(async () => {
+    await deviceStore.fetchDroneList();
+    if (droneStreamVisible.value) {
+      await checkAndSwitchEscortStreamDrone({ closeIfNoReplacement: true });
+    }
   }, DRONE_LIST_POLL_INTERVAL);
 });
 
@@ -278,20 +281,6 @@ watch(
       ElMessage.info("任务已经完成，即将主动关闭监控");
       setTimeout(() => {
         taskMonitorVisible.value = false;
-      }, 2000);
-    }
-  },
-);
-
-// 监听无人机伴飞结束：当前展示的无人机结束伴飞时，提示并关闭视频
-watch(
-  () => deviceStore.justStoppedEscortDroneIds,
-  (ids) => {
-    if (!ids || ids.length === 0) return;
-    if (droneStreamVisible.value && streamDrone.value?.id && ids.includes(streamDrone.value.id)) {
-      ElMessage.info("任务已经完成，即将主动关闭监控");
-      setTimeout(() => {
-        closeDroneStream();
       }, 2000);
     }
   },
@@ -369,6 +358,109 @@ function resolveEscortTargetId(device) {
   ).trim();
 }
 
+function isDroneCurrentlyEscorting(drone) {
+  if (!drone) return false;
+  if (drone.isEscorting) return true;
+  if (Number(drone.status) === 2 || Number(drone.rawStatus) === 2) return true;
+  if (drone.status === "escorting") return true;
+  return false;
+}
+
+function findReplacementEscortDrone(preferredTargetId, excludeDroneId) {
+  const preferred = String(preferredTargetId || "").trim();
+  if (!preferred) return null;
+
+  const exclude = String(excludeDroneId || "");
+  return (
+    deviceStore.drones.find((d) => {
+      const id = String(d?.id || "");
+      if (!id || id === exclude) return false;
+      if (!isDroneCurrentlyEscorting(d)) return false;
+      return resolveEscortTargetId(d) === preferred;
+    }) || null
+  );
+}
+
+let streamSwitchInFlight = false;
+/** 当前视频弹窗内无人机曾处于伴飞，用于识别「伴飞 → 其他」状态跃迁 */
+let streamDroneWasEscorting = false;
+
+function syncMapAfterStreamDroneSwitch(replacement) {
+  if (!replacement?.id) return;
+  const targetId = resolveEscortTargetId(replacement);
+  const droneId = String(replacement.id);
+  if (immersiveFlight.value) {
+    mapRef.value?.setImmersiveMapFocus?.(true, targetId, droneId);
+    if (targetId) {
+      mapRef.value?.lockEscortTargetOnImmersive?.(targetId);
+    }
+  }
+}
+
+/** 视频弹窗：当前无人机从伴飞变为其他状态时，尝试切换到同目标的其他伴飞机，否则关闭 */
+async function checkAndSwitchEscortStreamDrone({
+  closeIfNoReplacement = false,
+} = {}) {
+  if (!droneStreamVisible.value || !streamDrone.value?.id) return;
+  if (streamSwitchInFlight) return;
+
+  const live = streamDroneLive.value || streamDrone.value;
+  const currentlyEscorting = isDroneCurrentlyEscorting(live);
+
+  if (currentlyEscorting) {
+    streamDroneWasEscorting = true;
+    return;
+  }
+
+  if (!streamDroneWasEscorting) return;
+  streamDroneWasEscorting = false;
+
+  const currentId = String(streamDrone.value.id);
+  const currentTargetId =
+    resolveEscortTargetId(live) || resolveEscortTargetId(streamDrone.value);
+
+  if (!currentTargetId) return;
+
+  const replacement = findReplacementEscortDrone(currentTargetId, currentId);
+
+  if (replacement && String(replacement.id) !== currentId) {
+    streamSwitchInFlight = true;
+    try {
+      ElMessage.info(
+        `伴飞无人机已切换至「${replacement.name || replacement.id}」`,
+      );
+      await openDroneStream(replacement);
+      syncMapAfterStreamDroneSwitch(replacement);
+    } finally {
+      streamSwitchInFlight = false;
+    }
+    return;
+  }
+
+  if (closeIfNoReplacement) {
+    ElMessage.info("任务已经完成，即将主动关闭监控");
+    setTimeout(() => {
+      closeDroneStream();
+    }, 2000);
+  }
+}
+
+watch(
+  () => {
+    if (!droneStreamVisible.value || !streamDrone.value?.id) return null;
+    return isDroneCurrentlyEscorting(
+      streamDroneLive.value || streamDrone.value,
+    );
+  },
+  (escorting, prevEscorting) => {
+    if (prevEscorting === true && escorting === false) {
+      void checkAndSwitchEscortStreamDrone({ closeIfNoReplacement: true });
+    } else if (escorting === true) {
+      streamDroneWasEscorting = true;
+    }
+  },
+);
+
 const streamTargetId = computed(() => resolveEscortTargetId(streamDrone.value));
 
 const streamTargetLabel = computed(() => {
@@ -430,6 +522,10 @@ const openDroneStream = async (device) => {
     streamDrone.value = device;
   }
   droneStreamVisible.value = true;
+  const liveFromStore = deviceStore.drones.find((d) => String(d?.id) === id);
+  streamDroneWasEscorting = isDroneCurrentlyEscorting(
+    liveFromStore ? { ...streamDrone.value, ...liveFromStore } : streamDrone.value,
+  );
 };
 
 const handleStreamRecall = async ({ droneId } = {}) => {
@@ -447,6 +543,7 @@ const closeDroneStream = () => {
   if (immersiveFlight.value) {
     mapRef.value?.setImmersiveMapFocus?.(false);
   }
+  streamDroneWasEscorting = false;
   droneStreamVisible.value = false;
   immersiveFlight.value = false;
   streamDrone.value = null;
