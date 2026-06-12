@@ -270,6 +270,11 @@ import { ElMessageBox, ElMessage } from "element-plus";
 import { AccompanyingFlyService } from "@/api";
 import { unwrapApiList } from "@/utils/request.js";
 
+const props = defineProps({
+  /** 伴飞中当前选中的无人机 id（通常来自视频弹窗/资源卡片） */
+  activeEscortDroneId: { type: String, default: "" },
+});
+
 const emit = defineEmits(["open-drone-stream"]);
 
 // 加载状态
@@ -762,6 +767,128 @@ const OFFICER_NORMAL_PATH_COLOR =
 const VEHICLE_LABEL_COLOR = Cesium.Color.fromCssColorString("#5794DF");
 const DRONE_LABEL_COLOR = Cesium.Color.fromCssColorString("#0EF2F2");
 
+const escortTargetHighlight = reactive({
+  targetId: null,
+  droneName: "",
+});
+
+function formatTargetDisplayLabel(baseLabel, droneName = "") {
+  const base = String(baseLabel || "").trim();
+  const drone = String(droneName || "").trim();
+  if (!base) return drone ? `(${drone})` : "";
+  if (!drone) return base;
+  return `${base} (${drone})`;
+}
+
+function resolveEscortHighlightDroneName(droneId) {
+  const id = String(droneId || "").trim();
+  if (!id) return "";
+  const drone = deviceStore.drones.find((d) => String(d?.id || "") === id);
+  return String(drone?.name || drone?.id || "无人机").trim();
+}
+
+function refreshTargetLabel(deviceId) {
+  const targetId = String(deviceId || "").trim();
+  if (!targetId) return;
+
+  const highlighted =
+    escortTargetHighlight.targetId === targetId
+      ? escortTargetHighlight.droneName
+      : "";
+
+  const vehicle = vehicleManager.vehicles.get(targetId);
+  if (vehicle?.entity?.label) {
+    vehicle.entity.label.text = formatTargetDisplayLabel(
+      vehicle.baseLabel,
+      highlighted,
+    );
+    return;
+  }
+
+  const officer = officerManager.officers.get(targetId);
+  if (officer?.entity?.label) {
+    officer.entity.label.text = formatTargetDisplayLabel(
+      officer.baseLabel,
+      highlighted,
+    );
+  }
+}
+
+function applyTargetEscortHighlight(deviceId, active) {
+  const targetId = String(deviceId || "").trim();
+  if (!targetId) return;
+
+  const vehicle = vehicleManager.vehicles.get(targetId);
+  if (vehicle?.entity) {
+    if (active) {
+      vehicleManager._applyHighlight(targetId, true);
+    } else if (vehicleManager.selectedDeviceId !== targetId) {
+      vehicleManager._applyHighlight(targetId, false);
+    }
+    return;
+  }
+
+  const officer = officerManager.officers.get(targetId);
+  if (!officer?.entity) return;
+  const entity = officer.entity;
+
+  if (active) {
+    entity.billboard.width = 46;
+    entity.billboard.height = 46;
+    entity.label.fillColor = VEHICLE_HIGHLIGHT_COLOR;
+    entity.label.outlineColor = Cesium.Color.BLACK;
+    entity.label.outlineWidth = 3;
+    entity.label.font = "bold 15px Microsoft YaHei, sans-serif";
+    entity.label.pixelOffset = new Cesium.Cartesian2(0, -46);
+    entity.path.width = 6;
+  } else {
+    entity.billboard.width = 34;
+    entity.billboard.height = 34;
+    entity.label.fillColor = Cesium.Color.WHITE;
+    entity.label.outlineColor = Cesium.Color.BLACK;
+    entity.label.outlineWidth = 2;
+    entity.label.font = "14px sans-serif";
+    entity.label.pixelOffset = new Cesium.Cartesian2(0, -38);
+    entity.path.width = 4;
+  }
+}
+
+function syncEscortTargetHighlight(droneId) {
+  const prevTargetId = escortTargetHighlight.targetId;
+  if (prevTargetId) {
+    applyTargetEscortHighlight(prevTargetId, false);
+    refreshTargetLabel(prevTargetId);
+  }
+
+  escortTargetHighlight.targetId = null;
+  escortTargetHighlight.droneName = "";
+
+  const id = String(droneId || "").trim();
+  if (!id) {
+    mainViewer?.scene?.requestRender?.();
+    return;
+  }
+
+  const drone = deviceStore.drones.find((d) => String(d?.id || "") === id);
+  if (!drone?.isEscorting) {
+    mainViewer?.scene?.requestRender?.();
+    return;
+  }
+
+  const targetId = resolveEscortTargetId(drone);
+  if (!targetId) {
+    mainViewer?.scene?.requestRender?.();
+    return;
+  }
+
+  escortTargetHighlight.targetId = targetId;
+  escortTargetHighlight.droneName = resolveEscortHighlightDroneName(id);
+
+  applyTargetEscortHighlight(targetId, true);
+  refreshTargetLabel(targetId);
+  mainViewer?.scene?.requestRender?.();
+}
+
 function resolveTargetType(target) {
   const type = Number(target?.type);
   return Number.isFinite(type) ? type : 1;
@@ -953,6 +1080,7 @@ const vehicleManager = {
       lastPosition: null,
       defaultPathMaterial,
       highlightPathMaterial,
+      baseLabel: labelText || deviceId,
     });
 
     console.log(`🚗 创建车辆实体: ${deviceId}`);
@@ -981,8 +1109,13 @@ const vehicleManager = {
   updateVehicleLabel(deviceId, labelText) {
     const vehicle = this.vehicles.get(deviceId);
     if (!vehicle?.entity?.label) return;
-    vehicle.entity.label.text = labelText || deviceId;
-    vehicle.entity.label.fillColor = VEHICLE_LABEL_COLOR;
+    vehicle.baseLabel = labelText || deviceId;
+    vehicle.entity.label.text = formatTargetDisplayLabel(
+      vehicle.baseLabel,
+      escortTargetHighlight.targetId === String(deviceId)
+        ? escortTargetHighlight.droneName
+        : "",
+    );
     if (vehicle.entity.properties?.deviceName) {
       vehicle.entity.properties.deviceName = labelText || deviceId;
     }
@@ -1077,6 +1210,7 @@ const officerManager = {
         leadTime: 0,
         trailTime: 999999,
       },
+      viewFrom: getVehicleViewFrom(false),
       show: targetLayerVisibility.officer,
     });
 
@@ -1085,6 +1219,7 @@ const officerManager = {
       positionProp,
       lastPosition: null,
       defaultPathMaterial,
+      baseLabel: labelText || deviceId,
     });
     return this.officers.get(deviceId);
   },
@@ -1106,7 +1241,13 @@ const officerManager = {
   updateOfficerLabel(deviceId, labelText) {
     const officer = this.officers.get(deviceId);
     if (!officer?.entity?.label) return;
-    officer.entity.label.text = labelText || deviceId;
+    officer.baseLabel = labelText || deviceId;
+    officer.entity.label.text = formatTargetDisplayLabel(
+      officer.baseLabel,
+      escortTargetHighlight.targetId === String(deviceId)
+        ? escortTargetHighlight.droneName
+        : "",
+    );
     if (officer.entity.properties?.deviceName) {
       officer.entity.properties.deviceName = labelText || deviceId;
     }
@@ -1456,6 +1597,35 @@ const getVehicleModelRotation = () =>
     return Cesium.Quaternion.fromHeadingPitchRoll(hpr);
   }, false);
 
+/** 根据 2D/3D 模式计算 trackedEntity 的相机偏移（ENU：东、北、上） */
+const getVehicleViewFrom = (to2D = false) => {
+  const range = to2D
+    ? MAP_CONFIG.vehicleFollowRange2D
+    : MAP_CONFIG.vehicleFollowRange3D;
+  if (to2D) {
+    return new Cesium.Cartesian3(0, 0, range);
+  }
+  const pitchRad = Cesium.Math.toRadians(45);
+  return new Cesium.Cartesian3(
+    0,
+    -range * Math.cos(pitchRad),
+    range * Math.sin(pitchRad),
+  );
+};
+
+const applyEntityTrackViewFrom = (entity, to2D = isPitch2D.value) => {
+  if (!entity) return;
+  entity.viewFrom = getVehicleViewFrom(to2D);
+};
+
+const refreshTrackedEntity = (viewer, entity) => {
+  if (!viewer || viewer.isDestroyed?.() || !entity) return;
+  if (viewer.trackedEntity === entity) {
+    viewer.trackedEntity = undefined;
+  }
+  viewer.trackedEntity = entity;
+};
+
 const getVehicleShapeGraphics = () => ({
   model: {
     uri: "/models/car.glb",
@@ -1484,6 +1654,7 @@ const getVehicleShapeGraphics = () => ({
     heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
     disableDepthTestDistance: Number.POSITIVE_INFINITY,
   },
+  viewFrom: getVehicleViewFrom(false),
 });
 
 const patchVehicleDisplayGraphics = (entity) => {
@@ -1503,6 +1674,8 @@ const patchVehicleDisplayGraphics = (entity) => {
   if (!entity.point) {
     entity.point = getVehicleShapeGraphics().point;
   }
+
+  applyEntityTrackViewFrom(entity);
 };
 
 // 切换展示模式
@@ -1799,141 +1972,109 @@ const pickGlobeCenter = (viewer) => {
   return cartesian;
 };
 
-/** 读取当前相机层级，切换 2D/3D 时原样保留，不做重算 */
-const getPreservedCameraRange = (viewer) => {
-  const height = viewer?.camera?.positionCartographic?.height;
-  if (Number.isFinite(height) && height > 50 && height < 50000) {
-    return height;
-  }
-
-  const center = pickGlobeCenter(viewer);
-  if (Cesium.defined(center)) {
-    const distance = Cesium.Cartesian3.distance(viewer.camera.position, center);
-    if (Number.isFinite(distance) && distance > 50 && distance < 50000) {
-      return distance;
-    }
-  }
-
-  return MAP_CONFIG.mapDefaultRange;
-};
-
-const resolveViewFocusCenter = (viewer, focusEntity) => {
+/**
+ * 取当前相机到屏幕中心地面点的距离（即真实 range）。
+ * 返回 { center: Cartesian3, range: number }
+ * 这个 range 在 lookAt(HeadingPitchRange) 中是稳定的，不随 pitch 变化而漂移。
+ */
+const getCenterAndRange = (viewer, focusEntity = null) => {
+  // 优先使用锁定实体位置
   if (focusEntity?.position) {
-    const entityCenter = focusEntity.position.getValue(viewer.clock.currentTime);
-    if (Cesium.defined(entityCenter)) {
-      return entityCenter;
+    const pos = focusEntity.position.getValue(viewer.clock.currentTime);
+    if (Cesium.defined(pos)) {
+      const dist = Cesium.Cartesian3.distance(viewer.camera.position, pos);
+      const safeRange = Number.isFinite(dist) && dist > 10 && dist < 100000
+        ? dist
+        : MAP_CONFIG.mapDefaultRange;
+      return { center: pos, range: safeRange };
     }
   }
 
-  const picked = pickGlobeCenter(viewer);
-  if (Cesium.defined(picked)) {
-    return picked;
+  // 从屏幕中心射线拾取地面
+  const groundCenter = pickGlobeCenter(viewer);
+  if (Cesium.defined(groundCenter)) {
+    const dist = Cesium.Cartesian3.distance(viewer.camera.position, groundCenter);
+    if (Number.isFinite(dist) && dist > 10 && dist < 100000) {
+      return { center: groundCenter, range: dist };
+    }
   }
 
+  // 兜底：以相机正下方地面点 + 相机高度作为 range
   const carto = viewer.camera.positionCartographic;
-  return Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, 0);
-};
-
-const bakeCameraFromLookAt = (viewer) => {
-  const destination = Cesium.Cartesian3.clone(
-    viewer.camera.positionWC || viewer.camera.position,
+  const fallbackCenter = Cesium.Cartesian3.fromRadians(
+    carto.longitude, carto.latitude, 0,
   );
-  const direction = Cesium.Cartesian3.clone(
-    viewer.camera.directionWC || viewer.camera.direction,
+  const fallbackRange = Cesium.Math.clamp(
+    carto.height || MAP_CONFIG.mapDefaultRange, 100, 50000,
   );
-  const up = Cesium.Cartesian3.clone(viewer.camera.upWC || viewer.camera.up);
-
-  viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
-  viewer.camera.setView({
-    destination,
-    orientation: { direction, up },
-  });
-};
-
-const applyPitchOnlyView = (viewer, center, range, to2D, heading) => {
-  if (!viewer || viewer.isDestroyed?.() || !Cesium.defined(center)) return;
-
-  const resolvedRange =
-    Number.isFinite(range) && range > 50 ? range : MAP_CONFIG.mapDefaultRange;
-  const resolvedHeading = Cesium.defined(heading)
-    ? heading
-    : viewer.camera.heading;
-  const pitch = Cesium.Math.toRadians(to2D ? -90 : -45);
-
-  viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
-  viewer.camera.lookAt(
-    center,
-    new Cesium.HeadingPitchRange(resolvedHeading, pitch, resolvedRange),
-  );
-  bakeCameraFromLookAt(viewer);
+  return { center: fallbackCenter, range: fallbackRange };
 };
 
 /**
- * @description: switch 2D and 3D pitch（仅改俯仰角，不改变缩放层级）
+ * @description: switch 2D and 3D pitch（仅改俯仰角，中心点和缩放不变）
  * @return {*}
  */
 const toggleSceneMode = () => {
   if (!mainViewer || mainViewer.isDestroyed?.()) return;
-
-  const preservedRange = getPreservedCameraRange(mainViewer);
-  const preservedHeading = mainViewer.camera.heading;
 
   let focusEntity = null;
   if (isLockMode.value) {
     focusEntity =
       mainViewer.trackedEntity ||
       vehicleManager.vehicles.get(followedVehicleDeviceId)?.entity;
-    if (focusEntity) {
-      mainViewer.trackedEntity = focusEntity;
-    }
   }
-
-  const focusCenter = resolveViewFocusCenter(mainViewer, focusEntity);
 
   isPitch2D.value = !isPitch2D.value;
   const to2D = isPitch2D.value;
 
-  applyPitchOnlyView(
-    mainViewer,
-    focusCenter,
-    preservedRange,
-    to2D,
-    preservedHeading,
+  if (isLockMode.value && focusEntity) {
+    applyEntityTrackViewFrom(focusEntity, to2D);
+    refreshTrackedEntity(mainViewer, focusEntity);
+    return;
+  }
+
+  // 在改 isPitch2D 之前先拿到当前 center + range
+  const { center, range } = getCenterAndRange(mainViewer, focusEntity);
+  const heading = mainViewer.camera.heading;
+
+  // 用 lookAt 定位，再解除 transform 让相机可自由操作
+  mainViewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+  mainViewer.camera.lookAt(
+    center,
+    new Cesium.HeadingPitchRange(
+      heading,
+      Cesium.Math.toRadians(to2D ? -90 : -45),
+      range,
+    ),
   );
+  mainViewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
 
   if (subViewer && !subViewer.isDestroyed?.()) {
-    applyPitchOnlyView(
-      subViewer,
-      resolveViewFocusCenter(subViewer, null),
-      getPreservedCameraRange(subViewer),
-      to2D,
-      subViewer.camera.heading,
+    const sub = getCenterAndRange(subViewer, null);
+    subViewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+    subViewer.camera.lookAt(
+      sub.center,
+      new Cesium.HeadingPitchRange(
+        subViewer.camera.heading,
+        Cesium.Math.toRadians(to2D ? -90 : -45),
+        sub.range,
+      ),
     );
+    subViewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
   }
 };
 
 /**
- * @description: Switch tracking offset（首次锁车时使用配置距离；pitch 切换请走 toggleSceneMode）
- * @param {*} viewer
- * @param {*} targetEntity
- * @param {*} to2D
- * @param {{ preserveRange?: number }} options
- * @return {*}
+ * @description: 更新锁定目标的 viewFrom，并由 trackedEntity 维持跟车距离
  */
-const switchTrackedView = (viewer, targetEntity, to2D, { preserveRange } = {}) => {
+const switchTrackedView = (viewer, targetEntity, to2D) => {
   if (!viewer || viewer.isDestroyed?.()) return;
 
   const entity = targetEntity || viewer.trackedEntity;
-  if (!entity?.position) return;
+  if (!entity) return;
 
-  const center = entity.position.getValue(viewer.clock.currentTime);
-  if (!Cesium.defined(center)) return;
-
-  const range =
-    preserveRange ??
-    (to2D ? MAP_CONFIG.vehicleFollowRange2D : MAP_CONFIG.vehicleFollowRange3D);
-
-  applyPitchOnlyView(viewer, center, range, to2D, viewer.camera.heading);
+  applyEntityTrackViewFrom(entity, to2D);
+  refreshTrackedEntity(viewer, entity);
 };
 
 /**
@@ -1997,13 +2138,9 @@ const followVehicleEntity = (entity, deviceId, { force3D = false } = {}) => {
     isPitch2D.value = false;
   }
 
-  const entityChanged = mainViewer.trackedEntity !== entity;
-  mainViewer.trackedEntity = entity;
+  applyEntityTrackViewFrom(entity, isPitch2D.value);
   isLockMode.value = true;
-
-  if (entityChanged || force3D) {
-    switchTrackedView(mainViewer, entity, isPitch2D.value);
-  }
+  switchTrackedView(mainViewer, entity, isPitch2D.value);
 };
 
 const releaseVehicleFollow = () => {
@@ -2233,7 +2370,7 @@ const createDynamicVehicle = (viewer) => {
       leadTime: 0,
       trailTime: 999999,
     },
-    viewFrom: new Cesium.Cartesian3(-150, -150, 100),
+    viewFrom: getVehicleViewFrom(false),
   });
 };
 
@@ -3854,6 +3991,10 @@ function syncStoreDevicesToMap() {
     }
   });
   orphanIds.forEach((id) => droneTestManager.removeDrone(id));
+
+  if (props.activeEscortDroneId) {
+    syncEscortTargetHighlight(props.activeEscortDroneId);
+  }
 }
 
 function subscribeVehicleLocationTopics() {
@@ -4573,6 +4714,25 @@ defineExpose({
   recallDrone,
   toggleLayerVisibility,
 });
+
+watch(
+  () => props.activeEscortDroneId,
+  (droneId) => syncEscortTargetHighlight(droneId),
+);
+
+watch(
+  () => {
+    const droneId = String(props.activeEscortDroneId || "").trim();
+    if (!droneId || !escortTargetHighlight.targetId) return "";
+    const drone = deviceStore.drones.find((d) => String(d?.id || "") === droneId);
+    return drone?.isEscorting ? resolveEscortTargetId(drone) : "";
+  },
+  (targetId) => {
+    if (!props.activeEscortDroneId || !targetId) return;
+    syncEscortTargetHighlight(props.activeEscortDroneId);
+  },
+);
+
 watch(
   () => viewerLoadCount.value,
   (newVal) => {
@@ -4622,6 +4782,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  syncEscortTargetHighlight("");
   mqttService.unsubscribe("carBox/+/location");
   subscribeEscortDroneOsd._subscribed = false;
   officerManager.clearAll();

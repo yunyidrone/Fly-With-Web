@@ -8,7 +8,11 @@
   <div class="page-wrapper" :class="{ 'immersive-flight': immersiveFlight }">
     <!-- 全屏地图（图例叠在地图区域内，沉浸分屏时随左半屏地图居中） -->
     <div class="map-container" @click="onMapAreaClick">
-      <TiandituMap ref="mapRef" @open-drone-stream="openDroneStream" />
+      <TiandituMap
+        ref="mapRef"
+        :active-escort-drone-id="activeEscortDroneId"
+        @open-drone-stream="openDroneStream"
+      />
       <div v-show="!immersiveFlight" class="map-legend-host">
         <MapLegend
           @lockdown="mapRef?.triggerLockdown()"
@@ -324,6 +328,15 @@ const streamDroneLive = computed(() => {
 });
 
 const streamDroneKey = computed(() => streamDroneLive.value?.id || "none");
+
+/** 伴飞中当前选中的无人机（视频弹窗打开且处于伴飞） */
+const activeEscortDroneId = computed(() => {
+  if (!droneStreamVisible.value || !streamDrone.value?.id) return "";
+  const live = streamDroneLive.value;
+  const drone = live || streamDrone.value;
+  if (!drone?.isEscorting) return "";
+  return String(drone.id);
+});
 
 function resolveEscortTargetId(device) {
   return String(
