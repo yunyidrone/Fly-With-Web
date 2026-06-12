@@ -378,6 +378,8 @@ async function submitStartFollow(targetId, droneSn, droneId) {
     droneTestManager.clearDroneTrajectory(entityKey);
     await deviceStore.fetchDroneList();
     ElMessage.success(`已下发伴飞指令：${targetId}`);
+    pendingEscortLockTargetId = String(targetId).trim();
+    lockToEscortTarget(pendingEscortLockTargetId);
     if (escortDrone) {
       emit("open-drone-stream", escortDrone);
     }
@@ -1268,9 +1270,37 @@ const officerManager = {
   },
 };
 
+function horizontalDistanceMeters(lng1, lat1, lng2, lat2) {
+  const c1 = Cesium.Cartesian3.fromDegrees(lng1, lat1, 0);
+  const c2 = Cesium.Cartesian3.fromDegrees(lng2, lat2, 0);
+  return Cesium.Cartesian3.distance(c1, c2);
+}
+
 // 多无人机测试管理器
 const droneTestManager = {
   drones: new Map(),
+
+  _removeAllPositionSamples(drone) {
+    drone.positionProp.removeSamples(
+      new Cesium.TimeInterval({
+        start: Cesium.JulianDate.fromIso8601("1970-01-01T00:00:00Z"),
+        stop: Cesium.JulianDate.fromIso8601("9999-12-31T23:59:59Z"),
+      }),
+    );
+  },
+
+  _refreshPath(drone) {
+    if (!drone?.entity?.path) return;
+    drone.entity.path.show = false;
+    drone.entity.path.show = true;
+  },
+
+  _addTrailSample(drone, lng, lat, height) {
+    const now = mainViewer.clock.currentTime;
+    const position = Cesium.Cartesian3.fromDegrees(lng, lat, height);
+    drone.positionProp.addSample(now, position);
+    drone.lastPosition = { lng, lat, height };
+  },
 
   createDrone(viewer, droneId, lng, lat, height = 80, labelText = droneId) {
     if (this.drones.has(droneId)) return this.drones.get(droneId);
@@ -1335,17 +1365,13 @@ const droneTestManager = {
       },
     });
 
-    // 设置初始位置
-    const initPos = Cesium.Cartesian3.fromDegrees(lng, lat, height);
-    const now = viewer.clock.currentTime;
-    positionProp.addSample(now, initPos);
-
     this.drones.set(droneId, {
       entity,
       positionProp,
       orientationProp,
       lastPosition: { lng, lat, height },
       lastScheduledTime: null,
+      hasTrailSample: false,
     });
 
     console.log(`🛸 创建无人机实体: ${droneId}`);
@@ -1358,39 +1384,53 @@ const droneTestManager = {
       console.warn(`无人机 ${droneId} 不存在`);
       return;
     }
+    if (!mainViewer || mainViewer.isDestroyed?.()) return;
 
-    const now = mainViewer.clock.currentTime;
-    const position = Cesium.Cartesian3.fromDegrees(lng, lat, height);
-    drone.positionProp.addSample(now, position);
-    drone.lastPosition = { lng, lat, height };
+    const maxStep = MAP_CONFIG.droneTrailMaxStepMeters ?? 500;
+    const last = drone.lastPosition;
+
+    if (
+      drone.hasTrailSample &&
+      last &&
+      Number.isFinite(last.lng) &&
+      Number.isFinite(last.lat)
+    ) {
+      const dist = horizontalDistanceMeters(last.lng, last.lat, lng, lat);
+      if (dist > maxStep) {
+        console.warn(
+          `无人机 ${droneId} 轨迹跳变 ${dist.toFixed(0)}m，已清空旧轨迹并重记`,
+        );
+        this._removeAllPositionSamples(drone);
+        this._addTrailSample(drone, lng, lat, height);
+        drone.hasTrailSample = true;
+        this._refreshPath(drone);
+        return;
+      }
+    }
+
+    this._addTrailSample(drone, lng, lat, height);
+    drone.hasTrailSample = true;
   },
 
   clearDroneTrajectory(droneId) {
     const drone = this.drones.get(droneId);
     if (!drone) return;
 
-    // 清空所有历史轨迹
-    drone.positionProp.removeSamples(
-      new Cesium.TimeInterval({
-        start: Cesium.JulianDate.fromIso8601("1970-01-01T00:00:00Z"),
-        stop: Cesium.JulianDate.fromIso8601("9999-12-31T23:59:59Z"),
-      }),
-    );
+    this._removeAllPositionSamples(drone);
 
-    // 保留当前位置作为新轨迹起点（只留一个点 = 无轨迹线）
     if (drone.lastPosition?.lng != null && drone.lastPosition?.lat != null) {
-      const pos = Cesium.Cartesian3.fromDegrees(
+      this._addTrailSample(
+        drone,
         drone.lastPosition.lng,
         drone.lastPosition.lat,
-        drone.lastPosition.height || 80,
+        drone.lastPosition.height ?? DRONE_HEIGHT,
       );
-      drone.positionProp.addSample(mainViewer.clock.currentTime, pos);
+      drone.hasTrailSample = true;
+    } else {
+      drone.hasTrailSample = false;
     }
 
-    // 强制刷新轨迹显示
-    drone.entity.path.show = false;
-    drone.entity.path.show = true;
-
+    this._refreshPath(drone);
     drone.lastScheduledTime = null;
     console.log(`🧹 已清除无人机 ${droneId} 轨迹`);
   },
@@ -1488,6 +1528,8 @@ let verticalLines = [];
 let isFirstPoint = true;
 // 当前持续跟随的车辆 deviceId（伴飞时保持居中）
 let followedVehicleDeviceId = null;
+/** 开始伴飞后待锁定的目标 id（实体尚未就绪时保留，以最新一次伴飞为准） */
+let pendingEscortLockTargetId = null;
 // Record the next point index
 let runPointIndex = 0;
 // Record the time of the last path point for car
@@ -2125,6 +2167,14 @@ const switchMapMode = (mode) => {
   }
 };
 
+/** 锁定模式下，仅刷新当前已跟随车辆的位置，不因其他车辆 MQTT 消息切换目标 */
+function shouldRefreshVehicleFollowOnMqtt(deviceId) {
+  if (!isLockMode.value) return false;
+  const incomingId = String(deviceId || "").trim();
+  const followedId = String(followedVehicleDeviceId || "").trim();
+  return Boolean(incomingId && followedId && incomingId === followedId);
+}
+
 /**
  * @description: 锁定相机跟随车辆，使车辆保持在视野中心
  */
@@ -2145,6 +2195,7 @@ const followVehicleEntity = (entity, deviceId, { force3D = false } = {}) => {
 
 const releaseVehicleFollow = () => {
   isLockMode.value = false;
+  pendingEscortLockTargetId = null;
   if (mainViewer && !mainViewer.isDestroyed?.()) {
     mainViewer.trackedEntity = undefined;
   }
@@ -3245,6 +3296,7 @@ const clearRunningRoute = () => {
   // 重置初始状态
   isFirstPoint = true;
   followedVehicleDeviceId = null;
+  pendingEscortLockTargetId = null;
   isLockMode.value = false;
   mainViewer.trackedEntity = undefined;
 
@@ -3710,6 +3762,194 @@ async function requestRouteFromTDT(startLng, startLat, endLng, endLat) {
 }
 
 /**
+ * @description: 开始伴飞后锁定到伴飞目标（车辆/警员），以最新一次伴飞为准
+ */
+function lockToEscortTarget(targetId) {
+  if (!mainViewer || mainViewer.isDestroyed?.()) return false;
+
+  const id = String(targetId || "").trim();
+  if (!id) return false;
+
+  const target = (Array.isArray(deviceStore.targets) ? deviceStore.targets : []).find(
+    (t) => String(t?.id || "") === id,
+  );
+  const targetType = resolveTargetType(target);
+
+  if (targetType === 2) {
+    const officer = officerManager.officers.get(id);
+    if (officer?.entity) {
+      followVehicleEntity(officer.entity, id, { force3D: true });
+      pendingEscortLockTargetId = null;
+      return true;
+    }
+    return false;
+  }
+
+  const vehicle = vehicleManager.vehicles.get(id);
+  if (vehicle?.entity) {
+    followVehicleEntity(vehicle.entity, id, { force3D: true });
+    pendingEscortLockTargetId = null;
+    return true;
+  }
+  return false;
+}
+
+function tryApplyPendingEscortLock(deviceId) {
+  const pending = String(pendingEscortLockTargetId || "").trim();
+  if (!pending) return;
+  if (deviceId && String(deviceId) !== pending) return;
+  lockToEscortTarget(pending);
+}
+
+/**
+ * 沉浸伴飞：锁定当前视频对应伴飞目标
+ * - 已锁定同一目标：忽略
+ * - 未锁定：锁定
+ * - 已锁定其他目标：切换到新目标
+ */
+let immersiveMapFocusActive = false;
+let immersiveMapFocusTargetId = null;
+let immersiveMapFocusDroneId = null;
+let immersiveMapFocusDroneKeys = new Set();
+
+function resolveImmersiveDroneKeys(droneId) {
+  const id = String(droneId || "").trim();
+  const keys = new Set();
+  if (!id) return keys;
+
+  const drone =
+    deviceStore.drones.find((d) => String(d?.id || "") === id) ||
+    deviceStore.drones.find((d) => String(d?.sn || "") === id) ||
+    deviceStore.drones.find((d) => String(d?.mqttSn || "") === id);
+
+  if (drone) {
+    const primary = getDroneEntityKey(drone);
+    if (primary) keys.add(primary);
+    [drone.id, drone.sn, drone.mqttSn].forEach((alias) => {
+      const key = String(alias || "").trim();
+      if (key) keys.add(key);
+    });
+  } else {
+    keys.add(id);
+  }
+  return keys;
+}
+
+function applyImmersiveMapEntityVisibility() {
+  if (!mainViewer || mainViewer.isDestroyed?.() || !immersiveMapFocusActive) return;
+
+  const targetId = String(immersiveMapFocusTargetId || "").trim();
+  const droneKeys = immersiveMapFocusDroneKeys;
+
+  vehicleManager.vehicles.forEach((vehicle, id) => {
+    if (vehicle?.entity) vehicle.entity.show = String(id) === targetId;
+  });
+  officerManager.officers.forEach((officer, id) => {
+    if (officer?.entity) officer.entity.show = String(id) === targetId;
+  });
+  droneTestManager.drones.forEach((drone, id) => {
+    if (drone?.entity) drone.entity.show = droneKeys.has(String(id));
+  });
+
+  if (carEntity) carEntity.show = false;
+  if (droneEntity) {
+    const legacyKey = String(drone_id || "").trim();
+    droneEntity.show = legacyKey && droneKeys.has(legacyKey);
+  }
+
+  lockdownEntities.forEach((entity) => {
+    if (entity) entity.show = false;
+  });
+  companionRouteEntities.forEach((entity) => {
+    if (entity) entity.show = false;
+  });
+  routeMarkers.forEach((entity) => {
+    if (entity) entity.show = false;
+  });
+  verticalLines.forEach((entity) => {
+    if (entity) entity.show = false;
+  });
+  flightPlanPolygonEntities.forEach((entity) => {
+    if (entity) entity.show = false;
+  });
+
+  mainViewer?.scene?.requestRender?.();
+}
+
+function restoreMapVisibilityAfterImmersive() {
+  if (!mainViewer || mainViewer.isDestroyed?.()) return;
+
+  vehicleManager.vehicles.forEach((vehicle) => {
+    if (vehicle?.entity) vehicle.entity.show = targetLayerVisibility.policeCar;
+  });
+  officerManager.officers.forEach((officer) => {
+    if (officer?.entity) officer.entity.show = targetLayerVisibility.officer;
+  });
+  droneTestManager.drones.forEach((drone) => {
+    if (drone?.entity) drone.entity.show = true;
+  });
+
+  if (carEntity) carEntity.show = targetLayerVisibility.policeCar;
+  if (droneEntity) droneEntity.show = true;
+
+  lockdownEntities.forEach((entity) => {
+    if (entity) entity.show = true;
+  });
+  companionRouteEntities.forEach((entity) => {
+    if (entity) entity.show = routeLayerVisible;
+  });
+  routeMarkers.forEach((entity) => {
+    if (entity) entity.show = routeLayerVisible;
+  });
+  verticalLines.forEach((entity) => {
+    if (entity) entity.show = routeLayerVisible;
+  });
+  flightPlanPolygonEntities.forEach((entity) => {
+    if (entity) entity.show = true;
+  });
+
+  mainViewer?.scene?.requestRender?.();
+}
+
+function setImmersiveMapFocus(active, targetId = "", droneId = "") {
+  if (active) {
+    const tid = String(targetId || "").trim();
+    const did = String(droneId || "").trim();
+    if (!tid || !did) return false;
+
+    immersiveMapFocusActive = true;
+    immersiveMapFocusTargetId = tid;
+    immersiveMapFocusDroneId = did;
+    immersiveMapFocusDroneKeys = resolveImmersiveDroneKeys(did);
+    applyImmersiveMapEntityVisibility();
+    return true;
+  }
+
+  immersiveMapFocusActive = false;
+  immersiveMapFocusTargetId = null;
+  immersiveMapFocusDroneId = null;
+  immersiveMapFocusDroneKeys = new Set();
+  restoreMapVisibilityAfterImmersive();
+  return true;
+}
+
+function lockEscortTargetOnImmersive(targetId) {
+  const id = String(targetId || "").trim();
+  if (!id) return false;
+
+  if (isLockMode.value && String(followedVehicleDeviceId || "") === id) {
+    return true;
+  }
+
+  pendingEscortLockTargetId = id;
+  const ok = lockToEscortTarget(id);
+  if (!ok) {
+    ElMessage.warning("伴飞目标尚未就绪，将在位置更新后自动锁定");
+  }
+  return ok;
+}
+
+/**
  * @description: 锁定到指定车辆
  */
 const lockToVehicle = (deviceId) => {
@@ -3831,17 +4071,6 @@ const handleCarBoxMessage = (topic, data) => {
       officerManager.createOfficer(mainViewer, deviceId, label);
       officerManager.updateOfficerLabel(deviceId, label);
       officerManager.updateOfficerPosition(deviceId, longitude, latitude, 0);
-
-      if (isFirstPoint) {
-        const officer = officerManager.officers.get(deviceId);
-        if (officer?.entity) {
-          mainViewer.trackedEntity = officer.entity;
-          isLockMode.value = true;
-          switchTrackedView(mainViewer, officer.entity, false);
-          isPitch2D.value = false;
-          isFirstPoint = false;
-        }
-      }
     } else if (targetType === 3) {
       vehicleManager.removeVehicle(deviceId);
       officerManager.removeOfficer(deviceId);
@@ -3854,33 +4083,19 @@ const handleCarBoxMessage = (topic, data) => {
       );
       vehicleManager.updateVehicleLabel(deviceId, label);
       vehicleManager.updateVehiclePosition(deviceId, longitude, latitude, 0);
-      if (isFirstPoint) {
-        followVehicleEntity(vehicle.entity, deviceId, { force3D: true });
-        isFirstPoint = false;
-      } else if (isLockMode.value) {
+      if (shouldRefreshVehicleFollowOnMqtt(deviceId)) {
         followVehicleEntity(vehicle.entity, deviceId);
       }
     }
+
+    tryApplyPendingEscortLock(deviceId);
   }
 
   if (alarmFlag && alarmFlag !== 0) {
-    const targetType = resolveTargetType(target);
-    if (targetType === 2) {
-      const officer = officerManager.officers.get(deviceId);
-      if (officer?.entity) {
-        mainViewer.trackedEntity = officer.entity;
-        isLockMode.value = true;
-        switchTrackedView(mainViewer, officer.entity, false);
-        isPitch2D.value = false;
-      }
-    } else {
-      lockToVehicle(deviceId);
-    }
-    const devicePosition = {
+    showAlarmDialog(deviceId, alarmFlag, {
       longitude,
       latitude,
-    };
-    showAlarmDialog(deviceId, alarmFlag, devicePosition);
+    });
   }
 
   systemStore.addCarMessage({ ...data, deviceId });
@@ -3980,7 +4195,9 @@ function syncStoreDevicesToMap() {
       label,
     );
     droneTestManager.updateDroneLabel(entityKey, label);
-    droneTestManager.updateDronePosition(entityKey, lng, lat, resolvedHeight);
+    if (!drone._mqttUpdated) {
+      droneTestManager.updateDronePosition(entityKey, lng, lat, resolvedHeight);
+    }
   });
 
   // 清理已从 store 移除的无人机实体
@@ -3994,6 +4211,13 @@ function syncStoreDevicesToMap() {
 
   if (props.activeEscortDroneId) {
     syncEscortTargetHighlight(props.activeEscortDroneId);
+  }
+
+  if (immersiveMapFocusActive) {
+    immersiveMapFocusDroneKeys = resolveImmersiveDroneKeys(
+      immersiveMapFocusDroneId,
+    );
+    applyImmersiveMapEntityVisibility();
   }
 }
 
@@ -4499,7 +4723,7 @@ const syncCamera = (subViewer, mainViewer) => {
   });
 };
 
-// 拖动地图时解除锁定，按钮状态通过 isLockMode 同步
+// 用户主动操作地图（拖拽/缩放）时解除锁定，按钮状态通过 isLockMode 同步
 let manualUnlockHandler = null;
 const initManualUnlock = (viewer) => {
   if (manualUnlockHandler) {
@@ -4507,11 +4731,24 @@ const initManualUnlock = (viewer) => {
     manualUnlockHandler = null;
   }
 
-  manualUnlockHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-  manualUnlockHandler.setInputAction(() => {
+  const unlockOnUserCameraInput = () => {
     if (!isLockMode.value) return;
     releaseVehicleFollow();
-  }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+  };
+
+  manualUnlockHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  manualUnlockHandler.setInputAction(
+    unlockOnUserCameraInput,
+    Cesium.ScreenSpaceEventType.LEFT_DOWN,
+  );
+  manualUnlockHandler.setInputAction(
+    unlockOnUserCameraInput,
+    Cesium.ScreenSpaceEventType.WHEEL,
+  );
+  manualUnlockHandler.setInputAction(
+    unlockOnUserCameraInput,
+    Cesium.ScreenSpaceEventType.PINCH_START,
+  );
 };
 
 // 监听鼠标移动，实时更新坐标
@@ -4713,6 +4950,8 @@ defineExpose({
   triggerLockdown,
   recallDrone,
   toggleLayerVisibility,
+  lockEscortTargetOnImmersive,
+  setImmersiveMapFocus,
 });
 
 watch(

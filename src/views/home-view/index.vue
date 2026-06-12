@@ -102,7 +102,7 @@
               :escort-start-time="streamEscortStartTime"
               :companion-task-title="streamCompanionTaskTitle"
               :immersive-flight="immersiveFlight"
-              @toggle-immersive="immersiveFlight = !immersiveFlight"
+              @toggle-immersive="onToggleImmersive"
               @recall="handleStreamRecall"
             />
         </div>
@@ -297,6 +297,25 @@ watch(
   },
 );
 
+function onToggleImmersive() {
+  const willEnter = !immersiveFlight.value;
+  immersiveFlight.value = willEnter;
+
+  const targetId = streamTargetId.value;
+  const droneId = String(
+    streamDroneLive.value?.id || streamDrone.value?.id || "",
+  );
+
+  if (willEnter) {
+    mapRef.value?.setImmersiveMapFocus?.(true, targetId, droneId);
+    if (targetId) {
+      mapRef.value?.lockEscortTargetOnImmersive?.(targetId);
+    }
+  } else {
+    mapRef.value?.setImmersiveMapFocus?.(false);
+  }
+}
+
 watch(immersiveFlight, () => {
   nextTick(() => {
     requestAnimationFrame(() => {
@@ -424,6 +443,9 @@ const handleStreamRecall = async ({ droneId } = {}) => {
 const closeDroneStream = () => {
   if (document.fullscreenElement) {
     document.exitFullscreen().catch(() => {});
+  }
+  if (immersiveFlight.value) {
+    mapRef.value?.setImmersiveMapFocus?.(false);
   }
   droneStreamVisible.value = false;
   immersiveFlight.value = false;

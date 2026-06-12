@@ -180,6 +180,7 @@
         <img class="footer-btn__icon-img" :src="qjxsPng" alt="" aria-hidden="true" />
       </button>
       <button
+        v-if="hasEscortTarget"
         type="button"
         class="footer-btn btn-primary"
         @click="handleImmersiveToggle"
@@ -287,6 +288,11 @@ const perspectiveVideoText = computed(() =>
 const immersiveBtnLabel = computed(() =>
   props.immersiveFlight ? "退出沉浸" : "沉浸伴飞",
 );
+
+const hasEscortTarget = computed(() => {
+  const id = String(props.targetDeviceId || "").trim();
+  return Boolean(id && id !== "—");
+});
 
 const lng = computed(() => props.lng);
 const lat = computed(() => props.lat);
