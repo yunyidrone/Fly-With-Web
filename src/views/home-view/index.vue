@@ -11,7 +11,9 @@
       <TiandituMap
         ref="mapRef"
         :active-escort-drone-id="activeEscortDroneId"
+        :immersive-flight="immersiveFlight"
         @open-drone-stream="openDroneStream"
+        @immersive-escort-switch="onImmersiveEscortSwitch"
       />
       <div v-show="!immersiveFlight" class="map-legend-host">
         <MapLegend
@@ -527,6 +529,15 @@ const openDroneStream = async (device) => {
     liveFromStore ? { ...streamDrone.value, ...liveFromStore } : streamDrone.value,
   );
 };
+
+/** 沉浸中「开始伴飞并跳转」：先退出沉浸，再切视频（锁车由地图侧 submitStartFollow 完成） */
+function onImmersiveEscortSwitch(device) {
+  if (immersiveFlight.value) {
+    immersiveFlight.value = false;
+    mapRef.value?.setImmersiveMapFocus?.(false);
+  }
+  void openDroneStream(device);
+}
 
 const handleStreamRecall = async ({ droneId } = {}) => {
   if (droneId) {

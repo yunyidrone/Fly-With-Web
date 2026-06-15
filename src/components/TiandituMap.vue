@@ -203,11 +203,34 @@
         </select>
       </div>
       <p v-else class="police-vehicle-popup__empty">暂无可用无人机（仅展示就绪状态）</p>
+      <div
+        v-if="immersiveFlight"
+        class="police-vehicle-popup__actions"
+      >
+        <button
+          type="button"
+          class="police-vehicle-popup__escort police-vehicle-popup__escort--primary"
+          :disabled="policeVehiclePopup.loadingDrones || !policeVehiclePopup.drones.length"
+          @click="handlePolicePopupEscort('follow-only')"
+        >
+          开始伴飞
+        </button>
+        <button
+          type="button"
+          class="police-vehicle-popup__escort police-vehicle-popup__escort--jump"
+          title="将退出当前沉浸并切换到新伴飞目标"
+          :disabled="policeVehiclePopup.loadingDrones || !policeVehiclePopup.drones.length"
+          @click="handlePolicePopupEscort('follow-and-switch')"
+        >
+          开始伴飞并跳转
+        </button>
+      </div>
       <button
+        v-else
         type="button"
         class="police-vehicle-popup__escort"
         :disabled="policeVehiclePopup.loadingDrones || !policeVehiclePopup.drones.length"
-        @click="handlePolicePopupEscort"
+        @click="handlePolicePopupEscort('follow-full')"
       >
         一键伴飞
       </button>
@@ -273,9 +296,11 @@ import { unwrapApiList } from "@/utils/request.js";
 const props = defineProps({
   /** 伴飞中当前选中的无人机 id（通常来自视频弹窗/资源卡片） */
   activeEscortDroneId: { type: String, default: "" },
+  /** 是否处于沉浸伴飞（告警弹窗在沉浸中会展示「开始伴飞并跳转」） */
+  immersiveFlight: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(["open-drone-stream"]);
+const emit = defineEmits(["open-drone-stream", "immersive-escort-switch"]);
 
 // 加载状态
 const isLoading = ref(true);
@@ -328,7 +353,7 @@ const updatePolicePopupScreenPosition = () => {
   let left = canvasPos.x + POLICE_POPUP_OFFSET;
   let top = canvasPos.y;
 
-  if (left + POLICE_POPUP_WIDTH > w - 8) {FF
+  if (left + POLICE_POPUP_WIDTH > w - 8) {
     left = canvasPos.x - POLICE_POPUP_WIDTH - POLICE_POPUP_OFFSET;
   }
   left = Math.max(8, Math.min(left, w - POLICE_POPUP_WIDTH - 8));
@@ -357,7 +382,8 @@ const closePoliceVehiclePopup = () => {
   detachPolicePopupTracker();
 };
 
-async function submitStartFollow(targetId, droneSn, droneId) {
+async function submitStartFollow(targetId, droneSn, droneId, options = {}) {
+  const { applyLock = true, openStream = true, exitImmersive = false } = options;
   if (!targetId) {
     ElMessage.warning("未找到目标设备");
     return false;
@@ -378,10 +404,17 @@ async function submitStartFollow(targetId, droneSn, droneId) {
     droneTestManager.clearDroneTrajectory(entityKey);
     await deviceStore.fetchDroneList();
     ElMessage.success(`已下发伴飞指令：${targetId}`);
-    pendingEscortLockTargetId = String(targetId).trim();
-    lockToEscortTarget(pendingEscortLockTargetId);
-    if (escortDrone) {
-      emit("open-drone-stream", escortDrone);
+    if (applyLock) {
+      // 记录待锁目标；目标已在地图上则立即锁定，否则等 MQTT 后由 tryApplyPendingEscortLock 补锁
+      pendingEscortLockTargetId = String(targetId).trim();
+      lockToEscortTarget(pendingEscortLockTargetId);
+    }
+    if (openStream && escortDrone) {
+      if (exitImmersive) {
+        emit("immersive-escort-switch", escortDrone);
+      } else {
+        emit("open-drone-stream", escortDrone);
+      }
     }
     return true;
   } catch (e) {
@@ -495,13 +528,41 @@ function resolveEscortTargetId(device) {
   ).trim();
 }
 
-const handlePolicePopupEscort = async () => {
+/** 告警弹窗 / 警车弹窗共用：按动作下发伴飞并决定是否换锁车、切视频、退出沉浸 */
+async function applyEscortFollowAction(action, targetId, droneSn, droneId) {
+  if (!droneSn || !droneId) {
+    ElMessage.warning("请选择可用无人机");
+    return false;
+  }
+  if (action === "follow-only") {
+    return submitStartFollow(targetId, droneSn, droneId, {
+      applyLock: false,
+      openStream: false,
+    });
+  }
+  if (action === "follow-and-switch") {
+    return submitStartFollow(targetId, droneSn, droneId, {
+      applyLock: true,
+      openStream: true,
+      exitImmersive: true,
+    });
+  }
+  return submitStartFollow(targetId, droneSn, droneId);
+}
+
+function resolvePolicePopupDroneSelection() {
   const targetId = policeVehiclePopup.deviceId;
   const selected = (policeVehiclePopup.drones || []).find(
     (d) => String(d.id) === String(policeVehiclePopup.selectedDroneId),
   );
   const droneSn = selected?.sn || selected?.raw?.sn || "";
-  await submitStartFollow(targetId, droneSn, policeVehiclePopup.selectedDroneId);
+  const droneId = policeVehiclePopup.selectedDroneId;
+  return { targetId, droneSn, droneId };
+}
+
+const handlePolicePopupEscort = async (action = "follow-full") => {
+  const { targetId, droneSn, droneId } = resolvePolicePopupDroneSelection();
+  await applyEscortFollowAction(action, targetId, droneSn, droneId);
 };
 
 function toFiniteNumber(v) {
@@ -1329,7 +1390,7 @@ const droneTestManager = {
       position: positionProp,
       orientation: orientationProp,
       model: {
-        uri: "/models/uav.glb",
+        uri: "/models/drone.glb",
         minimumPixelSize: 48,
         runAnimations: true,
       },
@@ -1528,7 +1589,11 @@ let verticalLines = [];
 let isFirstPoint = true;
 // 当前持续跟随的车辆 deviceId（伴飞时保持居中）
 let followedVehicleDeviceId = null;
-/** 开始伴飞后待锁定的目标 id（实体尚未就绪时保留，以最新一次伴飞为准） */
+/**
+ * 待锁定的伴飞目标 deviceId。
+ * 开始伴飞 / 沉浸伴飞时写入；lockToEscortTarget 成功则清空，实体未就绪则保留。
+ * 由 tryApplyPendingEscortLock 在目标 MQTT 更新时重试；用户拖拽解除跟随时也会清空。
+ */
 let pendingEscortLockTargetId = null;
 // Record the next point index
 let runPointIndex = 0;
@@ -1841,7 +1906,7 @@ let modelsPreloaded = false;
 const preloadModels = () => {
   if (modelsPreloaded) return;
   modelsPreloaded = true;
-  ["/models/car.glb", "/models/uav.glb"].forEach((url) => {
+  ["/models/car.glb", "/models/drone.glb"].forEach((url) => {
     fetch(url).catch(() => {});
   });
 };
@@ -2195,7 +2260,7 @@ const followVehicleEntity = (entity, deviceId, { force3D = false } = {}) => {
 
 const releaseVehicleFollow = () => {
   isLockMode.value = false;
-  pendingEscortLockTargetId = null;
+  pendingEscortLockTargetId = null; // 用户手动解除跟随时取消待锁，避免再次自动锁回
   if (mainViewer && !mainViewer.isDestroyed?.()) {
     mainViewer.trackedEntity = undefined;
   }
@@ -2326,7 +2391,7 @@ const initScene = (viewer) => {
     position: dronePositionProp,
     orientation: droneOrientationProp,
     model: {
-      uri: "/models/uav.glb",
+      uri: "/models/drone.glb",
       minimumPixelSize: 48,
       runAnimations: true,
     },
@@ -3762,7 +3827,8 @@ async function requestRouteFromTDT(startLng, startLat, endLng, endLat) {
 }
 
 /**
- * @description: 开始伴飞后锁定到伴飞目标（车辆/警员），以最新一次伴飞为准
+ * 锁定镜头到伴飞目标（车辆 / 警员），以最新一次伴飞为准。
+ * @returns {boolean} 地图上已有对应实体并完成跟随时为 true，并清空 pendingEscortLockTargetId；否则 false 且保留 pending 供后续重试。
  */
 function lockToEscortTarget(targetId) {
   if (!mainViewer || mainViewer.isDestroyed?.()) return false;
@@ -3794,6 +3860,10 @@ function lockToEscortTarget(targetId) {
   return false;
 }
 
+/**
+ * 延迟锁车重试：目标实体尚未就绪时 pending 会保留，待该目标 MQTT 上报后再调用 lockToEscortTarget。
+ * 若已成功锁定（pending 已清空）或本次更新的是其他设备，则直接返回、不重复锁定。
+ */
 function tryApplyPendingEscortLock(deviceId) {
   const pending = String(pendingEscortLockTargetId || "").trim();
   if (!pending) return;
@@ -3941,6 +4011,7 @@ function lockEscortTargetOnImmersive(targetId) {
     return true;
   }
 
+  // 与开始伴飞相同：先记 pending，实体未就绪时由 tryApplyPendingEscortLock 补锁
   pendingEscortLockTargetId = id;
   const ok = lockToEscortTarget(id);
   if (!ok) {
@@ -3966,6 +4037,98 @@ const lockToVehicle = (deviceId) => {
 };
 
 /**
+ * 告警伴飞弹窗：沉浸模式下额外提供「开始伴飞并跳转」
+ * @returns {Promise<null | 'follow-full' | 'follow-only' | 'follow-and-switch'>}
+ */
+function promptAlarmEscortAction({ deviceId, vehicleName, optionsHtml, isImmersive }) {
+  const immersiveActionsHtml = isImmersive
+    ? `<div class="alarm-dialog__immersive-btns">
+        <button type="button" id="alarm-start-follow-only" class="alarm-dialog__btn alarm-dialog__btn--primary">开始伴飞</button>
+        <button type="button" id="alarm-start-follow-jump" class="alarm-dialog__btn alarm-dialog__btn--jump" title="将退出当前沉浸并切换到新伴飞目标">开始伴飞并跳转</button>
+      </div>`
+    : "";
+
+  const html = `<style>
+      #alarm-drone-select option { color: #fff; background: #1c222a; }
+    </style>
+    <div style="padding: 10px;">
+      <h4 style="margin: 0 0 10px 0;">接收到伴飞请求</h4>
+      <p>车辆名称：${vehicleName}</p>
+      <p style="margin:10px;">设备ID：${deviceId}</p>
+      <div style="margin-top:10px;display: flex;">
+        <label for="alarm-drone-select" style="margin-left: -18px;">推荐无人机：</label>
+        <select id="alarm-drone-select" style="width:250px;height:32px;padding:8px;border:1px solid #30363b;background:rgba(255,255,255,0.08);border-radius:2px;color:#fff;">
+          ${optionsHtml}
+        </select>
+      </div>
+      ${immersiveActionsHtml}
+    </div>`;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (action) => {
+      if (settled) return;
+      settled = true;
+      resolve(action);
+    };
+
+    ElMessageBox({
+      title: "伴飞请求",
+      message: html,
+      dangerouslyUseHTMLString: true,
+      showConfirmButton: !isImmersive,
+      showCancelButton: true,
+      confirmButtonText: "开始伴飞",
+      cancelButtonText: "取消",
+      type: "warning",
+      customClass: isImmersive
+        ? "alarm-dialog alarm-dialog--immersive"
+        : "alarm-dialog",
+      closeOnClickModal: false,
+      beforeClose: (action, _instance, done) => {
+        if (!settled && (action === "cancel" || action === "close")) {
+          finish(null);
+        }
+        done();
+      },
+    })
+      .then(() => {
+        if (!isImmersive) finish("follow-full");
+      })
+      .catch(() => finish(null));
+
+    if (isImmersive) {
+      requestAnimationFrame(() => {
+        const bind = (elementId, action) => {
+          const btn = document.getElementById(elementId);
+          if (!btn) return;
+          btn.addEventListener(
+            "click",
+            () => {
+              ElMessageBox.close();
+              finish(action);
+            },
+            { once: true },
+          );
+        };
+        bind("alarm-start-follow-only", "follow-only");
+        bind("alarm-start-follow-jump", "follow-and-switch");
+      });
+    }
+  });
+}
+
+function readAlarmDroneSelection(suggestedList) {
+  const selectEl = document.getElementById("alarm-drone-select");
+  const selectedId = selectEl?.value || "";
+  const selected = suggestedList.find(
+    (d) => String(d?.id ?? d?.sn ?? "") === String(selectedId),
+  );
+  const droneSn = String(selected?.sn || "");
+  return { selectedId, droneSn };
+}
+
+/**
  * @description: 显示告警伴飞请求对话框
  */
 const showAlarmDialog = async (deviceId, alarmFlag, devicePosition) => {
@@ -3989,40 +4152,17 @@ const showAlarmDialog = async (deviceId, alarmFlag, devicePosition) => {
         .join("")
     : '<option value="">暂无可用无人机</option>';
 
-  ElMessageBox.confirm(
-    `<style>
-      #alarm-drone-select option { color: #fff; background: #1c222a; }
-    </style>
-    <div style="padding: 10px;">
-      <h4 style="margin: 0 0 10px 0;">接收到伴飞请求</h4>
-      <p>车辆名称：${vehicleName}</p>
-      <p style="margin:10px;">设备ID：${deviceId}</p>
-      <div style="margin-top:10px;display: flex;">
-        <label for="alarm-drone-select" style="margin-left: -18px;">推荐无人机：</label>
-        <select id="alarm-drone-select" style="width:250px;height:32px;padding:8px;border:1px solid #30363b;background:rgba(255,255,255,0.08);border-radius:2px;color:#fff;">
-          ${optionsHtml}
-        </select>
-      </div>
-    </div>`,
-    "伴飞请求",
-    {
-      confirmButtonText: "开始伴飞",
-      cancelButtonText: "取消",
-      type: "warning",
-      dangerouslyUseHTMLString: true,
-      customClass: "alarm-dialog",
-    },
-  )
-    .then(async () => {
-      const selectEl = document.getElementById("alarm-drone-select");
-      const selectedId = selectEl?.value || "";
-      const selected = suggestedList.find(
-        (d) => String(d?.id ?? d?.sn ?? "") === String(selectedId),
-      );
-      const droneSn = String(selected?.sn || "");
-      await submitStartFollow(deviceId, droneSn, selectedId);
-    })
-    .catch(() => {});
+  const isImmersive = Boolean(props.immersiveFlight);
+  const action = await promptAlarmEscortAction({
+    deviceId,
+    vehicleName,
+    optionsHtml,
+    isImmersive,
+  });
+  if (!action) return;
+
+  const { selectedId, droneSn } = readAlarmDroneSelection(suggestedList);
+  await applyEscortFollowAction(action, deviceId, droneSn, selectedId);
 };
 
 /**
@@ -4088,6 +4228,7 @@ const handleCarBoxMessage = (topic, data) => {
       }
     }
 
+    // 伴飞待锁目标：实体刚创建或位置更新时尝试补锁
     tryApplyPendingEscortLock(deviceId);
   }
 
@@ -5345,6 +5486,26 @@ line-height: normal;
       opacity: 0.45;
       cursor: not-allowed;
     }
+
+    &--primary {
+      background: #409eff;
+    }
+
+    &--jump {
+      background: #e6a23c;
+    }
+  }
+
+  &__actions {
+    display: flex;
+    gap: 8px;
+
+    .police-vehicle-popup__escort {
+      flex: 1;
+      width: auto;
+      padding: 8px 6px;
+      font-size: 13px;
+    }
   }
 }
 
@@ -5421,5 +5582,49 @@ line-height: normal;
 .mouse-operation-popover {
   background-color: rgba(0, 0, 0, 0.8) !important;
   background: rgba(0, 0, 0, 0.8) !important;
+}
+
+.alarm-dialog--immersive {
+  .el-message-box__btns {
+    justify-content: flex-end;
+  }
+
+  .el-message-box__btns .el-button--primary {
+    display: none;
+  }
+}
+
+.alarm-dialog__immersive-btns {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.alarm-dialog__btn {
+  min-width: 88px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  font-size: 14px;
+  cursor: pointer;
+  color: #fff;
+}
+
+.alarm-dialog__btn--primary {
+  background: #409eff;
+  border-color: #409eff;
+}
+
+.alarm-dialog__btn--jump {
+  background: #e6a23c;
+  border-color: #e6a23c;
+}
+
+.alarm-dialog__btn--jump:hover {
+  background: #ebb563;
+  border-color: #ebb563;
 }
 </style>
