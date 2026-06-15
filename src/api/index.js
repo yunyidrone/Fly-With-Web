@@ -1,4 +1,4 @@
-import { requestData } from "@/utils/request.js";
+import { requestData, requestOk } from "@/utils/request.js";
 
 export class AccompanyingFlyService {
   /**
@@ -46,6 +46,15 @@ export class AccompanyingFlyService {
   static async startFollow(params) {
     return requestData("/target/startFollow", params, "POST", "application/json");
   }
+
+  /**
+   * 伴飞请求绑定校验：sn 为目标 terminalPhone
+   * @returns {Promise<{ code: number, data: boolean, [key: string]: unknown }>} 业务结果在 data：true 可弹窗，false 已绑定
+   */
+  static async targetBindCheck(query = {}, options = {}) {
+    return requestOk("/target/bindCheck", { params: query }, "GET", undefined, options);
+  }
+
    /**
    * 停止伴飞
    */

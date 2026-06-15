@@ -4131,7 +4131,16 @@ function readAlarmDroneSelection(suggestedList) {
 /**
  * @description: 显示告警伴飞请求对话框
  */
-const showAlarmDialog = async (deviceId, alarmFlag, devicePosition) => {
+const showAlarmDialog = async (deviceId, devicePosition, terminalPhone) => {
+  const sn = String(terminalPhone ?? "").trim();
+  if (!sn) return;
+  try {
+    const res = await AccompanyingFlyService.targetBindCheck({ sn }, { silent: true });
+    if (res?.data !== true) return;
+  } catch (_) {
+    return;
+  }
+
   const vehicleData = (Array.isArray(deviceStore.targets) ? deviceStore.targets : []).find(
     (v) => String(v.id) === String(deviceId),
   );
@@ -4194,7 +4203,7 @@ const handleCarBoxMessage = (topic, data) => {
     vehicleManager.removeVehicle(sn);
   }
 
-  const { alarmFlag } = data;
+  const { alarmFlag, terminalPhone } = data;
   const latitude = toFiniteNumber(data.latitude);
   const longitude = toFiniteNumber(data.longitude);
 
@@ -4233,10 +4242,7 @@ const handleCarBoxMessage = (topic, data) => {
   }
 
   if (alarmFlag && alarmFlag !== 0) {
-    showAlarmDialog(deviceId, alarmFlag, {
-      longitude,
-      latitude,
-    });
+    void showAlarmDialog(deviceId, { longitude, latitude }, terminalPhone);
   }
 
   systemStore.addCarMessage({ ...data, deviceId });
