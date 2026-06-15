@@ -903,7 +903,6 @@ function applyTargetEscortHighlight(deviceId, active) {
     entity.label.outlineWidth = 3;
     entity.label.font = "bold 15px Microsoft YaHei, sans-serif";
     entity.label.pixelOffset = new Cesium.Cartesian2(0, -46);
-    entity.path.width = 6;
   } else {
     entity.billboard.width = 34;
     entity.billboard.height = 34;
@@ -912,7 +911,6 @@ function applyTargetEscortHighlight(deviceId, active) {
     entity.label.outlineWidth = 2;
     entity.label.font = "14px sans-serif";
     entity.label.pixelOffset = new Cesium.Cartesian2(0, -38);
-    entity.path.width = 4;
   }
 }
 
@@ -1043,8 +1041,6 @@ const vehicleManager = {
       entity.label.outlineWidth = 3;
       entity.label.font = "bold 15px Microsoft YaHei, sans-serif";
       entity.label.pixelOffset = new Cesium.Cartesian2(0, -48);
-      entity.path.width = 7;
-      entity.path.material = vehicle.highlightPathMaterial;
     } else {
       entity.model.silhouetteSize = 0;
       entity.model.silhouetteColor = undefined;
@@ -1053,8 +1049,6 @@ const vehicleManager = {
       entity.label.outlineWidth = 2;
       entity.label.font = "14px sans-serif";
       entity.label.pixelOffset = new Cesium.Cartesian2(0, -40);
-      entity.path.width = 5;
-      entity.path.material = vehicle.defaultPathMaterial;
     }
   },
 
@@ -1081,11 +1075,6 @@ const vehicleManager = {
       glowPower: 0.2,
       taperPower: 0.7,
       color: VEHICLE_NORMAL_PATH_COLOR,
-    });
-    const highlightPathMaterial = new Cesium.PolylineGlowMaterialProperty({
-      glowPower: 0.35,
-      taperPower: 0.6,
-      color: Cesium.Color.fromCssColorString("#ff9900"),
     });
 
     const entity = viewer.entities.add({
@@ -1142,7 +1131,6 @@ const vehicleManager = {
       lastValidOrientation,
       lastPosition: null,
       defaultPathMaterial,
-      highlightPathMaterial,
       baseLabel: labelText || deviceId,
     });
 
@@ -2173,14 +2161,17 @@ const toggleSceneMode = () => {
 
 /**
  * @description: 更新锁定目标的 viewFrom，并由 trackedEntity 维持跟车距离
+ * @param {{ resetViewFrom?: boolean }} [options] resetViewFrom 为 false 时保留 entity 上已有 viewFrom
  */
-const switchTrackedView = (viewer, targetEntity, to2D) => {
+const switchTrackedView = (viewer, targetEntity, to2D, { resetViewFrom = true } = {}) => {
   if (!viewer || viewer.isDestroyed?.()) return;
 
   const entity = targetEntity || viewer.trackedEntity;
   if (!entity) return;
 
-  applyEntityTrackViewFrom(entity, to2D);
+  if (resetViewFrom) {
+    applyEntityTrackViewFrom(entity, to2D);
+  }
   refreshTrackedEntity(viewer, entity);
 };
 
@@ -2189,8 +2180,19 @@ const switchTrackedView = (viewer, targetEntity, to2D) => {
  * @return {*}
  */
 const zoomIn = () => {
+  if (isLockMode.value) {
+    const locked = resolveLockedFollowEntity();
+    if (locked?.entity && scaleLockedEntityViewFrom(locked.entity, 0.5)) {
+      switchTrackedView(mainViewer, locked.entity, isPitch2D.value, {
+        resetViewFrom: false,
+      });
+      return;
+    }
+  }
   mainViewer.camera.zoomIn(mainViewer.camera.positionCartographic.height * 0.5);
-  subViewer.camera.zoomIn(subViewer.camera.positionCartographic.height * 0.5);
+  if (subViewer && !subViewer.isDestroyed?.()) {
+    subViewer.camera.zoomIn(subViewer.camera.positionCartographic.height * 0.5);
+  }
 };
 
 /**
@@ -2198,10 +2200,21 @@ const zoomIn = () => {
  * @return {*}
  */
 const zoomOut = () => {
+  if (isLockMode.value) {
+    const locked = resolveLockedFollowEntity();
+    if (locked?.entity && scaleLockedEntityViewFrom(locked.entity, 2)) {
+      switchTrackedView(mainViewer, locked.entity, isPitch2D.value, {
+        resetViewFrom: false,
+      });
+      return;
+    }
+  }
   mainViewer.camera.zoomOut(
     mainViewer.camera.positionCartographic.height * 0.5,
   );
-  subViewer.camera.zoomOut(subViewer.camera.positionCartographic.height * 0.5);
+  if (subViewer && !subViewer.isDestroyed?.()) {
+    subViewer.camera.zoomOut(subViewer.camera.positionCartographic.height * 0.5);
+  }
 };
 
 /**
@@ -2240,10 +2253,132 @@ function shouldRefreshVehicleFollowOnMqtt(deviceId) {
   return Boolean(incomingId && followedId && incomingId === followedId);
 }
 
+/** 解析当前锁定跟车目标实体（车辆 / 警员） */
+function resolveLockedFollowEntity() {
+  const deviceId = String(followedVehicleDeviceId || "").trim();
+  if (deviceId) {
+    const vehicle = vehicleManager.vehicles.get(deviceId);
+    if (vehicle?.entity) return { entity: vehicle.entity, deviceId };
+    const officer = officerManager.officers.get(deviceId);
+    if (officer?.entity) return { entity: officer.entity, deviceId };
+  }
+  const tracked = mainViewer?.trackedEntity;
+  if (tracked) return { entity: tracked, deviceId: deviceId || null };
+  return null;
+}
+
+/** 读取实体当前 viewFrom 偏移 */
+function readEntityViewFromOffset(entity, viewer = mainViewer) {
+  const vf = entity?.viewFrom;
+  if (vf instanceof Cesium.Cartesian3) {
+    return Cesium.Cartesian3.clone(vf);
+  }
+  if (typeof vf?.getValue === "function") {
+    const value = vf.getValue(viewer?.clock?.currentTime);
+    return value ? Cesium.Cartesian3.clone(value) : null;
+  }
+  return null;
+}
+
+/** 锁车状态下按比例缩放 viewFrom（用于 +/- 按钮，避免与 trackedEntity 冲突） */
+function scaleLockedEntityViewFrom(entity, factor) {
+  let offset = readEntityViewFromOffset(entity);
+  if (!offset) {
+    applyEntityTrackViewFrom(entity, isPitch2D.value);
+    offset = readEntityViewFromOffset(entity);
+  }
+  if (!offset) return false;
+
+  let next = Cesium.Cartesian3.multiplyByScalar(
+    offset,
+    factor,
+    new Cesium.Cartesian3(),
+  );
+  const range = Cesium.Cartesian3.magnitude(next);
+  if (!Number.isFinite(range) || range < 1) return false;
+  if (range < 80 || range > 50000) {
+    const clamped = Cesium.Math.clamp(range, 80, 50000);
+    next = Cesium.Cartesian3.multiplyByScalar(
+      Cesium.Cartesian3.normalize(next, new Cesium.Cartesian3()),
+      clamped,
+      new Cesium.Cartesian3(),
+    );
+  }
+  entity.viewFrom = next;
+  return true;
+}
+
+/** 按当前相机与目标距离更新 viewFrom（ENU 局部坐标） */
+function syncViewFromFromCamera(viewer, entity) {
+  if (!viewer || viewer.isDestroyed?.() || !entity?.position) return false;
+
+  const entityPos = entity.position.getValue(viewer.clock.currentTime);
+  if (!entityPos) return false;
+
+  const worldOffset = Cesium.Cartesian3.subtract(
+    viewer.camera.positionWC,
+    entityPos,
+    new Cesium.Cartesian3(),
+  );
+  const enu = Cesium.Transforms.eastNorthUpToFixedFrame(entityPos);
+  const inv = Cesium.Matrix4.inverse(enu, new Cesium.Matrix4());
+  let localOffset = Cesium.Matrix4.multiplyByPointAsVector(
+    inv,
+    worldOffset,
+    new Cesium.Cartesian3(),
+  );
+
+  let range = Cesium.Cartesian3.magnitude(localOffset);
+  if (!Number.isFinite(range) || range < 1) return false;
+  if (range < 80 || range > 50000) {
+    const clamped = Cesium.Math.clamp(range, 80, 50000);
+    localOffset = Cesium.Cartesian3.multiplyByScalar(
+      Cesium.Cartesian3.normalize(localOffset, new Cesium.Cartesian3()),
+      clamped,
+      new Cesium.Cartesian3(),
+    );
+  }
+
+  entity.viewFrom = localOffset;
+  return true;
+}
+
+let restoreLockedFollowRaf = null;
+
+function restoreLockedFollowAfterZoom() {
+  if (!isLockMode.value || !mainViewer || mainViewer.isDestroyed?.()) return;
+
+  const locked = resolveLockedFollowEntity();
+  if (!locked?.entity) {
+    releaseVehicleFollow();
+    return;
+  }
+
+  if (!syncViewFromFromCamera(mainViewer, locked.entity)) return;
+  switchTrackedView(mainViewer, locked.entity, isPitch2D.value, {
+    resetViewFrom: false,
+  });
+}
+
+/** 缩放后恢复锁定跟车，并保留用户缩放后的距离 */
+function scheduleRestoreLockedFollow() {
+  if (restoreLockedFollowRaf != null) {
+    cancelAnimationFrame(restoreLockedFollowRaf);
+  }
+  // 双 rAF：等相机完成缩放后再同步 viewFrom，避免滚轮缩放时尚未更新
+  restoreLockedFollowRaf = requestAnimationFrame(() => {
+    restoreLockedFollowRaf = requestAnimationFrame(() => {
+      restoreLockedFollowRaf = null;
+      restoreLockedFollowAfterZoom();
+    });
+  });
+}
+
 /**
  * @description: 锁定相机跟随车辆，使车辆保持在视野中心
+ * @param {{ force3D?: boolean, resetViewFrom?: boolean }} [options] resetViewFrom 为 false 时保留用户已调整的跟车距离
  */
-const followVehicleEntity = (entity, deviceId, { force3D = false } = {}) => {
+const followVehicleEntity = (entity, deviceId, { force3D = false, resetViewFrom = true } = {}) => {
   if (!mainViewer || mainViewer.isDestroyed?.() || !entity) return;
 
   if (deviceId != null) {
@@ -2253,9 +2388,11 @@ const followVehicleEntity = (entity, deviceId, { force3D = false } = {}) => {
     isPitch2D.value = false;
   }
 
-  applyEntityTrackViewFrom(entity, isPitch2D.value);
+  if (resetViewFrom) {
+    applyEntityTrackViewFrom(entity, isPitch2D.value);
+  }
   isLockMode.value = true;
-  switchTrackedView(mainViewer, entity, isPitch2D.value);
+  switchTrackedView(mainViewer, entity, isPitch2D.value, { resetViewFrom });
 };
 
 const releaseVehicleFollow = () => {
@@ -4040,13 +4177,20 @@ const lockToVehicle = (deviceId) => {
  * 告警伴飞弹窗：沉浸模式下额外提供「开始伴飞并跳转」
  * @returns {Promise<null | 'follow-full' | 'follow-only' | 'follow-and-switch'>}
  */
-function promptAlarmEscortAction({ deviceId, vehicleName, optionsHtml, isImmersive }) {
-  const immersiveActionsHtml = isImmersive
-    ? `<div class="alarm-dialog__immersive-btns">
+function promptAlarmEscortAction({
+  deviceId,
+  vehicleName,
+  optionsHtml,
+  isImmersive,
+  hasSuggestedDrones,
+}) {
+  const immersiveActionsHtml =
+    isImmersive && hasSuggestedDrones
+      ? `<div class="alarm-dialog__immersive-btns">
         <button type="button" id="alarm-start-follow-only" class="alarm-dialog__btn alarm-dialog__btn--primary">开始伴飞</button>
         <button type="button" id="alarm-start-follow-jump" class="alarm-dialog__btn alarm-dialog__btn--jump" title="将退出当前沉浸并切换到新伴飞目标">开始伴飞并跳转</button>
       </div>`
-    : "";
+      : "";
 
   const html = `<style>
       #alarm-drone-select option { color: #fff; background: #1c222a; }
@@ -4076,7 +4220,7 @@ function promptAlarmEscortAction({ deviceId, vehicleName, optionsHtml, isImmersi
       title: "伴飞请求",
       message: html,
       dangerouslyUseHTMLString: true,
-      showConfirmButton: !isImmersive,
+      showConfirmButton: !isImmersive && hasSuggestedDrones,
       showCancelButton: true,
       confirmButtonText: "开始伴飞",
       cancelButtonText: "取消",
@@ -4093,11 +4237,11 @@ function promptAlarmEscortAction({ deviceId, vehicleName, optionsHtml, isImmersi
       },
     })
       .then(() => {
-        if (!isImmersive) finish("follow-full");
+        if (!isImmersive && hasSuggestedDrones) finish("follow-full");
       })
       .catch(() => finish(null));
 
-    if (isImmersive) {
+    if (isImmersive && hasSuggestedDrones) {
       requestAnimationFrame(() => {
         const bind = (elementId, action) => {
           const btn = document.getElementById(elementId);
@@ -4161,12 +4305,14 @@ const showAlarmDialog = async (deviceId, devicePosition, terminalPhone) => {
         .join("")
     : '<option value="">暂无可用无人机</option>';
 
+  const hasSuggestedDrones = suggestedList.length > 0;
   const isImmersive = Boolean(props.immersiveFlight);
   const action = await promptAlarmEscortAction({
     deviceId,
     vehicleName,
     optionsHtml,
     isImmersive,
+    hasSuggestedDrones,
   });
   if (!action) return;
 
@@ -4233,7 +4379,7 @@ const handleCarBoxMessage = (topic, data) => {
       vehicleManager.updateVehicleLabel(deviceId, label);
       vehicleManager.updateVehiclePosition(deviceId, longitude, latitude, 0);
       if (shouldRefreshVehicleFollowOnMqtt(deviceId)) {
-        followVehicleEntity(vehicle.entity, deviceId);
+        followVehicleEntity(vehicle.entity, deviceId, { resetViewFrom: false });
       }
     }
 
@@ -4870,32 +5016,48 @@ const syncCamera = (subViewer, mainViewer) => {
   });
 };
 
-// 用户主动操作地图（拖拽/缩放）时解除锁定，按钮状态通过 isLockMode 同步
+// 拖拽解除锁定；缩放（滚轮/双指/+/-）在锁定状态下保持跟车并保留缩放距离
 let manualUnlockHandler = null;
+let pinchZoomLockDetachActive = false;
+
+const detachTrackedEntityForLockedZoom = () => {
+  if (!isLockMode.value) return false;
+  const locked = resolveLockedFollowEntity();
+  if (!locked?.entity) {
+    releaseVehicleFollow();
+    return false;
+  }
+  if (mainViewer && !mainViewer.isDestroyed?.()) {
+    mainViewer.trackedEntity = undefined;
+    mainViewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+  }
+  return true;
+};
+
 const initManualUnlock = (viewer) => {
   if (manualUnlockHandler) {
     manualUnlockHandler.destroy();
     manualUnlockHandler = null;
   }
 
-  const unlockOnUserCameraInput = () => {
+  manualUnlockHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  manualUnlockHandler.setInputAction(() => {
     if (!isLockMode.value) return;
     releaseVehicleFollow();
-  };
-
-  manualUnlockHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-  manualUnlockHandler.setInputAction(
-    unlockOnUserCameraInput,
-    Cesium.ScreenSpaceEventType.LEFT_DOWN,
-  );
-  manualUnlockHandler.setInputAction(
-    unlockOnUserCameraInput,
-    Cesium.ScreenSpaceEventType.WHEEL,
-  );
-  manualUnlockHandler.setInputAction(
-    unlockOnUserCameraInput,
-    Cesium.ScreenSpaceEventType.PINCH_START,
-  );
+  }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+  manualUnlockHandler.setInputAction(() => {
+    if (!detachTrackedEntityForLockedZoom()) return;
+    scheduleRestoreLockedFollow();
+  }, Cesium.ScreenSpaceEventType.WHEEL);
+  manualUnlockHandler.setInputAction(() => {
+    if (!detachTrackedEntityForLockedZoom()) return;
+    pinchZoomLockDetachActive = true;
+  }, Cesium.ScreenSpaceEventType.PINCH_START);
+  manualUnlockHandler.setInputAction(() => {
+    if (!pinchZoomLockDetachActive) return;
+    pinchZoomLockDetachActive = false;
+    scheduleRestoreLockedFollow();
+  }, Cesium.ScreenSpaceEventType.PINCH_END);
 };
 
 // 监听鼠标移动，实时更新坐标
@@ -5104,6 +5266,15 @@ defineExpose({
 watch(
   () => props.activeEscortDroneId,
   (droneId) => syncEscortTargetHighlight(droneId),
+);
+
+watch(
+  () => props.immersiveFlight,
+  () => {
+    if (props.activeEscortDroneId) {
+      syncEscortTargetHighlight(props.activeEscortDroneId);
+    }
+  },
 );
 
 watch(
