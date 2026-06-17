@@ -116,7 +116,9 @@ function isGeneratedDroneId(id) {
  * @property {number} [latitude]
  * @property {number} [lng]
  * @property {number} [lat]
- * @property {number|string} [type] 1车 2人 3动物
+ * @property {number|string} [type] 1车 2人 3机器人
+ * @property {number|string} [robotId]
+ * @property {number|string} [communityId]
  */
 
 /**
@@ -147,8 +149,17 @@ export function normalizeTargetRecord(raw) {
       : typeof nameSrc === "string" && nameSrc.trim()
         ? `target-${nameSrc.trim()}`
         : "target-unknown";
+  const pickNumeric = (v) => {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "string" && v.trim() !== "") {
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  };
+  const normalizedId = id !== "" && id != null ? String(id) : stableFallbackId;
   return {
-    id: id !== "" && id != null ? String(id) : stableFallbackId,
+    id: normalizedId,
     name:
       typeof nameSrc === "string" && nameSrc.trim()
         ? nameSrc.trim()
@@ -157,6 +168,10 @@ export function normalizeTargetRecord(raw) {
     type: Number(raw?.type ?? raw?.targetType ?? raw?.category ?? 1) || 1,
     lng: pickCoord(raw.longitude) ?? pickCoord(raw.lng) ?? null, // 121.428
     lat: pickCoord(raw.latitude) ?? pickCoord(raw.lat) ?? null, // 28.653
+    robotId: pickNumeric(raw?.robotId) ?? pickNumeric(raw?.id) ?? pickNumeric(normalizedId),
+    communityId: pickNumeric(raw?.communityId),
+    streamUrl: raw?.streamUrl ?? raw?.stream_url ?? "",
+    playUrl: raw?.playUrl ?? raw?.play_url ?? "",
     raw,
   };
 }

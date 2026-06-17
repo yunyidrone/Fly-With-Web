@@ -24,7 +24,7 @@ export function onDroneOsdTelemetry(fn) {
 }
 
 function handleDroneOsdMessage(actualTopic, msg) {
-  console.log(`[MQTT Drone OSD] topic: ${actualTopic}`, msg);
+  // console.log(`[MQTT Drone OSD] topic: ${actualTopic}`, msg);
   const sn = extractOsdSnFromTopic(actualTopic);
   if (!sn) return;
   const deviceStore = useDeviceStore();

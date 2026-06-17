@@ -85,6 +85,16 @@
           </button>
         </el-tooltip>
       </div>
+      <!-- <el-tooltip
+        v-if="isDev"
+        effect="dark"
+        content="测试机器人视频（星树 WebRTC）"
+        placement="left"
+      >
+        <button class="test-robot-btn" type="button" @click="openTestRobotStream">
+          机视
+        </button>
+      </el-tooltip> -->
       <!-- <el-popover placement="left" :width="240" trigger="click">
         <template #reference>
           <div class="round-control" :style="mapSwitchStyle"></div>
@@ -283,8 +293,10 @@ import {
   TIANDITU_CONFIG,
   DEVICE_CONFIG,
   MAP_CONFIG,
+  ROBOT_VIDEO_CONFIG,
 } from "@/config/app-config.js";
 import dtJyPng from "@/assets/images/dt_jy.png";
+import dbJqrPng from "@/assets/images/db_jqr.png";
 import { TEST_POLICE_VEHICLES, TEST_DRONES } from "@/config/test-devices.js";
 import { useDeviceStore } from "@/stores/device.js";
 import { useFlightPlanStore } from "@/stores/flightPlan.js";
@@ -300,10 +312,25 @@ const props = defineProps({
   immersiveFlight: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(["open-drone-stream", "immersive-escort-switch"]);
+const emit = defineEmits(["open-drone-stream", "open-robot-stream", "immersive-escort-switch"]);
+
+const isDev = import.meta.env.DEV;
 
 // 加载状态
 const isLoading = ref(true);
+
+/** 开发环境：打开机器人视频测试窗（使用 ROBOT_VIDEO_CONFIG 默认参数） */
+function openTestRobotStream() {
+  const robotId = ROBOT_VIDEO_CONFIG.defaultRobotId;
+  const communityId = ROBOT_VIDEO_CONFIG.defaultCommunityId;
+  emit("open-robot-stream", {
+    id: `test-robot-${robotId}`,
+    name: "机器人39号",
+    robotId,
+    communityId,
+    type: 3,
+  });
+}
 
 const POLICE_POPUP_WIDTH = 280;
 const POLICE_POPUP_OFFSET = 16;
@@ -418,7 +445,7 @@ async function submitStartFollow(targetId, droneSn, droneId, options = {}) {
     }
     return true;
   } catch (e) {
-    ElMessage.error(e?.message || "下发伴飞指令失败");
+    // ElMessage.error(e?.message || "下发伴飞指令失败");
     return false;
   }
 }
@@ -827,6 +854,8 @@ const VEHICLE_NORMAL_PATH_COLOR =
   Cesium.Color.fromCssColorString("#00eeee");
 const OFFICER_NORMAL_PATH_COLOR =
   Cesium.Color.fromCssColorString("#66ccff");
+const ROBOT_NORMAL_PATH_COLOR =
+  Cesium.Color.fromCssColorString("#88ddff");
 const VEHICLE_LABEL_COLOR = Cesium.Color.fromCssColorString("#5794DF");
 const DRONE_LABEL_COLOR = Cesium.Color.fromCssColorString("#0EF2F2");
 
@@ -874,6 +903,15 @@ function refreshTargetLabel(deviceId) {
       officer.baseLabel,
       highlighted,
     );
+    return;
+  }
+
+  const robot = robotManager.robots.get(targetId);
+  if (robot?.entity?.label) {
+    robot.entity.label.text = formatTargetDisplayLabel(
+      robot.baseLabel,
+      highlighted,
+    );
   }
 }
 
@@ -892,8 +930,32 @@ function applyTargetEscortHighlight(deviceId, active) {
   }
 
   const officer = officerManager.officers.get(targetId);
-  if (!officer?.entity) return;
-  const entity = officer.entity;
+  if (officer?.entity) {
+    const entity = officer.entity;
+
+    if (active) {
+      entity.billboard.width = 46;
+      entity.billboard.height = 46;
+      entity.label.fillColor = VEHICLE_HIGHLIGHT_COLOR;
+      entity.label.outlineColor = Cesium.Color.BLACK;
+      entity.label.outlineWidth = 3;
+      entity.label.font = "bold 15px Microsoft YaHei, sans-serif";
+      entity.label.pixelOffset = new Cesium.Cartesian2(0, -46);
+    } else {
+      entity.billboard.width = 34;
+      entity.billboard.height = 34;
+      entity.label.fillColor = Cesium.Color.WHITE;
+      entity.label.outlineColor = Cesium.Color.BLACK;
+      entity.label.outlineWidth = 2;
+      entity.label.font = "14px sans-serif";
+      entity.label.pixelOffset = new Cesium.Cartesian2(0, -38);
+    }
+    return;
+  }
+
+  const robot = robotManager.robots.get(targetId);
+  if (!robot?.entity) return;
+  const entity = robot.entity;
 
   if (active) {
     entity.billboard.width = 46;
@@ -1319,6 +1381,127 @@ const officerManager = {
   },
 };
 
+// 机器人目标管理（type=3，billboard + 采样位置 + 轨迹）
+const robotManager = {
+  robots: new Map(),
+
+  createRobot(viewer, deviceId, labelText = deviceId) {
+    if (this.robots.has(deviceId)) {
+      return this.robots.get(deviceId);
+    }
+
+    const positionProp = new Cesium.SampledPositionProperty();
+    positionProp.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+    positionProp.backwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+    positionProp.setInterpolationOptions({
+      interpolationDegree: 1,
+      interpolationAlgorithm: Cesium.HermitePolynomialApproximation,
+    });
+
+    const defaultPathMaterial = new Cesium.PolylineGlowMaterialProperty({
+      glowPower: 0.2,
+      taperPower: 0.7,
+      color: ROBOT_NORMAL_PATH_COLOR,
+    });
+
+    const entity = viewer.entities.add({
+      availability: new Cesium.TimeIntervalCollection([
+        new Cesium.TimeInterval({
+          start: viewer.clock.startTime,
+          stop: Cesium.JulianDate.fromIso8601("9999-12-31T23:59:59Z"),
+        }),
+      ]),
+      position: positionProp,
+      properties: {
+        deviceId,
+        deviceName: labelText || deviceId,
+        targetType: 3,
+      },
+      billboard: {
+        image: dbJqrPng,
+        width: 34,
+        height: 34,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: labelText || deviceId,
+        font: "14px sans-serif",
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new Cesium.Cartesian2(0, -38),
+        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      path: {
+        show: routeLayerVisible,
+        width: 4,
+        material: defaultPathMaterial,
+        leadTime: 0,
+        trailTime: 999999,
+      },
+      viewFrom: getVehicleViewFrom(false),
+      show: targetLayerVisibility.robot,
+    });
+
+    this.robots.set(deviceId, {
+      entity,
+      positionProp,
+      lastPosition: null,
+      defaultPathMaterial,
+      baseLabel: labelText || deviceId,
+    });
+    return this.robots.get(deviceId);
+  },
+
+  updateRobotPosition(deviceId, longitude, latitude, height = 0) {
+    const robot = this.robots.get(deviceId);
+    if (!robot) return;
+
+    const currentTime = mainViewer.clock.currentTime;
+    const newPosition = Cesium.Cartesian3.fromDegrees(
+      longitude,
+      latitude,
+      height,
+    );
+    robot.positionProp.addSample(currentTime, newPosition);
+    robot.lastPosition = { longitude, latitude, height };
+  },
+
+  updateRobotLabel(deviceId, labelText) {
+    const robot = this.robots.get(deviceId);
+    if (!robot?.entity?.label) return;
+    robot.baseLabel = labelText || deviceId;
+    robot.entity.label.text = formatTargetDisplayLabel(
+      robot.baseLabel,
+      escortTargetHighlight.targetId === String(deviceId)
+        ? escortTargetHighlight.droneName
+        : "",
+    );
+    if (robot.entity.properties?.deviceName) {
+      robot.entity.properties.deviceName = labelText || deviceId;
+    }
+  },
+
+  removeRobot(deviceId) {
+    const robot = this.robots.get(deviceId);
+    if (!robot) return;
+    mainViewer?.entities?.remove(robot.entity);
+    this.robots.delete(deviceId);
+  },
+
+  clearAll() {
+    this.robots.forEach((robot) => {
+      mainViewer?.entities?.remove(robot.entity);
+    });
+    this.robots.clear();
+  },
+};
+
 function horizontalDistanceMeters(lng1, lat1, lng2, lat2) {
   const c1 = Cesium.Cartesian3.fromDegrees(lng1, lat1, 0);
   const c2 = Cesium.Cartesian3.fromDegrees(lng2, lat2, 0);
@@ -1575,7 +1758,7 @@ let routeMarkers = [];
 let verticalLines = [];
 // Record the point is first or not
 let isFirstPoint = true;
-// 当前持续跟随的车辆 deviceId（伴飞时保持居中）
+// 当前持续跟随的目标 deviceId（车辆 / 警员 / 机器人，伴飞时保持居中）
 let followedVehicleDeviceId = null;
 /**
  * 待锁定的伴飞目标 deviceId。
@@ -1630,6 +1813,7 @@ const vehicleDisplayMode = ref("model");
 const targetLayerVisibility = reactive({
   policeCar: true,
   officer: false,
+  robot: false,
 });
 
 // refs
@@ -2115,8 +2299,7 @@ const toggleSceneMode = () => {
   let focusEntity = null;
   if (isLockMode.value) {
     focusEntity =
-      mainViewer.trackedEntity ||
-      vehicleManager.vehicles.get(followedVehicleDeviceId)?.entity;
+      mainViewer.trackedEntity || resolveLockedFollowEntity()?.entity;
   }
 
   isPitch2D.value = !isPitch2D.value;
@@ -2245,22 +2428,37 @@ const switchMapMode = (mode) => {
   }
 };
 
-/** 锁定模式下，仅刷新当前已跟随车辆的位置，不因其他车辆 MQTT 消息切换目标 */
-function shouldRefreshVehicleFollowOnMqtt(deviceId) {
+/** 锁定模式下，仅刷新当前已跟随目标的位置，不因其他目标 MQTT 消息切换镜头 */
+function shouldRefreshFollowOnMqtt(deviceId) {
   if (!isLockMode.value) return false;
   const incomingId = String(deviceId || "").trim();
   const followedId = String(followedVehicleDeviceId || "").trim();
   return Boolean(incomingId && followedId && incomingId === followedId);
 }
 
-/** 解析当前锁定跟车目标实体（车辆 / 警员） */
+/** 按 deviceId 从车辆 / 警员 / 机器人管理器解析地图实体 */
+function resolveFollowTargetEntity(deviceId) {
+  const id = String(deviceId || "").trim();
+  if (!id) return null;
+
+  const vehicle = vehicleManager.vehicles.get(id);
+  if (vehicle?.entity) return { entity: vehicle.entity, deviceId: id };
+
+  const officer = officerManager.officers.get(id);
+  if (officer?.entity) return { entity: officer.entity, deviceId: id };
+
+  const robot = robotManager.robots.get(id);
+  if (robot?.entity) return { entity: robot.entity, deviceId: id };
+
+  return null;
+}
+
+/** 解析当前锁定跟随目标实体（车辆 / 警员 / 机器人） */
 function resolveLockedFollowEntity() {
   const deviceId = String(followedVehicleDeviceId || "").trim();
   if (deviceId) {
-    const vehicle = vehicleManager.vehicles.get(deviceId);
-    if (vehicle?.entity) return { entity: vehicle.entity, deviceId };
-    const officer = officerManager.officers.get(deviceId);
-    if (officer?.entity) return { entity: officer.entity, deviceId };
+    const resolved = resolveFollowTargetEntity(deviceId);
+    if (resolved) return resolved;
   }
   const tracked = mainViewer?.trackedEntity;
   if (tracked) return { entity: tracked, deviceId: deviceId || null };
@@ -2375,8 +2573,8 @@ function scheduleRestoreLockedFollow() {
 }
 
 /**
- * @description: 锁定相机跟随车辆，使车辆保持在视野中心
- * @param {{ force3D?: boolean, resetViewFrom?: boolean }} [options] resetViewFrom 为 false 时保留用户已调整的跟车距离
+ * @description: 锁定相机跟随目标（车辆 / 警员 / 机器人），使目标保持在视野中心
+ * @param {{ force3D?: boolean, resetViewFrom?: boolean }} [options] resetViewFrom 为 false 时保留用户已调整的跟随距离
  */
 const followVehicleEntity = (entity, deviceId, { force3D = false, resetViewFrom = true } = {}) => {
   if (!mainViewer || mainViewer.isDestroyed?.() || !entity) return;
@@ -2403,18 +2601,41 @@ const releaseVehicleFollow = () => {
   }
 };
 
-const resolveFollowVehicleTarget = () => {
-  const deviceId =
-    vehicleManager.selectedDeviceId ||
-    followedVehicleDeviceId ||
-    vehicleManager.getAllVehicles()[0] ||
-    null;
+/** 手动锁定模式：解析当前应跟随的目标（车辆 / 警员 / 机器人） */
+function resolveManualFollowTarget() {
+  const candidateIds = [
+    vehicleManager.selectedDeviceId,
+    followedVehicleDeviceId,
+  ]
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
 
-  if (deviceId) {
-    const vehicle = vehicleManager.vehicles.get(String(deviceId));
-    if (vehicle?.entity) {
-      return { entity: vehicle.entity, deviceId: String(deviceId) };
-    }
+  for (const id of candidateIds) {
+    const resolved = resolveFollowTargetEntity(id);
+    if (resolved) return resolved;
+  }
+
+  const targetList = Array.isArray(deviceStore.targets) ? deviceStore.targets : [];
+  for (const target of targetList) {
+    const id = String(target?.id || "").trim();
+    if (!id) continue;
+    const resolved = resolveFollowTargetEntity(id);
+    if (resolved) return resolved;
+  }
+
+  for (const id of officerManager.officers.keys()) {
+    const resolved = resolveFollowTargetEntity(id);
+    if (resolved) return resolved;
+  }
+  for (const id of robotManager.robots.keys()) {
+    const resolved = resolveFollowTargetEntity(id);
+    if (resolved) return resolved;
+  }
+
+  const firstVehicleId = vehicleManager.getAllVehicles()[0];
+  if (firstVehicleId) {
+    const resolved = resolveFollowTargetEntity(firstVehicleId);
+    if (resolved) return resolved;
   }
 
   if (
@@ -2425,7 +2646,7 @@ const resolveFollowVehicleTarget = () => {
   }
 
   return null;
-};
+}
 
 /**
  * @description: get Tianditu layer provider
@@ -2991,9 +3212,9 @@ const toggleLockMode = () => {
     return;
   }
 
-  const target = resolveFollowVehicleTarget();
+  const target = resolveManualFollowTarget();
   if (!target?.entity) {
-    ElMessage.warning("暂无可跟随的车辆");
+    ElMessage.warning("暂无可跟随的目标");
     return;
   }
 
@@ -3387,10 +3608,29 @@ const initVehicleClickHandler = (viewer) => {
         return;
       }
 
+      const deviceId = getVehicleDeviceIdFromEntity(entity);
+      if (deviceId && robotManager.robots.has(deviceId)) {
+        const target = (Array.isArray(deviceStore.targets) ? deviceStore.targets : []).find(
+          (t) => String(t?.id) === String(deviceId),
+        );
+        const robot = robotManager.robots.get(deviceId);
+        emit("open-robot-stream", {
+          id: deviceId,
+          name: target?.name || robot?.baseLabel || deviceId,
+          robotId: target?.robotId ?? target?.raw?.robotId ?? deviceId,
+          communityId:
+            target?.communityId ??
+            target?.raw?.communityId ??
+            undefined,
+          type: 3,
+        });
+        vehicleManager.clearSelection();
+        closePoliceVehiclePopup();
+        return;
+      }
+
       // 检查是否是车辆实体
       if (entity && entity.model && entity.label) {
-        const deviceId = getVehicleDeviceIdFromEntity(entity);
-
         if (deviceId) {
           const vehicle = vehicleManager.vehicles.get(deviceId);
           if (vehicle) {
@@ -3964,7 +4204,7 @@ async function requestRouteFromTDT(startLng, startLat, endLng, endLat) {
 }
 
 /**
- * 锁定镜头到伴飞目标（车辆 / 警员），以最新一次伴飞为准。
+ * 锁定镜头到伴飞目标（车辆 / 警员 / 机器人），以最新一次伴飞为准。
  * @returns {boolean} 地图上已有对应实体并完成跟随时为 true，并清空 pendingEscortLockTargetId；否则 false 且保留 pending 供后续重试。
  */
 function lockToEscortTarget(targetId) {
@@ -3973,24 +4213,9 @@ function lockToEscortTarget(targetId) {
   const id = String(targetId || "").trim();
   if (!id) return false;
 
-  const target = (Array.isArray(deviceStore.targets) ? deviceStore.targets : []).find(
-    (t) => String(t?.id || "") === id,
-  );
-  const targetType = resolveTargetType(target);
-
-  if (targetType === 2) {
-    const officer = officerManager.officers.get(id);
-    if (officer?.entity) {
-      followVehicleEntity(officer.entity, id, { force3D: true });
-      pendingEscortLockTargetId = null;
-      return true;
-    }
-    return false;
-  }
-
-  const vehicle = vehicleManager.vehicles.get(id);
-  if (vehicle?.entity) {
-    followVehicleEntity(vehicle.entity, id, { force3D: true });
+  const resolved = resolveFollowTargetEntity(id);
+  if (resolved?.entity) {
+    followVehicleEntity(resolved.entity, id, { force3D: true });
     pendingEscortLockTargetId = null;
     return true;
   }
@@ -4054,6 +4279,9 @@ function applyImmersiveMapEntityVisibility() {
   officerManager.officers.forEach((officer, id) => {
     if (officer?.entity) officer.entity.show = String(id) === targetId;
   });
+  robotManager.robots.forEach((robot, id) => {
+    if (robot?.entity) robot.entity.show = String(id) === targetId;
+  });
   droneTestManager.drones.forEach((drone, id) => {
     if (drone?.entity) drone.entity.show = droneKeys.has(String(id));
   });
@@ -4091,6 +4319,9 @@ function restoreMapVisibilityAfterImmersive() {
   });
   officerManager.officers.forEach((officer) => {
     if (officer?.entity) officer.entity.show = targetLayerVisibility.officer;
+  });
+  robotManager.robots.forEach((robot) => {
+    if (robot?.entity) robot.entity.show = targetLayerVisibility.robot;
   });
   droneTestManager.drones.forEach((drone) => {
     if (drone?.entity) drone.entity.show = true;
@@ -4158,18 +4389,20 @@ function lockEscortTargetOnImmersive(targetId) {
 }
 
 /**
- * @description: 锁定到指定车辆
+ * @description: 锁定到指定目标（车辆 / 警员 / 机器人）
  */
-const lockToVehicle = (deviceId) => {
-  const vehicle = vehicleManager.vehicles.get(deviceId);
-  if (vehicle?.entity) {
-    followVehicleEntity(vehicle.entity, deviceId, { force3D: true });
-
-    console.log(`🔒 已锁定到车辆: ${deviceId}`);
-    ElMessage.success(`已锁定到车辆 ${deviceId}`);
+const lockToTarget = (deviceId) => {
+  const id = String(deviceId || "").trim();
+  if (!id) {
+    ElMessage.warning("未找到目标");
+    return;
+  }
+  if (lockToEscortTarget(id)) {
+    console.log(`🔒 已锁定到目标: ${id}`);
+    ElMessage.success(`已锁定到目标 ${id}`);
   } else {
-    console.warn(`⚠️ 未找到车辆: ${deviceId}`);
-    ElMessage.warning(`未找到车辆 ${deviceId}`);
+    console.warn(`⚠️ 未找到目标: ${id}`);
+    ElMessage.warning(`未找到目标 ${id}`);
   }
 };
 
@@ -4324,7 +4557,7 @@ const showAlarmDialog = async (deviceId, devicePosition, terminalPhone) => {
  * @description: 处理 carBox 主题车辆消息（MQTT 与本地模拟共用）
  */
 const handleCarBoxMessage = (topic, data) => {
-  console.log("🚗 收到车辆消息:", topic, data);
+  // console.log("🚗 收到车辆消息:", topic, data);
 
   if (!mainViewer || mainViewer.isDestroyed?.()) {
     ElMessage.warning("地图未就绪");
@@ -4363,23 +4596,28 @@ const handleCarBoxMessage = (topic, data) => {
 
     if (targetType === 2) {
       vehicleManager.removeVehicle(deviceId);
+      robotManager.removeRobot(deviceId);
       officerManager.createOfficer(mainViewer, deviceId, label);
       officerManager.updateOfficerLabel(deviceId, label);
       officerManager.updateOfficerPosition(deviceId, longitude, latitude, 0);
     } else if (targetType === 3) {
       vehicleManager.removeVehicle(deviceId);
       officerManager.removeOfficer(deviceId);
+      robotManager.createRobot(mainViewer, deviceId, label);
+      robotManager.updateRobotLabel(deviceId, label);
+      robotManager.updateRobotPosition(deviceId, longitude, latitude, 0);
     } else {
       officerManager.removeOfficer(deviceId);
-      const vehicle = vehicleManager.createVehicle(
-        mainViewer,
-        deviceId,
-        label,
-      );
+      robotManager.removeRobot(deviceId);
+      vehicleManager.createVehicle(mainViewer, deviceId, label);
       vehicleManager.updateVehicleLabel(deviceId, label);
       vehicleManager.updateVehiclePosition(deviceId, longitude, latitude, 0);
-      if (shouldRefreshVehicleFollowOnMqtt(deviceId)) {
-        followVehicleEntity(vehicle.entity, deviceId, { resetViewFrom: false });
+    }
+
+    if (shouldRefreshFollowOnMqtt(deviceId)) {
+      const locked = resolveFollowTargetEntity(deviceId);
+      if (locked?.entity) {
+        followVehicleEntity(locked.entity, deviceId, { resetViewFrom: false });
       }
     }
 
@@ -4407,6 +4645,7 @@ function syncStoreDevicesToMap() {
     ? deviceStore.targets
     : [];
   const activeOfficerIds = new Set();
+  const activeRobotIds = new Set();
   targetList.forEach((target) => {
     if (!target?.id) return;
     const lng = Number(target.lng);
@@ -4418,6 +4657,7 @@ function syncStoreDevicesToMap() {
     if (targetType === 2) {
       activeOfficerIds.add(id);
       vehicleManager.removeVehicle(id);
+      robotManager.removeRobot(id);
       officerManager.createOfficer(mainViewer, id, label);
       officerManager.updateOfficerLabel(id, label);
       officerManager.updateOfficerPosition(id, lng, lat, 0);
@@ -4427,13 +4667,20 @@ function syncStoreDevicesToMap() {
     }
 
     if (targetType === 3) {
+      activeRobotIds.add(id);
       vehicleManager.removeVehicle(id);
       officerManager.removeOfficer(id);
+      robotManager.createRobot(mainViewer, id, label);
+      robotManager.updateRobotLabel(id, label);
+      robotManager.updateRobotPosition(id, lng, lat, 0);
+      const robot = robotManager.robots.get(id);
+      if (robot?.entity) robot.entity.show = targetLayerVisibility.robot;
       return;
     }
 
     if (targetType === 1 || !Number.isFinite(targetType)) {
       officerManager.removeOfficer(id);
+      robotManager.removeRobot(id);
       vehicleManager.createVehicle(mainViewer, id, label);
       vehicleManager.updateVehicleLabel(id, label);
       vehicleManager.updateVehiclePosition(id, lng, lat, 0);
@@ -4445,6 +4692,12 @@ function syncStoreDevicesToMap() {
   Array.from(officerManager.officers.keys()).forEach((id) => {
     if (!activeOfficerIds.has(id)) {
       officerManager.removeOfficer(id);
+    }
+  });
+
+  Array.from(robotManager.robots.keys()).forEach((id) => {
+    if (!activeRobotIds.has(id)) {
+      robotManager.removeRobot(id);
     }
   });
 
@@ -5211,6 +5464,9 @@ const toggleLayerVisibility = ({ key, active }) => {
       officerManager.officers.forEach((officer) => {
         if (officer.entity?.path) officer.entity.path.show = active;
       });
+      robotManager.robots.forEach((robot) => {
+        if (robot.entity?.path) robot.entity.path.show = active;
+      });
       droneTestManager.drones.forEach((drone) => {
         if (drone.entity?.path) drone.entity.path.show = active;
       });
@@ -5221,6 +5477,12 @@ const toggleLayerVisibility = ({ key, active }) => {
       targetLayerVisibility.officer = active;
       officerManager.officers.forEach((officer) => {
         if (officer.entity) officer.entity.show = active;
+      });
+      break;
+    case "robot":
+      targetLayerVisibility.robot = active;
+      robotManager.robots.forEach((robot) => {
+        if (robot.entity) robot.entity.show = active;
       });
       break;
   }
@@ -5343,6 +5605,7 @@ onUnmounted(() => {
   mqttService.unsubscribe("carBox/+/location");
   subscribeEscortDroneOsd._subscribed = false;
   officerManager.clearAll();
+  robotManager.clearAll();
   clearLockdownMarkers();
   closePoliceVehiclePopup();
   vehicleManager.selectedDeviceId = null;
@@ -5463,6 +5726,16 @@ onUnmounted(() => {
     min-width: 30px;
     font-size: 12px !important;
     background-color: #e6a23c !important;
+    color: #fff !important;
+  }
+
+  .test-robot-btn {
+    width: auto !important;
+    padding: 0 6px;
+    min-width: 30px;
+    font-size: 11px !important;
+    font-weight: 600;
+    background-color: #67c23a !important;
     color: #fff !important;
   }
 

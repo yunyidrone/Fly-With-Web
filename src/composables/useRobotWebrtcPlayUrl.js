@@ -1,13 +1,11 @@
 import { ref, watch, onUnmounted } from "vue";
-import { VIDEO_CONFIG } from "@/config/app-config.js";
 
 /**
- * SRS WebRTC 播放（与 DroneStream 一致）
+ * ZLMediaKit / 星树 WebRTC 播放
+ * 与 useWebrtcPlayUrl 基本一致，区别是 answer 为 JSON：{ code, sdp, type }
  * @param {import('vue').Ref<string> | (() => string)} playUrlSource
- * @param {{ allowEnvFallback?: boolean }} [options]
  */
-export function useWebrtcPlayUrl(playUrlSource, options = {}) {
-  const { allowEnvFallback = true } = options;
+export function useRobotWebrtcPlayUrl(playUrlSource) {
   const videoRef = ref(null);
   /** @type {RTCPeerConnection | null} */
   let pc = null;
@@ -17,9 +15,7 @@ export function useWebrtcPlayUrl(playUrlSource, options = {}) {
   }
 
   function resolveUrl() {
-    const trimmed = String(readSource() || "").trim();
-    if (trimmed) return trimmed;
-    return allowEnvFallback ? String(VIDEO_CONFIG.streamUrl || "").trim() : "";
+    return String(readSource() || "").trim();
   }
 
   function teardown() {
@@ -60,8 +56,6 @@ export function useWebrtcPlayUrl(playUrlSource, options = {}) {
 
   async function startPlay() {
     const url = resolveUrl();
-    console.log('视频url', url)
-    // const url = "http://srs.vlaigo.cn:12360/rtc/v1/whep/?app=live&stream=banfei-che"
     if (!url) {
       teardown();
       return;
@@ -95,10 +89,11 @@ export function useWebrtcPlayUrl(playUrlSource, options = {}) {
         body: sdp,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const answerSdp = await res.text();
-      await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+      const json = await res.json();
+      if (json.code !== 0) throw new Error(json.msg || json.message || `code=${json.code}`);
+      await pc.setRemoteDescription({ type: "answer", sdp: json.sdp });
     } catch (e) {
-      console.warn("[WebRTC] 播放失败", url, e);
+      console.warn("[RobotWebRTC] 播放失败", url, e);
     }
   }
 

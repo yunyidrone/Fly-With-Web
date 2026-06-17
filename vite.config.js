@@ -53,6 +53,11 @@ export default defineConfig(({ mode, command }) => {
           target: proxyTarget,
           changeOrigin: true,
         },
+        "/robot-video-api": {
+          target: "https://api.xingshu-tech.com",
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/robot-video-api/, "/v1"),
+        },
       },
     },
   };

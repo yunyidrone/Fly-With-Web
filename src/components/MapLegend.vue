@@ -64,7 +64,8 @@
       <div class="legend-layout">
       <div class="legend-panel legend-panel--main">
         <div class="legend-items">
-          <template v-for="(item, index) in legendItems" :key="item.key">
+          <template v-for="item in legendItems" :key="item.key">
+            <span v-if="item.key === 'checkpoint'" class="legend-divider" aria-hidden="true" />
             <div
               class="legend-item"
               :class="{ active: item.active }"
@@ -77,7 +78,6 @@
               </span>
               <span class="legend-label">{{ item.label }}</span>
             </div>
-            <span v-if="index === 4" class="legend-divider" aria-hidden="true" />
           </template>
         </div>
       </div>
@@ -105,6 +105,7 @@ import dbWrjPng from "@/assets/images/db_wrj.png";
 import dbWrgPng from "@/assets/images/db_wrg.png";
 import dbWrtPng from "@/assets/images/db_wrt.png";
 import dbJyPng from "@/assets/images/db_jy.png";
+import dbJqrPng from "@/assets/images/db_jqr.png";
 import dbJcPng from "@/assets/images/db_jc.png";
 import dbKdPng from "@/assets/images/db_kd.png";
 import dbBflxPng from "@/assets/images/db_bflx.png";
@@ -118,6 +119,7 @@ const DEFAULT_LEGEND_ACTIVE = {
   robotDog: false,
   unmannedBoat: false,
   officer: false,
+  robot: false,
   policeCar: true,
   checkpoint: false,
   route: false,
@@ -128,6 +130,7 @@ const STATIC_LEGEND_ITEMS = [
   { key: "robotDog", iconSrc: dbWrgPng, label: "无人犬", active: false },
   { key: "unmannedBoat", iconSrc: dbWrtPng, label: "无人艇", active: false },
   { key: "officer", iconSrc: dbJyPng, label: "警员", active: false },
+  { key: "robot", iconSrc: dbJqrPng, label: "机器人", active: false },
   { key: "policeCar", iconSrc: dbJcPng, label: "警车", active: true },
   { key: "checkpoint", iconSrc: dbKdPng, label: "卡点", active: false },
   { key: "route", iconSrc: dbBflxPng, label: "伴飞路线", active: false },
@@ -168,6 +171,7 @@ function resolveLegendKey(item, expectedType) {
   }
 
   if (expectedType === 2) {
+    if (rawKey === "robot" || rawKey === "jqr" || /机器人|jqr/.test(text)) return "robot";
     if (rawKey === "police" || rawKey === "officer" || /警员|人员|officer|police.?man|jy/.test(text)) return "officer";
     if (rawKey === "car" || rawKey === "policeCar" || /警车|车辆|car|vehicle|police.?car|jc/.test(text))
       return "policeCar";
@@ -178,13 +182,15 @@ function resolveLegendKey(item, expectedType) {
 
 function resolveLegendIcon(item, legendKey) {
   const rawKey = String(item?.key ?? "").trim();
+  const iconFileKey = rawKey === "robot" || legendKey === "robot" ? "jqr" : rawKey;
   return (
-    legendIconModules[`../assets/images/db_${rawKey}.png`] ||
+    legendIconModules[`../assets/images/db_${iconFileKey}.png`] ||
     {
       drone: dbWrjPng,
       robotDog: dbWrgPng,
       unmannedBoat: dbWrtPng,
       officer: dbJyPng,
+      robot: dbJqrPng,
       policeCar: dbJcPng,
     }[legendKey]
   );

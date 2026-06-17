@@ -13,6 +13,7 @@
         :active-escort-drone-id="activeEscortDroneId"
         :immersive-flight="immersiveFlight"
         @open-drone-stream="openDroneStream"
+        @open-robot-stream="openRobotStream"
         @immersive-escort-switch="onImmersiveEscortSwitch"
       />
       <div v-show="!immersiveFlight" class="map-legend-host">
@@ -111,6 +112,25 @@
       </Transition>
     </Teleport>
 
+    <!-- 机器人视频：风格与无人机一致，内容精简 -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="robotStreamVisible" class="drone-stream-float">
+          <button type="button" class="drone-stream-close" aria-label="关闭" @click="closeRobotStream">
+            <i class="ri-close-line" />
+          </button>
+          <RobotStream
+            ref="robotStreamRef"
+            :key="streamRobotKey"
+            :robot-id="streamRobot?.robotId"
+            :robot-name="streamRobot?.name"
+            :community-id="streamRobot?.communityId"
+            @close="closeRobotStream"
+          />
+        </div>
+      </Transition>
+    </Teleport>
+
     <!-- 地图框选弹窗 -->
     <!-- <AreaDrawPopup
       :visible="areaDrawPopup.visible"
@@ -137,13 +157,15 @@ const PlanPanel = defineAsyncComponent(() => import("@/components/PlanPanel.vue"
 // const AreaDrawPopup = defineAsyncComponent(() => import("@/components/AreaDrawPopup.vue"));
 const ResourcePanel = defineAsyncComponent(() => import("@/components/ResourcePanel.vue"));
 const DroneStream = defineAsyncComponent(() => import("@/components/DroneStream.vue"));
-import { MAP_CONFIG } from "@/config/app-config.js";
+const RobotStream = defineAsyncComponent(() => import("@/components/RobotStream.vue"));
+import { MAP_CONFIG, ROBOT_VIDEO_CONFIG } from "@/config/app-config.js";
 import { ensureDroneOsdMqtt } from "@/composables/useDroneOsdMqtt.js";
 import { useDeviceStore } from "@/stores/device.js";
 import { useFlightPlanStore } from "@/stores/flightPlan.js";
 import { AccompanyingFlyService } from "@/api";
 
 const mapRef = ref(null);
+const robotStreamRef = ref(null);
 const leftSidebarRef = ref(null);
 const planPanelRef = ref(null);
 const planHistoryVisible = ref(false);
@@ -153,12 +175,14 @@ const taskMonitorPlanId = ref("");
 function onOpenPlanHistory() {
   taskMonitorVisible.value = false;
   closeDroneStream();
+  closeRobotStream();
   planHistoryVisible.value = true;
 }
 
 function onOpenTaskMonitor(planId) {
   planHistoryVisible.value = false;
   closeDroneStream();
+  closeRobotStream();
   taskMonitorPlanId.value = String(planId || "");
   taskMonitorVisible.value = true;
 }
@@ -183,6 +207,8 @@ async function onLeftSidebarSelect(tab) {
 }
 const droneStreamVisible = ref(false);
 const streamDrone = ref(null);
+const robotStreamVisible = ref(false);
+const streamRobot = ref(null);
 const immersiveFlight = ref(false);
 
 const deviceStore = useDeviceStore();
@@ -338,6 +364,7 @@ const streamDroneLive = computed(() => {
 });
 
 const streamDroneKey = computed(() => streamDroneLive.value?.id || "none");
+const streamRobotKey = computed(() => streamRobot.value?.id || "none");
 
 /** 伴飞中当前选中的无人机（视频弹窗打开且处于伴飞） */
 const activeEscortDroneId = computed(() => {
@@ -503,6 +530,7 @@ const streamCompanionTaskTitle = computed(() => {
 
 const openDroneStream = async (device) => {
   if (!device?.id) return;
+  closeRobotStream();
   planHistoryVisible.value = false;
   taskMonitorVisible.value = false;
   const id = String(device.id);
@@ -539,6 +567,32 @@ function onImmersiveEscortSwitch(device) {
   void openDroneStream(device);
 }
 
+const openRobotStream = (device) => {
+  if (!device?.id) return;
+  closeDroneStream();
+  planHistoryVisible.value = false;
+  taskMonitorVisible.value = false;
+  const id = String(device.id);
+  const fromStore = deviceStore.targets.find((t) => String(t?.id) === id);
+  const robotId =
+    device?.robotId ??
+    fromStore?.robotId ??
+    ROBOT_VIDEO_CONFIG.defaultRobotId;
+  const communityId =
+    device?.communityId ??
+    fromStore?.communityId ??
+    ROBOT_VIDEO_CONFIG.defaultCommunityId;
+  streamRobot.value = {
+    ...fromStore,
+    ...device,
+    id,
+    name: device.name || fromStore?.name || id,
+    robotId,
+    communityId,
+  };
+  robotStreamVisible.value = true;
+};
+
 const handleStreamRecall = async ({ droneId } = {}) => {
   if (droneId) {
     deviceStore.setDroneStandby(droneId);
@@ -558,6 +612,15 @@ const closeDroneStream = () => {
   droneStreamVisible.value = false;
   immersiveFlight.value = false;
   streamDrone.value = null;
+};
+
+const closeRobotStream = () => {
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  }
+  robotStreamRef.value?.teardown?.();
+  robotStreamVisible.value = false;
+  streamRobot.value = null;
 };
 </script>
 

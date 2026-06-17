@@ -35,6 +35,18 @@ export const VIDEO_CONFIG = {
 };
 
 // ==========================================
+// 机器人视频（星枢 WebRTC）
+// ==========================================
+export const ROBOT_VIDEO_CONFIG = {
+  baseURL:
+    import.meta.env.VITE_ROBOT_VIDEO_API_BASE ||
+    "https://api.xingshu-tech.com/v1",
+  token: import.meta.env.VITE_ROBOT_VIDEO_TOKEN || "",
+  defaultCommunityId: 48, // 48 10
+  defaultRobotId: 39, // 39 29
+};
+
+// ==========================================
 // 目标设备配置
 // ==========================================
 export const DEVICE_CONFIG = {
