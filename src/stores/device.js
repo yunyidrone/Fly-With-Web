@@ -350,6 +350,13 @@ export const useDeviceStore = defineStore("device", () => {
     try {
       const data = await AccompanyingFlyService.targetList(query);
       const records = unwrapApiList(data);
+      // 测试：固定首条目标坐标（需改 records，且 longitude/latitude 优先级高于 lng/lat）
+      // if (records[0]) {
+      //   records[0].longitude = 121.20539;
+      //   records[0].latitude = 28.62448;
+      //   records[0].lng = 121.20539;
+      //   records[0].lat = 28.62448;
+      // }
       if (
         data != null &&
         typeof data === "object" &&
@@ -363,6 +370,7 @@ export const useDeviceStore = defineStore("device", () => {
       }
       targets.value = records.map((r) => normalizeTargetRecord(r));
       targetsLoadedFromApi.value = true;
+      // console.log('目标设备', targets);
       return targets.value;
     } catch (e) {
       targetsFetchError.value = e?.message || String(e);
