@@ -64,7 +64,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import { ElMessage } from "element-plus";
 import { useRobotWebrtcPlayUrl } from "@/composables/useRobotWebrtcPlayUrl.js";
-import { RobotVideoService } from "@/api/robotVideo.js";
+import { RobotService } from "@/api/robot.js";
 import arrowRightPng from "@/assets/images/arrow_right.png";
 import hfmrPng from "@/assets/images/hfmr.png";
 import qjxsPng from "@/assets/images/qjxs.png";
@@ -226,7 +226,7 @@ function doFetchAndConnect(session) {
   playUrl.value = "";
   armLoadWatchdog(session);
 
-  RobotVideoService.getWebrtcPlayUrl({
+  RobotService.getPlayUrl({
     communityId: props.communityId,
     robotId: props.robotId,
   })

@@ -158,7 +158,8 @@ const PlanPanel = defineAsyncComponent(() => import("@/components/PlanPanel.vue"
 const ResourcePanel = defineAsyncComponent(() => import("@/components/ResourcePanel.vue"));
 const DroneStream = defineAsyncComponent(() => import("@/components/DroneStream.vue"));
 const RobotStream = defineAsyncComponent(() => import("@/components/RobotStream.vue"));
-import { MAP_CONFIG, ROBOT_VIDEO_CONFIG } from "@/config/app-config.js";
+import { MAP_CONFIG } from "@/config/app-config.js";
+import { DEFAULT_ROBOT_ID, DEFAULT_COMMUNITY_ID } from "@/api/robot.js";
 import { ensureDroneOsdMqtt } from "@/composables/useDroneOsdMqtt.js";
 import { useDeviceStore } from "@/stores/device.js";
 import { useFlightPlanStore } from "@/stores/flightPlan.js";
@@ -574,14 +575,8 @@ const openRobotStream = (device) => {
   taskMonitorVisible.value = false;
   const id = String(device.id);
   const fromStore = deviceStore.targets.find((t) => String(t?.id) === id);
-  const robotId =
-    device?.robotId ??
-    fromStore?.robotId ??
-    ROBOT_VIDEO_CONFIG.defaultRobotId;
-  const communityId =
-    device?.communityId ??
-    fromStore?.communityId ??
-    ROBOT_VIDEO_CONFIG.defaultCommunityId;
+  const robotId = DEFAULT_ROBOT_ID;
+  const communityId = DEFAULT_COMMUNITY_ID;
   streamRobot.value = {
     ...fromStore,
     ...device,

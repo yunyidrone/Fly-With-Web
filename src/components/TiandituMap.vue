@@ -293,8 +293,8 @@ import {
   TIANDITU_CONFIG,
   DEVICE_CONFIG,
   MAP_CONFIG,
-  ROBOT_VIDEO_CONFIG,
 } from "@/config/app-config.js";
+import { DEFAULT_ROBOT_ID, DEFAULT_COMMUNITY_ID } from "@/api/robot.js";
 import dtJyPng from "@/assets/images/dt_jy.png";
 import dbJqrPng from "@/assets/images/db_jqr.png";
 import { TEST_POLICE_VEHICLES, TEST_DRONES } from "@/config/test-devices.js";
@@ -319,10 +319,10 @@ const isDev = import.meta.env.DEV;
 // 加载状态
 const isLoading = ref(true);
 
-/** 开发环境：打开机器人视频测试窗（使用 ROBOT_VIDEO_CONFIG 默认参数） */
+/** 开发环境：打开机器人视频测试窗 */
 function openTestRobotStream() {
-  const robotId = ROBOT_VIDEO_CONFIG.defaultRobotId;
-  const communityId = ROBOT_VIDEO_CONFIG.defaultCommunityId;
+  const robotId = DEFAULT_ROBOT_ID;
+  const communityId = DEFAULT_COMMUNITY_ID;
   emit("open-robot-stream", {
     id: `test-robot-${robotId}`,
     name: "机器人39号",
