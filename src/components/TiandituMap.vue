@@ -168,6 +168,29 @@
       <div id="subViewerContainer"></div>
     </div>
 
+    <!-- 地图重叠设备悬浮列表 -->
+    <div
+      v-if="overlapDevicePopup.visible"
+      class="overlap-device-popup"
+      :style="overlapDevicePopupStyle"
+      @mouseenter="overlapDevicePopup.hovering = true"
+      @mouseleave="overlapDevicePopup.hovering = false"
+      @click.stop
+    >
+      <button
+        v-for="item in overlapDevicePopup.items"
+        :key="item.key"
+        type="button"
+        class="overlap-device-popup__item"
+        @click="handleOverlapDeviceSelect(item)"
+      >
+        <span class="overlap-device-popup__icon" aria-hidden="true">
+          <img :src="item.iconSrc" alt="" />
+        </span>
+        <span class="overlap-device-popup__name">{{ item.name }}</span>
+      </button>
+    </div>
+
     <!-- 目标设备伴飞弹窗：锚定在警车/警员/机器人旁 -->
     <div
       v-if="policeVehiclePopup.visible"
@@ -302,6 +325,9 @@ import {
 } from "@/config/app-config.js";
 import { DEFAULT_ROBOT_ID, DEFAULT_COMMUNITY_ID } from "@/api/robot.js";
 import dtJyPng from "@/assets/images/dt_jy.png";
+import dbWrjPng from "@/assets/images/db_wrj.png";
+import dbJyPng from "@/assets/images/db_jy.png";
+import dbJcPng from "@/assets/images/db_jc.png";
 import dbJqrPng from "@/assets/images/db_jqr.png";
 import sosSvg from "@/assets/images/sos.svg";
 import { TEST_POLICE_VEHICLES, TEST_DRONES } from "@/config/test-devices.js";
@@ -341,6 +367,8 @@ function openTestRobotStream() {
 
 const POLICE_POPUP_WIDTH = 280;
 const POLICE_POPUP_OFFSET = 16;
+const OVERLAP_POPUP_WIDTH = 230;
+const OVERLAP_POPUP_OFFSET = 12;
 
 const policeVehiclePopup = reactive({
   visible: false,
@@ -360,6 +388,19 @@ const policeVehiclePopupStyle = computed(() => ({
   left: `${policeVehiclePopup.left}px`,
   top: `${policeVehiclePopup.top}px`,
   transform: "translateY(-50%)",
+}));
+
+const overlapDevicePopup = reactive({
+  visible: false,
+  left: 0,
+  top: 0,
+  hovering: false,
+  items: [],
+});
+
+const overlapDevicePopupStyle = computed(() => ({
+  left: `${overlapDevicePopup.left}px`,
+  top: `${overlapDevicePopup.top}px`,
 }));
 
 let policePopupPostRenderRemove = null;
@@ -464,6 +505,116 @@ const closePoliceVehiclePopup = () => {
   detachPolicePopupTracker();
 };
 
+function hideOverlapDevicePopup() {
+  overlapDevicePopup.visible = false;
+  overlapDevicePopup.hovering = false;
+  overlapDevicePopup.items = [];
+}
+
+function updateOverlapDevicePopupPosition(screenPosition) {
+  if (!mainViewer || !screenPosition) return;
+  const w = mainViewer.canvas.clientWidth;
+  const h = mainViewer.canvas.clientHeight;
+  let left = Number(screenPosition.x || 0) + OVERLAP_POPUP_OFFSET;
+  let top = Number(screenPosition.y || 0) + OVERLAP_POPUP_OFFSET;
+  if (left + OVERLAP_POPUP_WIDTH > w - 8) {
+    left = Number(screenPosition.x || 0) - OVERLAP_POPUP_WIDTH - OVERLAP_POPUP_OFFSET;
+  }
+  left = Math.max(8, Math.min(left, w - OVERLAP_POPUP_WIDTH - 8));
+  top = Math.max(64, Math.min(top, h - 120));
+  overlapDevicePopup.left = left;
+  overlapDevicePopup.top = top;
+}
+
+function getTargetPopupItem(deviceId) {
+  const id = String(deviceId || "").trim();
+  if (!id) return null;
+  const target = (Array.isArray(deviceStore.targets) ? deviceStore.targets : []).find(
+    (t) => String(t?.id || "") === id,
+  );
+  const type = resolveTargetType(target);
+  const iconSrc = type === 2 ? dbJyPng : type === 3 ? dbJqrPng : dbJcPng;
+  return {
+    key: `target:${id}`,
+    kind: "target",
+    id,
+    iconSrc,
+    name: String(target?.name || id),
+  };
+}
+
+function getDronePopupItem(drone) {
+  if (!drone || isDroneOffline(drone)) return null;
+  const id = String(drone?.id || drone?.sn || drone?.mqttSn || "").trim();
+  if (!id) return null;
+  return {
+    key: `drone:${id}`,
+    kind: "drone",
+    id,
+    iconSrc: dbWrjPng,
+    name: String(drone?.name || drone?.sn || id),
+    drone,
+  };
+}
+
+function collectOverlapPopupItems(screenPosition) {
+  if (!mainViewer || mainViewer.isDestroyed?.() || !screenPosition) return [];
+  const picked = mainViewer.scene.drillPick(screenPosition, 20) || [];
+  const dedup = new Map();
+  picked.forEach((entry) => {
+    const entity = entry?.id;
+    if (!entity) return;
+    const drone = getDroneDeviceFromEntity(entity);
+    if (drone) {
+      const droneItem = getDronePopupItem(drone);
+      if (droneItem && !dedup.has(droneItem.key)) dedup.set(droneItem.key, droneItem);
+      return;
+    }
+    const deviceId = getVehicleDeviceIdFromEntity(entity);
+    const targetEntry = deviceId ? resolveTargetMapEntry(deviceId) : null;
+    if (!targetEntry) return;
+    const targetItem = getTargetPopupItem(deviceId);
+    if (targetItem && !dedup.has(targetItem.key)) dedup.set(targetItem.key, targetItem);
+  });
+  return [...dedup.values()];
+}
+
+function handleTargetSelectById(deviceId) {
+  const id = String(deviceId || "").trim();
+  if (!id) return;
+  setTargetSelected(id);
+  const lastPos = resolveTargetDisplayPosition(id);
+  if (robotManager.robots.has(id)) {
+    openRobotStreamForTarget(id);
+  }
+  if (TEST_POLICE_VEHICLES.some((v) => v.id === id)) {
+    showTestVehicleDialog(id, lastPos);
+  } else {
+    void showApiVehiclePopup(id, lastPos);
+  }
+}
+
+function handleDroneSelect(drone) {
+  if (!drone) return;
+  applyDroneSelectionCircle(getDroneEntityKey(drone));
+  emit("open-drone-stream", drone);
+}
+
+function handleOverlapDeviceSelect(item) {
+  hideOverlapDevicePopup();
+  if (!item) return;
+  if (item.kind === "drone") {
+    const drone =
+      item.drone ||
+      deviceStore.drones.find((d) => String(d?.id || "") === String(item.id || "")) ||
+      deviceStore.drones.find((d) => String(d?.sn || "") === String(item.id || "")) ||
+      deviceStore.drones.find((d) => String(d?.mqttSn || "") === String(item.id || ""));
+    handleDroneSelect(drone);
+    return;
+  }
+  handleTargetSelectById(item.id);
+}
+
 async function submitStartFollow(targetId, droneSn, droneId, options = {}) {
   const { applyLock = true, openStream = true, exitImmersive = false } = options;
   if (!targetId) {
@@ -524,6 +675,14 @@ function subscribeEscortDroneOsd() {
   });
 }
 
+function isDroneOffline(drone) {
+  if (!drone) return true;
+  if (drone.rawStatus === 0 || Number(drone.status) === 0) return true;
+  if (drone.status === "offline") return true;
+  if (drone.active === false) return true;
+  return false;
+}
+
 function updateDroneMapEntityBySn(sn, lng, lat, height) {
   if (!mainViewer || mainViewer.isDestroyed?.()) return;
   const key = String(sn || "").trim();
@@ -531,6 +690,16 @@ function updateDroneMapEntityBySn(sn, lng, lat, height) {
   if (!drone) return;
   const entityKey = getDroneEntityKey(drone);
   if (!entityKey) return;
+
+  if (isDroneOffline(drone)) {
+    if (droneTestManager.drones.has(entityKey)) {
+      droneTestManager.removeDrone(entityKey);
+      if (selectedDroneOnMap === entityKey) {
+        clearDroneSelectionCircle();
+      }
+    }
+    return;
+  }
 
   const label = String(drone?.name || drone?.id || key || "无人机");
   const resolvedHeight = Number.isFinite(height)
@@ -548,6 +717,7 @@ function updateDroneMapEntityBySn(sn, lng, lat, height) {
     label,
   );
   droneTestManager.updateDroneLabel(entityKey, label);
+  droneTestManager.updateDroneLabelColor(entityKey, drone.isEscorting);
   droneTestManager.updateDronePosition(entityKey, lng, lat, resolvedHeight);
 
   [drone?.id, drone?.sn, drone?.mqttSn, key].forEach((alias) => {
@@ -920,6 +1090,7 @@ const ROBOT_NORMAL_PATH_COLOR =
   Cesium.Color.fromCssColorString("#88ddff");
 const VEHICLE_LABEL_COLOR = Cesium.Color.fromCssColorString("#5794DF");
 const DRONE_LABEL_COLOR = Cesium.Color.fromCssColorString("#0EF2F2");
+const DRONE_LABEL_COLOR_ESCORTING = Cesium.Color.fromCssColorString("#52C41A");
 
 const escortTargetHighlight = reactive({
   targetId: null,
@@ -929,6 +1100,9 @@ let hasAppliedInitialDroneOverview = false;
 
 /** 地图点击选中的伴飞目标（警车 / 警员 / 机器人） */
 let selectedTargetDeviceId = null;
+/** 地图点击选中的无人机 entity key */
+let selectedDroneOnMap = null;
+const DRONE_SELECTION_CIRCLE_COLOR = Cesium.Color.fromCssColorString("#FFC300");
 
 function applyBillboardTargetHighlight(entity, selected) {
   if (!entity?.billboard || !entity?.label) return;
@@ -975,9 +1149,72 @@ function clearTargetVisualHighlight(deviceId) {
   }
 }
 
+/** 无人机选中圆圈（独立实体，跟随无人机位置） */
+let selectionCircleEntity = null;
+
+function applyDroneSelectionCircle(entityKey) {
+  clearDroneSelectionCircle();
+  const drone = droneTestManager.drones.get(entityKey);
+  if (!drone?.entity?.position || !mainViewer) return;
+
+  selectionCircleEntity = mainViewer.entities.add({
+    // 用 CallbackProperty 让圆圈始终跟随无人机当前位置
+    position: new Cesium.CallbackProperty(() => {
+      const currentDrone = droneTestManager.drones.get(entityKey);
+      return currentDrone?.entity?.position?.getValue(Cesium.JulianDate.now());
+    }, false),
+    // 屏幕空心圆环：固定像素大小，不随缩放变化，并始终位于顶层
+    point: {
+      pixelSize: 56,
+      color: DRONE_SELECTION_CIRCLE_COLOR.withAlpha(0.0),
+      outlineColor: DRONE_SELECTION_CIRCLE_COLOR,
+      outlineWidth: 4,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  });
+  selectedDroneOnMap = entityKey;
+}
+
+function clearDroneSelectionCircle() {
+  if (selectionCircleEntity) {
+    mainViewer?.entities?.remove(selectionCircleEntity);
+    selectionCircleEntity = null;
+  }
+  selectedDroneOnMap = null;
+}
+
+function syncActiveDroneSelectionCircle(droneId) {
+  const id = String(droneId || "").trim();
+  if (!id) {
+    clearDroneSelectionCircle();
+    mainViewer?.scene?.requestRender?.();
+    return;
+  }
+  const drone =
+    deviceStore.drones.find((d) => String(d?.id || "") === id) ||
+    deviceStore.drones.find((d) => String(d?.sn || "") === id) ||
+    deviceStore.drones.find((d) => String(d?.mqttSn || "") === id);
+  if (!drone) {
+    clearDroneSelectionCircle();
+    mainViewer?.scene?.requestRender?.();
+    return;
+  }
+  const key = getDroneEntityKey(drone);
+  if (!key) {
+    clearDroneSelectionCircle();
+    mainViewer?.scene?.requestRender?.();
+    return;
+  }
+  if (selectedDroneOnMap !== key) {
+    applyDroneSelectionCircle(key);
+  }
+  mainViewer?.scene?.requestRender?.();
+}
+
 function collectInitialDroneOverviewCoords() {
   const droneList = Array.isArray(deviceStore.drones) ? deviceStore.drones : [];
   return droneList
+    .filter((drone) => !isDroneOffline(drone))
     .map((drone) => {
       const lng = Number(
         drone?.longitude ?? drone?.lng,
@@ -1891,6 +2128,14 @@ const droneTestManager = {
     if (!drone?.entity?.label) return;
     drone.entity.label.text = labelText || droneId;
     drone.entity.label.fillColor = DRONE_LABEL_COLOR;
+  },
+
+  updateDroneLabelColor(droneId, isEscorting) {
+    const drone = this.drones.get(droneId);
+    if (!drone?.entity?.label) return;
+    drone.entity.label.fillColor = isEscorting
+      ? DRONE_LABEL_COLOR_ESCORTING
+      : DRONE_LABEL_COLOR;
   },
 
   flyToPoint(droneId, lng, lat, speed = 30, height = 80) {
@@ -3813,6 +4058,7 @@ const initVehicleClickHandler = (viewer) => {
   vehicleClickHandler.setInputAction((click) => {
     // 当允许添加位置时，不处理车辆点击
     if (isAllowAddLocation.value) return;
+    hideOverlapDevicePopup();
 
     // 拾取点击的对象
     const pickedObject = viewer.scene.pick(click.position);
@@ -3822,23 +4068,14 @@ const initVehicleClickHandler = (viewer) => {
 
       const drone = getDroneDeviceFromEntity(entity);
       if (drone) {
-        emit("open-drone-stream", drone);
+        handleDroneSelect(drone);
         return;
       }
 
       const deviceId = getVehicleDeviceIdFromEntity(entity);
       const targetEntry = deviceId ? resolveTargetMapEntry(deviceId) : null;
       if (targetEntry) {
-        setTargetSelected(deviceId);
-        const lastPos = resolveTargetDisplayPosition(deviceId);
-        if (robotManager.robots.has(deviceId)) {
-          openRobotStreamForTarget(deviceId);
-        }
-        if (TEST_POLICE_VEHICLES.some((v) => v.id === deviceId)) {
-          showTestVehicleDialog(deviceId, lastPos);
-        } else {
-          void showApiVehiclePopup(deviceId, lastPos);
-        }
+        handleTargetSelectById(deviceId);
         return;
       }
     }
@@ -3846,6 +4083,22 @@ const initVehicleClickHandler = (viewer) => {
     clearTargetSelection();
     closePoliceVehiclePopup();
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+  vehicleClickHandler.setInputAction((movement) => {
+    if (isAllowAddLocation.value) {
+      hideOverlapDevicePopup();
+      return;
+    }
+    if (overlapDevicePopup.hovering) return;
+    const items = collectOverlapPopupItems(movement?.endPosition);
+    if (items.length >= 2) {
+      overlapDevicePopup.items = items;
+      overlapDevicePopup.visible = true;
+      updateOverlapDevicePopupPosition(movement?.endPosition);
+      return;
+    }
+    hideOverlapDevicePopup();
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 };
 
 /**
@@ -4902,6 +5155,7 @@ function syncStoreDevicesToMap() {
   const activeDroneKeys = new Set();
   const currentEscortingKeys = new Set();
   droneList.forEach((drone) => {
+    if (isDroneOffline(drone)) return;
     const key = getDroneEntityKey(drone);
     if (key) {
       activeDroneKeys.add(key);
@@ -4921,6 +5175,7 @@ function syncStoreDevicesToMap() {
   currentEscortingKeys.forEach((key) => prevEscortingDroneKeys.add(key));
 
   droneList.forEach((drone) => {
+    if (isDroneOffline(drone)) return;
     const entityKey = getDroneEntityKey(drone);
     if (!entityKey) return;
     const lng = Number(drone.lng);
@@ -4938,6 +5193,7 @@ function syncStoreDevicesToMap() {
       label,
     );
     droneTestManager.updateDroneLabel(entityKey, label);
+    droneTestManager.updateDroneLabelColor(entityKey, drone.isEscorting);
     if (!drone._mqttUpdated) {
       droneTestManager.updateDronePosition(entityKey, lng, lat, resolvedHeight);
     }
@@ -4950,7 +5206,12 @@ function syncStoreDevicesToMap() {
       orphanIds.push(droneId);
     }
   });
-  orphanIds.forEach((id) => droneTestManager.removeDrone(id));
+  orphanIds.forEach((id) => {
+    droneTestManager.removeDrone(id);
+    if (selectedDroneOnMap === id) {
+      clearDroneSelectionCircle();
+    }
+  });
 
   if (props.activeEscortDroneId) {
     syncEscortTargetHighlight(props.activeEscortDroneId);
@@ -5723,11 +5984,15 @@ defineExpose({
   toggleLayerVisibility,
   lockEscortTargetOnImmersive,
   setImmersiveMapFocus,
+  clearDroneSelectionCircle,
 });
 
 watch(
   () => props.activeEscortDroneId,
-  (droneId) => syncEscortTargetHighlight(droneId),
+  (droneId) => {
+    syncEscortTargetHighlight(droneId);
+    syncActiveDroneSelectionCircle(droneId);
+  },
 );
 
 watch(
@@ -5802,6 +6067,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   syncEscortTargetHighlight("");
+  hideOverlapDevicePopup();
   mqttService.unsubscribe("carBox/+/location");
   subscribeEscortDroneOsd._subscribed = false;
   officerManager.clearAll();
@@ -5809,6 +6075,7 @@ onUnmounted(() => {
   clearLockdownMarkers();
   closePoliceVehiclePopup();
   selectedTargetDeviceId = null;
+  selectedDroneOnMap = null;
   vehicleManager.selectedDeviceId = null;
   if (mainViewer) {
     mainViewer.destroy();
@@ -6017,6 +6284,63 @@ onUnmounted(() => {
       height: 18px;
       background-color: #1890ff;
     }
+  }
+}
+
+.overlap-device-popup {
+  position: absolute;
+  z-index: 210;
+  width: 230px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid #37eadb;
+  border-radius: 6px;
+  background: rgba(3, 6, 10, 0.65);
+  box-sizing: border-box;
+  backdrop-filter: blur(6px);
+
+  &__item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: #ffffff;
+    cursor: pointer;
+    text-align: left;
+
+    &:hover {
+      background: rgba(55, 234, 219, 0.16);
+    }
+  }
+
+  &__icon {
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    img {
+      width: 16px;
+      height: 16px;
+      object-fit: contain;
+      display: block;
+    }
+  }
+
+  &__name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
   }
 }
 

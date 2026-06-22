@@ -369,13 +369,10 @@ const streamDroneLive = computed(() => {
 const streamDroneKey = computed(() => streamDroneLive.value?.id || "none");
 const streamRobotKey = computed(() => streamRobot.value?.id || "none");
 
-/** 伴飞中当前选中的无人机（视频弹窗打开且处于伴飞） */
+/** 当前视频弹窗选中的无人机（用于地图侧高亮/圈选） */
 const activeEscortDroneId = computed(() => {
   if (!droneStreamVisible.value || !streamDrone.value?.id) return "";
-  const live = streamDroneLive.value;
-  const drone = live || streamDrone.value;
-  if (!drone?.isEscorting) return "";
-  return String(drone.id);
+  return String(streamDrone.value.id);
 });
 
 function resolveEscortTargetId(device) {
@@ -610,6 +607,7 @@ const closeDroneStream = () => {
   droneStreamVisible.value = false;
   immersiveFlight.value = false;
   streamDrone.value = null;
+  mapRef.value?.clearDroneSelectionCircle?.();
 };
 
 const closeRobotStream = () => {

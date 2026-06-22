@@ -76,7 +76,7 @@
             height="16"
             aria-hidden="true"
           />
-          <span>伴飞任务：{{ companionTitle }}</span>
+          <span>伴飞任务：{{ showNoTask ? "暂无伴飞任务" : companionTitle }}</span>
         </div>
         <div class="task-block__lines">
           <div class="task-block__line">
@@ -165,7 +165,9 @@
         <span class="video-shot-btn__label">截图</span>
       </button>
       <div class="video-inner">
+        <div v-if="isOffline" class="video-offline-overlay">设备离线</div>
         <video
+          v-show="!isOffline"
           ref="videoPlayerRef"
           :muted="true"
           autoplay
@@ -206,6 +208,7 @@
         <img class="footer-btn__icon-img" :src="cjbfPng" alt="" aria-hidden="true" />
       </button>
       <button
+        v-if="showRecall"
         type="button"
         class="footer-btn btn-neutral"
         :disabled="isLoading"
@@ -295,12 +298,19 @@ const companionTitle = computed(
 const toplineStatusClass = computed(() => {
   const s = props.statusLabel;
   if (s === "伴飞中") return "is-escorting";
+  if (s === "返航中") return "is-escorting";
   if (s === "离线") return "is-offline";
   return "is-ready";
 });
 
+const isOffline = computed(() => props.statusLabel === "离线");
+const isStandby = computed(() => props.statusLabel === "就绪");
+const isEscorting = computed(() => props.statusLabel === "伴飞中" || props.statusLabel === "返航中");
+const showRecall = computed(() => isEscorting.value);
+const showNoTask = computed(() => isOffline.value || isStandby.value);
+
 const perspectiveVideoText = computed(() =>
-  viewMode.value === "airport" ? "当前机场视角" : "当前无人机视角",
+  viewMode.value === "airport" ? "当前机场视角" : "无人机",
 );
 
 const immersiveBtnLabel = computed(() =>
@@ -484,10 +494,11 @@ const handleRecall = async () => {
 };
 
 onMounted(() => {
-  initPlayVideo();
+  if (!isOffline.value) initPlayVideo();
 });
 
 watch(resolvedStreamUrl, () => {
+  if (isOffline.value) return;
   // 切换播放源时关闭旧连接，重新拉流
   try {
     if (pc) {
@@ -697,6 +708,15 @@ onUnmounted(() => {
 
   .meta-k {
     // color: rgba(255, 255, 255, 0.45);
+  }
+
+  &__no-task {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px 10px;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.45);
   }
 }
 
@@ -930,6 +950,18 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   min-height: 324px;
+}
+
+.video-offline-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: #f44;
+  z-index: 2;
 }
 
 .video-element {

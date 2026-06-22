@@ -351,12 +351,12 @@ export const useDeviceStore = defineStore("device", () => {
       const data = await AccompanyingFlyService.targetList(query);
       const records = unwrapApiList(data);
       // 测试：固定首条目标坐标（需改 records，且 longitude/latitude 优先级高于 lng/lat）
-      if (records[0]) {
-        records[0].longitude = 121.314453;
-        records[0].latitude = 28.674261;
-        records[0].lng = 121.20539;
-        records[0].lat = 28.62448;
-      }
+      // if (records[0]) {
+      //   records[0].longitude = 121.314453;
+      //   records[0].latitude = 28.674261;
+      //   records[0].lng = 121.20539;
+      //   records[0].lat = 28.62448;
+      // }
       if (
         data != null &&
         typeof data === "object" &&

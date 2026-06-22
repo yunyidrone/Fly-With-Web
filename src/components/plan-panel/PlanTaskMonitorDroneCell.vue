@@ -114,7 +114,15 @@
           x5-video-player-type="h5"
           x5-video-player-fullscreen="true"
         />
-        <div v-if="!effectivePlayUrl" class="ptm-cell__video-placeholder">暂无视频流</div>
+        <div
+          v-if="!effectivePlayUrl && !isOffline"
+          class="ptm-cell__video-placeholder"
+        >
+          暂无视频流
+        </div>
+        <div v-if="isOffline" class="ptm-cell__video-placeholder ptm-cell__video-placeholder--offline">
+          设备离线
+        </div>
         <button
           v-if="isPseudoFullscreen"
           type="button"
@@ -126,19 +134,24 @@
       </div>
 
       <div class="ptm-cell__info">
-        <p class="ptm-cell__route">航线信息：系统设定</p>
-        <ul class="ptm-cell__ai-list">
-          <template v-if="hasAiEvents">
-            <li v-for="(ev, idx) in aiEventSlots" :key="idx" class="ptm-cell__ai-line" v-show="ev">
-              <span class="ptm-cell__ai-k">ai事件：</span>
-              {{ ev.warnType }}
-              <span v-if="ev.eventTime" class="ptm-cell__ai-time">{{ ev.eventTime }}</span>
+        <template v-if="showNoTask">
+          <p class="ptm-cell__no-task">暂无伴飞任务</p>
+        </template>
+        <template v-else>
+          <p class="ptm-cell__route">航线信息：系统设定</p>
+          <ul class="ptm-cell__ai-list">
+            <template v-if="hasAiEvents">
+              <li v-for="(ev, idx) in aiEventSlots" :key="idx" class="ptm-cell__ai-line" v-show="ev">
+                <span class="ptm-cell__ai-k">ai事件：</span>
+                {{ ev.warnType }}
+                <span v-if="ev.eventTime" class="ptm-cell__ai-time">{{ ev.eventTime }}</span>
+              </li>
+            </template>
+            <li v-else class="ptm-cell__ai-line">
+              <span class="ptm-cell__ai-k">AI事件：</span>暂无AI事件
             </li>
-          </template>
-          <li v-else class="ptm-cell__ai-line">
-            <span class="ptm-cell__ai-k">AI事件：</span>暂无AI事件
-          </li>
-        </ul>
+          </ul>
+        </template>
       </div>
     </div>
 
@@ -148,6 +161,7 @@
         <img class="ptm-cell__foot-icon" :src="qjxsPng" alt="" aria-hidden="true" />
       </button>
       <button
+        v-if="showRecall"
         type="button"
         class="ptm-cell__foot-btn ptm-cell__foot-btn--primary"
         :disabled="recallLoading"
@@ -204,7 +218,10 @@ const aiEventSlots = computed(() => {
 const videoWrapRef = ref(null);
 const viewMode = ref("drone");
 
-const effectivePlayUrl = computed(() => String(props.playUrl || "").trim());
+const effectivePlayUrl = computed(() => {
+  if (isOffline.value) return "";
+  return String(props.playUrl || "").trim();
+});
 
 const { videoRef } = useWebrtcPlayUrl(() => effectivePlayUrl.value, {
   allowEnvFallback: false,
@@ -276,6 +293,10 @@ const display = computed(() => {
       detail.attitudeRoll,
       detail.roll,
     ),
+    rawStatus: live?.rawStatus ?? detail?.rawStatus,
+    status: live?.status ?? detail?.status ?? "standby",
+    statusText: live?.statusText ?? detail?.statusText ?? "就绪",
+    isEscorting: live?.isEscorting ?? detail?.isEscorting ?? false,
   };
 });
 
@@ -285,8 +306,15 @@ const altText = computed(() => {
   return `${n.toFixed(0)}m`;
 });
 
+const isOffline = computed(() => display.value.rawStatus === 0);
+const isStandby = computed(() => display.value.rawStatus === 1);
+const isEscorting = computed(() => display.value.rawStatus === 2);
+const isReturning = computed(() => display.value.rawStatus === 3);
+const showRecall = computed(() => isEscorting.value || isReturning.value);
+const showNoTask = computed(() => isOffline.value || isStandby.value);
+
 const perspectiveVideoText = computed(() =>
-  viewMode.value === "airport" ? "当前机场视角" : "当前无人机视角",
+  viewMode.value === "airport" ? "当前机场视角" : "无人机",
 );
 
 function formatCoord(v) {
@@ -588,6 +616,12 @@ function formatAngle(v) {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.35);
   z-index: 1;
+
+  &--offline {
+    color: #f44;
+    font-size: 15px;
+    font-weight: 600;
+  }
 }
 
 .ptm-cell__info {
@@ -603,6 +637,15 @@ function formatAngle(v) {
   padding: 6px 10px;
   border-radius: 2px 2px 0 0;
   background: #1C222A;
+}
+
+.ptm-cell__no-task {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 2px;
+  background: #1c222a;
+  color: rgba(255, 255, 255, 0.45);
+  text-align: center;
 }
 
 .ptm-cell__ai-list {
