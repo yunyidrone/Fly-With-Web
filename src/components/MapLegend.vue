@@ -65,8 +65,13 @@
       <div class="legend-panel legend-panel--main">
         <div class="legend-items">
           <template v-for="item in legendItems" :key="item.key">
-            <span v-if="item.key === 'checkpoint'" class="legend-divider" aria-hidden="true" />
+            <span
+              v-if="item.key === 'checkpoint' || item.key === 'divider'"
+              class="legend-divider"
+              aria-hidden="true"
+            />
             <div
+              v-if="item.key !== 'divider'"
               class="legend-item"
               :class="{ active: item.active }"
               @click="toggleItem(item)"
@@ -99,6 +104,7 @@
 
 <script setup>
 import { ref, onMounted } from "vue";
+import { ElMessage } from "element-plus";
 import { AccompanyingFlyService } from "@/api";
 import { unwrapApiList } from "@/utils/request.js";
 import dbWrjPng from "@/assets/images/db_wrj.png";
@@ -226,7 +232,13 @@ async function loadLegendItems() {
       1,
     );
     const targetItems = buildLegendItemsFromSource(normalizeLegendPayload(targetData), 2);
-    const nextItems = [...resourceItems, ...targetItems, ...STATIC_LEGEND_EXTRA_ITEMS];
+    const dividerItem = { key: "divider", label: "", iconSrc: "", active: false };
+    const nextItems = [
+      ...resourceItems,
+      ...(resourceItems.length && targetItems.length ? [dividerItem] : []),
+      ...targetItems,
+      ...STATIC_LEGEND_EXTRA_ITEMS,
+    ];
     if (resourceItems.length || targetItems.length) {
       legendItems.value = nextItems.map((item) => ({ ...item }));
     }
@@ -240,8 +252,15 @@ onMounted(() => {
 });
 
 const toggleItem = (item) => {
+  if (item.key === "divider") return;
   item.active = !item.active;
   emit("toggle", { key: item.key, active: item.active });
+
+  if (item.key === "checkpoint") {
+    ElMessage.success(item.active ? "已开启卡点" : "已关闭卡点");
+  } else if (item.key === "route") {
+    ElMessage.success(item.active ? "已开启伴飞路线" : "已关闭伴飞路线");
+  }
 };
 
 const handleLockdown = () => {
@@ -424,7 +443,7 @@ function clearAllSelection() {
   }
 
   &__btn--confirm {
-    background: #4965c9;
+    background: #ff4d4f;
   }
 }
 

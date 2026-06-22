@@ -6,7 +6,13 @@
         <div class="history-panel__title-group">
           <h2 class="history-panel__title">历史任务记录</h2>
           <span class="history-panel__title-divider" aria-hidden="true" />
-          <p class="history-panel__subtitle">仅显示30日的数据，数据范围之外需要去平台端查看</p>
+          <p class="history-panel__subtitle">仅显示30日的数据</p>
+          <button type="button" class="history-panel__expand-btn" @click="expandAll">
+            一键展开
+          </button>
+          <button type="button" class="history-panel__expand-btn" @click="collapseAll">
+            一键关闭
+          </button>
         </div>
         <div class="history-panel__head-actions">
           <el-date-picker
@@ -48,6 +54,7 @@
 
     <div v-loading="loading" class="history-panel__body">
       <el-table
+        ref="tableRef"
         :data="records"
         row-key="id"
         class="history-table"
@@ -188,6 +195,7 @@ import {
 import { getTodayYmd, isDateInHistoryRange } from "@/utils/plan-history.js";
 
 const visible = defineModel("visible", { type: Boolean, default: false });
+const tableRef = ref(null);
 
 const emit = defineEmits(["quick-create", "deleted"]);
 
@@ -320,6 +328,18 @@ function planToRecord(p) {
 
 function closePanel() {
   visible.value = false;
+}
+
+function expandAll() {
+  records.value.forEach((row) => {
+    tableRef.value?.toggleRowExpansion(row, true);
+  });
+}
+
+function collapseAll() {
+  records.value.forEach((row) => {
+    tableRef.value?.toggleRowExpansion(row, false);
+  });
 }
 
 function onResetFilters() {
@@ -559,6 +579,25 @@ watch(
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.history-panel__expand-btn {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #558efc;
+  border-radius: 2px;
+  background: #15191e;
+  color: rgba(255, 255, 255, 0.85);
+  font-family: Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 26px;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover {
+    background: rgba(85, 142, 252, 0.1);
+  }
 }
 
 .history-panel__head-actions {

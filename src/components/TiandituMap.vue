@@ -2128,7 +2128,6 @@ const getVehicleShapeGraphics = () => ({
   model: {
     uri: "/models/car.glb",
     minimumPixelSize: MAP_CONFIG.vehicleModelMinPixelSize,
-    maximumScale: MAP_CONFIG.vehicleModelMaxScale,
     show: new Cesium.CallbackProperty(
       () => vehicleDisplayMode.value === "model",
       false,
@@ -5883,8 +5882,8 @@ onUnmounted(() => {
 
 .custom-controls {
   position: absolute;
-  bottom: 20px;
-  right: 20px;
+  bottom: 21px;
+  right: 25px;
   z-index: 100;
   display: flex;
   flex-direction: column;

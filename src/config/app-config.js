@@ -85,7 +85,6 @@ export const MAP_CONFIG = {
   vehicleFollowRange3D: 500,
   /** 车辆 glb 在屏幕上的显示约束 */
   vehicleModelMinPixelSize: 32,
-  vehicleModelMaxScale: 64,
   /** 无人机轨迹：相邻两点超过此距离（米）则清空旧轨迹后从新位置重记，避免拉线到远处 */
   droneTrailMaxStepMeters: 500,
 };
