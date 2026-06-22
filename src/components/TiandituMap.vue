@@ -176,7 +176,10 @@
       @click.stop
     >
       <div class="police-vehicle-popup__header">
-        <div class="police-vehicle-popup__urgent">紧急伴飞</div>
+        <div class="police-vehicle-popup__urgent">
+          <img class="police-vehicle-popup__urgent-icon" :src="sosSvg" alt="" />
+          <span>紧急伴飞</span>
+        </div>
       </div>
       <div class="police-vehicle-popup__row">
         <span class="police-vehicle-popup__label">目标设备：</span>
@@ -245,7 +248,7 @@
         :disabled="policeVehiclePopup.loadingDrones || !policeVehiclePopup.drones.length"
         @click="handlePolicePopupEscort('follow-full')"
       >
-        一键伴飞
+        开始伴飞
       </button>
     </div>
   </div>
@@ -300,6 +303,7 @@ import {
 import { DEFAULT_ROBOT_ID, DEFAULT_COMMUNITY_ID } from "@/api/robot.js";
 import dtJyPng from "@/assets/images/dt_jy.png";
 import dbJqrPng from "@/assets/images/db_jqr.png";
+import sosSvg from "@/assets/images/sos.svg";
 import { TEST_POLICE_VEHICLES, TEST_DRONES } from "@/config/test-devices.js";
 import { useDeviceStore } from "@/stores/device.js";
 import { useFlightPlanStore } from "@/stores/flightPlan.js";
@@ -4544,7 +4548,7 @@ function promptAlarmEscortAction({
       #alarm-drone-select option { color: #fff; background: #1c222a; }
     </style>
     <div style="padding: 10px;">
-      <h4 style="margin: 0 0 10px 0; color: #ff4d4f;">紧急伴飞</h4>
+      <h4 style="margin: 0 0 10px 0;">接收到伴飞请求</h4>
       <p style="margin: 0 0 10px 0;">目标设备：${vehicleName}（${targetTypeLabel}）</p>
       <div style="margin-top:10px;display: flex;">
         <label for="alarm-drone-select" style="margin-left: -18px;">推荐无人机：</label>
@@ -5951,10 +5955,19 @@ onUnmounted(() => {
   }
 
   &__urgent {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 15px;
     font-weight: 600;
     color: #ff4d4f;
     margin-bottom: 8px;
+
+    &-icon {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
   }
 
   &__row {
@@ -6025,7 +6038,8 @@ line-height: normal;
     padding: 8px 0;
     border: none;
     border-radius: 2px;
-    background: #558efc;
+    // background: #558efc;
+    background: #ff4d4f;
     color: #ffffff;
     font-size: 14px;
     cursor: pointer;
