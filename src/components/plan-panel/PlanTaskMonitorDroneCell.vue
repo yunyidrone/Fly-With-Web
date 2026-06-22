@@ -1,5 +1,11 @@
 <template>
-  <article class="ptm-cell" :class="{ 'ptm-cell--collapsed': hidden }">
+  <article
+    class="ptm-cell"
+    :class="{
+      'ptm-cell--collapsed': hidden,
+      'video-pseudo-fullscreen-host': isPseudoFullscreen,
+    }"
+  >
     <header class="ptm-cell__subhead">
       <div class="ptm-cell__drone-title">
         <img :src="sjWrjPng" class="ptm-cell__drone-icon" alt="" aria-hidden="true" />
@@ -55,7 +61,11 @@
     </div>
 
     <div v-show="!hidden" class="ptm-cell__lower">
-      <div ref="videoWrapRef" class="ptm-cell__video">
+      <div
+        ref="videoWrapRef"
+        class="ptm-cell__video"
+        :class="{ 'video-pseudo-fullscreen': isPseudoFullscreen }"
+      >
         <div class="ptm-cell__video-overlay">
           <span class="ptm-cell__perspective">
             <img :src="arrowRightPng" alt="" class="ptm-cell__chev" width="16" height="16" aria-hidden="true" />
@@ -101,8 +111,18 @@
           autoplay
           playsinline
           webkit-playsinline
+          x5-video-player-type="h5"
+          x5-video-player-fullscreen="true"
         />
         <div v-if="!effectivePlayUrl" class="ptm-cell__video-placeholder">暂无视频流</div>
+        <button
+          v-if="isPseudoFullscreen"
+          type="button"
+          class="video-pseudo-fullscreen__exit"
+          @click="exitVideoFullscreen"
+        >
+          退出全屏
+        </button>
       </div>
 
       <div class="ptm-cell__info">
@@ -150,6 +170,7 @@ import sjJcPng from "@/assets/images/sj_jc.png";
 import screenshotPng from "@/assets/images/screenshot.png";
 import qjxsPng from "@/assets/images/qjxs.png";
 import yjzhPng from "@/assets/images/yjzh.png";
+import { useVideoFullscreen } from "@/composables/useVideoFullscreen.js";
 
 const props = defineProps({
   slotKey: { type: String, required: true },
@@ -188,6 +209,12 @@ const effectivePlayUrl = computed(() => String(props.playUrl || "").trim());
 const { videoRef } = useWebrtcPlayUrl(() => effectivePlayUrl.value, {
   allowEnvFallback: false,
 });
+
+const {
+  isPseudoFullscreen,
+  enterVideoFullscreen,
+  exitVideoFullscreen,
+} = useVideoFullscreen(videoWrapRef, videoRef);
 
 /** MQTT 写入 deviceStore 后此处自动刷新（勿 spread store 对象） */
 const liveDrone = useLiveDroneTelemetry(
@@ -274,20 +301,6 @@ function formatAngle(v) {
   const n = Number(v);
   if (!Number.isFinite(n)) return "—";
   return `${n.toFixed(0)}°`;
-}
-
-async function enterVideoFullscreen() {
-  const el = videoWrapRef.value || videoRef.value;
-  if (!el) return;
-  try {
-    if (document.fullscreenElement === el) {
-      await document.exitFullscreen();
-      return;
-    }
-    await el.requestFullscreen?.();
-  } catch {
-    /* ignore */
-  }
 }
 </script>
 

@@ -2,7 +2,10 @@
  * @Description: 机器人视频流卡片（名称 + 视频 + 重试 / 全局显示）
 -->
 <template>
-  <div class="drone-stream-card robot-stream-card">
+  <div
+    class="drone-stream-card robot-stream-card"
+    :class="{ 'video-pseudo-fullscreen-host': isPseudoFullscreen }"
+  >
     <header class="card-header">
       <div class="card-topline">
         <div class="card-topline__identity">
@@ -21,7 +24,11 @@
 
     <div class="header-divider" />
 
-    <div ref="videoWrapRef" class="video-wrap">
+    <div
+      ref="videoWrapRef"
+      class="video-wrap"
+      :class="{ 'video-pseudo-fullscreen': isPseudoFullscreen }"
+    >
       <div
         v-if="loadingVisible"
         class="video-loading"
@@ -37,9 +44,19 @@
           controls
           playsinline
           webkit-playsinline
+          x5-video-player-type="h5"
+          x5-video-player-fullscreen="true"
           class="video-element"
         />
       </div>
+      <button
+        v-if="isPseudoFullscreen"
+        type="button"
+        class="video-pseudo-fullscreen__exit"
+        @click="exitVideoFullscreen"
+      >
+        退出全屏
+      </button>
     </div>
 
     <footer class="card-footer card-footer--robot">
@@ -68,6 +85,7 @@ import { RobotService } from "@/api/robot.js";
 import arrowRightPng from "@/assets/images/arrow_right.png";
 import hfmrPng from "@/assets/images/hfmr.png";
 import qjxsPng from "@/assets/images/qjxs.png";
+import { useVideoFullscreen } from "@/composables/useVideoFullscreen.js";
 
 /** 从开始拉流到出画面的超时时长，超时触发重连 */
 const LOAD_TIMEOUT_MS = 15000;
@@ -104,6 +122,12 @@ const displayRobotName = computed(
 );
 
 const { videoRef: videoPlayerRef, startPlay, teardown } = useRobotWebrtcPlayUrl(playUrl);
+
+const {
+  isPseudoFullscreen,
+  enterVideoFullscreen,
+  exitVideoFullscreen,
+} = useVideoFullscreen(videoWrapRef, videoPlayerRef);
 
 watch(playUrl, (url) => {
   if (url) {
@@ -263,29 +287,6 @@ const handleRetry = () => {
   void fetchAndPlay();
 };
 
-const enterVideoFullscreen = async () => {
-  const el = videoWrapRef.value || videoPlayerRef.value;
-  if (!el) return;
-  try {
-    if (document.fullscreenElement === el) {
-      await document.exitFullscreen();
-      return;
-    }
-    if (el.requestFullscreen) {
-      await el.requestFullscreen();
-      return;
-    }
-    if (videoPlayerRef.value?.webkitEnterFullscreen) {
-      videoPlayerRef.value.webkitEnterFullscreen();
-      return;
-    }
-    ElMessage.warning("当前环境不支持全屏");
-  } catch (e) {
-    console.warn(e);
-    ElMessage.warning("无法进入全屏");
-  }
-};
-
 onMounted(() => {
   bindVideoMonitor();
   void fetchAndPlay();
@@ -299,7 +300,7 @@ onBeforeUnmount(() => {
   teardown();
 });
 
-defineExpose({ teardown });
+defineExpose({ teardown, exitVideoFullscreen });
 </script>
 
 <style lang="scss" scoped>

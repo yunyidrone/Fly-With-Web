@@ -86,6 +86,7 @@
               <i class="ri-close-line" />
             </button>
             <DroneStream
+              ref="droneStreamRef"
               :key="streamDroneKey"
               :drone-id="streamDroneLive?.id"
               :drone-name="streamDroneLive?.name"
@@ -167,6 +168,7 @@ import { AccompanyingFlyService } from "@/api";
 
 const mapRef = ref(null);
 const robotStreamRef = ref(null);
+const droneStreamRef = ref(null);
 const leftSidebarRef = ref(null);
 const planPanelRef = ref(null);
 const planHistoryVisible = ref(false);
@@ -597,6 +599,7 @@ const handleStreamRecall = async ({ droneId } = {}) => {
 };
 
 const closeDroneStream = () => {
+  droneStreamRef.value?.exitVideoFullscreen?.();
   if (document.fullscreenElement) {
     document.exitFullscreen().catch(() => {});
   }
@@ -610,6 +613,7 @@ const closeDroneStream = () => {
 };
 
 const closeRobotStream = () => {
+  robotStreamRef.value?.exitVideoFullscreen?.();
   if (document.fullscreenElement) {
     document.exitFullscreen().catch(() => {});
   }

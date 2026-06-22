@@ -1,0 +1,58 @@
+/* 移动端等不支持 Fullscreen API 时的 CSS 伪全屏 */
+.video-pseudo-fullscreen-lock {
+  overflow: hidden !important;
+  touch-action: none;
+}
+
+.video-pseudo-fullscreen-host {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 100000 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+  background: #000 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  box-sizing: border-box !important;
+}
+
+.video-pseudo-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 100001 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  max-width: none !important;
+  box-sizing: border-box !important;
+
+  .video-inner,
+  .video-element,
+  .ptm-cell__video-el {
+    min-height: 0 !important;
+    height: 100% !important;
+  }
+}
+
+.video-pseudo-fullscreen__exit {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+  z-index: 3;
+  padding: 6px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 20px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.2;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}

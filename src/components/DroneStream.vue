@@ -7,7 +7,10 @@
 <template>
   <div
     class="drone-stream-card"
-    :class="{ 'drone-stream-card--immersive': immersiveFlight }"
+    :class="{
+      'drone-stream-card--immersive': immersiveFlight,
+      'video-pseudo-fullscreen-host': isPseudoFullscreen,
+    }"
   >
     <header class="card-header">
       <!-- 顶行：箭头图 + 名称 | 状态（紧挨） + 右侧电量 -->
@@ -89,7 +92,11 @@
     <div class="header-divider" />
 
     <!-- 视频区：标题在左，操作在右（关闭仍使用外壳上的按钮） -->
-    <div ref="videoWrapRef" class="video-wrap">
+    <div
+      ref="videoWrapRef"
+      class="video-wrap"
+      :class="{ 'video-pseudo-fullscreen': isPseudoFullscreen }"
+    >
       <div class="video-overlay-top">
         <span class="perspective-hint">
           <img
@@ -165,9 +172,19 @@
           controls
           playsinline
           webkit-playsinline
+          x5-video-player-type="h5"
+          x5-video-player-fullscreen="true"
           class="video-element"
         />
       </div>
+      <button
+        v-if="isPseudoFullscreen"
+        type="button"
+        class="video-pseudo-fullscreen__exit"
+        @click="exitVideoFullscreen"
+      >
+        退出全屏
+      </button>
     </div>
 
     <footer class="card-footer">
@@ -214,6 +231,7 @@ import screenshotPng from "@/assets/images/screenshot.png";
 import qjxsPng from "@/assets/images/qjxs.png";
 import cjbfPng from "@/assets/images/cjbf.png";
 import yjzhPng from "@/assets/images/yjzh.png";
+import { useVideoFullscreen } from "@/composables/useVideoFullscreen.js";
 
 const props = defineProps({
   droneId: { type: String, default: "" },
@@ -436,28 +454,13 @@ const requestStopFollow = async () => {
   }
 };
 
-const enterVideoFullscreen = async () => {
-  const el = videoWrapRef.value || videoPlayerRef.value;
-  if (!el) return;
-  try {
-    if (document.fullscreenElement === el) {
-      await document.exitFullscreen();
-      return;
-    }
-    if (el.requestFullscreen) {
-      await el.requestFullscreen();
-      return;
-    }
-    if (videoPlayerRef.value?.webkitEnterFullscreen) {
-      videoPlayerRef.value.webkitEnterFullscreen();
-      return;
-    }
-    ElMessage.warning("当前环境不支持全屏");
-  } catch (e) {
-    console.warn(e);
-    ElMessage.warning("无法进入全屏");
-  }
-};
+const {
+  isPseudoFullscreen,
+  enterVideoFullscreen,
+  exitVideoFullscreen,
+} = useVideoFullscreen(videoWrapRef, videoPlayerRef);
+
+defineExpose({ exitVideoFullscreen });
 
 const handleImmersiveToggle = () => {
   emit("toggle-immersive");

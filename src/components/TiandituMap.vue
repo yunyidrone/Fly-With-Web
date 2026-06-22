@@ -885,6 +885,8 @@ const MAX_LEVEL = MAP_CONFIG.maxLevel;
 const DRONE_HEIGHT = MAP_CONFIG.droneHeight;
 const CAR_SPEED = MAP_CONFIG.carSpeed;
 const SCOPE_RATIO = MAP_CONFIG.scopeRatio; // 数值越小，取景框越靠中心
+const INITIAL_DRONE_VIEW_MIN_SPAN = 0.01; // 首屏自适应时，最小经纬跨度（防止过近）
+const INITIAL_DRONE_VIEW_PADDING_RATIO = 0.2; // 首屏自适应时，边距比例
 // cesium viewer
 let mainViewer,
   carEntity,
@@ -923,6 +925,7 @@ const escortTargetHighlight = reactive({
   targetId: null,
   droneName: "",
 });
+let hasAppliedInitialDroneOverview = false;
 
 /** 地图点击选中的伴飞目标（警车 / 警员 / 机器人） */
 let selectedTargetDeviceId = null;
@@ -970,6 +973,87 @@ function clearTargetVisualHighlight(deviceId) {
   if (robot?.entity) {
     applyBillboardTargetHighlight(robot.entity, false);
   }
+}
+
+function collectInitialDroneOverviewCoords() {
+  const droneList = Array.isArray(deviceStore.drones) ? deviceStore.drones : [];
+  return droneList
+    .map((drone) => {
+      const lng = Number(
+        drone?.longitude ?? drone?.lng,
+      );
+      const lat = Number(
+        drone?.latitude ?? drone?.lat,
+      );
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+      if (lng === 0 && lat === 0) return null;
+      return { lng, lat };
+    })
+    .filter(Boolean);
+}
+
+function flyToInitialDroneOverview() {
+  if (hasAppliedInitialDroneOverview) return;
+  if (!mainViewer || mainViewer.isDestroyed?.()) return;
+
+  const coords = collectInitialDroneOverviewCoords();
+  if (!coords.length) return;
+
+  hasAppliedInitialDroneOverview = true;
+
+  if (coords.length === 1) {
+    const { lng, lat } = coords[0];
+    mainViewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(
+        lng,
+        lat,
+        MAP_CONFIG.mapDefaultRange,
+      ),
+      orientation: {
+        heading: Cesium.Math.toRadians(0),
+        pitch: Cesium.Math.toRadians(-90),
+        roll: 0,
+      },
+      duration: 0.8,
+    });
+    return;
+  }
+
+  let west = Number.POSITIVE_INFINITY;
+  let east = Number.NEGATIVE_INFINITY;
+  let south = Number.POSITIVE_INFINITY;
+  let north = Number.NEGATIVE_INFINITY;
+  coords.forEach(({ lng, lat }) => {
+    west = Math.min(west, lng);
+    east = Math.max(east, lng);
+    south = Math.min(south, lat);
+    north = Math.max(north, lat);
+  });
+
+  const lngSpan = Math.max(east - west, INITIAL_DRONE_VIEW_MIN_SPAN);
+  const latSpan = Math.max(north - south, INITIAL_DRONE_VIEW_MIN_SPAN);
+  const padLng = lngSpan * INITIAL_DRONE_VIEW_PADDING_RATIO;
+  const padLat = latSpan * INITIAL_DRONE_VIEW_PADDING_RATIO;
+
+  const clampedWest = Math.max(-180, west - padLng);
+  const clampedEast = Math.min(180, east + padLng);
+  const clampedSouth = Math.max(-85, south - padLat);
+  const clampedNorth = Math.min(85, north + padLat);
+
+  mainViewer.camera.flyTo({
+    destination: Cesium.Rectangle.fromDegrees(
+      clampedWest,
+      clampedSouth,
+      clampedEast,
+      clampedNorth,
+    ),
+    orientation: {
+      heading: Cesium.Math.toRadians(0),
+      pitch: Cesium.Math.toRadians(-90),
+      roll: 0,
+    },
+    duration: 0.8,
+  });
 }
 
 function applyTargetVisualHighlight(deviceId) {
@@ -4872,6 +4956,9 @@ function syncStoreDevicesToMap() {
   if (props.activeEscortDroneId) {
     syncEscortTargetHighlight(props.activeEscortDroneId);
   }
+
+  // 仅在首屏时，根据 droneList 的经纬度自动框选无人机到一屏
+  flyToInitialDroneOverview();
 
   if (immersiveMapFocusActive) {
     immersiveMapFocusDroneKeys = resolveImmersiveDroneKeys(
