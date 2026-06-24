@@ -212,10 +212,10 @@
         <span class="police-vehicle-popup__label">坐标信息：</span>
         <span class="police-vehicle-popup__value">{{ policeVehiclePopup.coordText }}</span>
       </div>
-      <div class="police-vehicle-popup__row police-vehicle-popup__row--alert">
+      <!-- <div class="police-vehicle-popup__row police-vehicle-popup__row--alert">
         <span class="police-vehicle-popup__label">简要警情：</span>
         <span class="police-vehicle-popup__value">{{ policeVehiclePopup.alertInfo }}</span>
-      </div>
+      </div> -->
       <div
         v-if="policeVehiclePopup.loadingDrones"
         class="police-vehicle-popup__field"
@@ -328,7 +328,7 @@ import dtJyPng from "@/assets/images/dt_jy.png";
 import dbWrjPng from "@/assets/images/db_wrj.png";
 import dbJyPng from "@/assets/images/db_jy.png";
 import dbJcPng from "@/assets/images/db_jc.png";
-import dbJqrPng from "@/assets/images/db_jqr.png";
+import dtJqrPng from "@/assets/images/dt_jqr.png";
 import sosSvg from "@/assets/images/sos.svg";
 import { TEST_POLICE_VEHICLES, TEST_DRONES } from "@/config/test-devices.js";
 import { useDeviceStore } from "@/stores/device.js";
@@ -427,8 +427,8 @@ function resolveTargetDisplayPosition(deviceId) {
   const target = (Array.isArray(deviceStore.targets) ? deviceStore.targets : []).find(
     (t) => String(t?.id) === String(deviceId),
   );
-  const lng = Number(target?.lng);
-  const lat = Number(target?.lat);
+  const lng = Number(target?.longitude);
+  const lat = Number(target?.latitude);
   if (Number.isFinite(lng) && Number.isFinite(lat) && (lng !== 0 || lat !== 0)) {
     return { longitude: lng, latitude: lat, height: 0 };
   }
@@ -533,7 +533,7 @@ function getTargetPopupItem(deviceId) {
     (t) => String(t?.id || "") === id,
   );
   const type = resolveTargetType(target);
-  const iconSrc = type === 2 ? dbJyPng : type === 3 ? dbJqrPng : dbJcPng;
+  const iconSrc = type === 2 ? dbJyPng : type === 3 ? dtJqrPng : dbJcPng;
   return {
     key: `target:${id}`,
     kind: "target",
@@ -1088,7 +1088,7 @@ const OFFICER_NORMAL_PATH_COLOR =
   Cesium.Color.fromCssColorString("#66ccff");
 const ROBOT_NORMAL_PATH_COLOR =
   Cesium.Color.fromCssColorString("#88ddff");
-const VEHICLE_LABEL_COLOR = Cesium.Color.fromCssColorString("#5794DF");
+const VEHICLE_LABEL_COLOR = Cesium.Color.fromCssColorString("#4564c9");
 const DRONE_LABEL_COLOR = Cesium.Color.fromCssColorString("#0EF2F2");
 const DRONE_LABEL_COLOR_ESCORTING = Cesium.Color.fromCssColorString("#52C41A");
 
@@ -1874,7 +1874,7 @@ const robotManager = {
         targetType: 3,
       },
       billboard: {
-        image: dbJqrPng,
+        image: dtJqrPng,
         width: 34,
         height: 34,
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
