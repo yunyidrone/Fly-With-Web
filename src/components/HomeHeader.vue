@@ -27,16 +27,31 @@
           <div class="datetime-block__time">{{ timeStr }}</div>
           <div class="datetime-block__date">{{ dateStr }}</div>
         </div>
+        <!-- 设置 -->
+        <!-- <button
+          type="button"
+          class="settings-btn"
+          title="设置"
+          aria-label="设置"
+          @click="settingsVisible = true"
+        >
+          <i class="ri-settings-3-line" />
+        </button> -->
         <button type="button" class="reload-btn" title="重新加载页面" @click="handleReload">
           <i class="ri-refresh-line" />
         </button>
       </div>
     </div>
+
+    <SettingsDrawer v-model:visible="settingsVisible" />
   </header>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted } from "vue";
+import SettingsDrawer from "@/components/SettingsDrawer.vue";
+
+const settingsVisible = ref(false);
 
 const timeStr = ref("");
 const dateStr = ref("");
@@ -152,6 +167,7 @@ onUnmounted(() => {
   gap: 16px;
 }
 
+.settings-btn,
 .reload-btn {
   display: flex;
   align-items: center;
