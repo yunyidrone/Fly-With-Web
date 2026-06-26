@@ -314,7 +314,7 @@ const showRecall = computed(() => isEscorting.value || isReturning.value);
 const showNoTask = computed(() => isOffline.value || isStandby.value);
 
 const perspectiveVideoText = computed(() =>
-  viewMode.value === "airport" ? "当前机场视角" : "无人机",
+  viewMode.value === "airport" ? "当前机场视角" : "无人机视角",
 );
 
 function formatCoord(v) {

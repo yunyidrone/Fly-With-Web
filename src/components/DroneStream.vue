@@ -207,8 +207,8 @@
         {{ immersiveBtnLabel }}
         <img class="footer-btn__icon-img" :src="cjbfPng" alt="" aria-hidden="true" />
       </button>
+      <!-- v-if="showRecall" -->
       <button
-        v-if="showRecall"
         type="button"
         class="footer-btn btn-neutral"
         :disabled="isLoading"
@@ -310,7 +310,7 @@ const showRecall = computed(() => isEscorting.value);
 const showNoTask = computed(() => isOffline.value || isStandby.value);
 
 const perspectiveVideoText = computed(() =>
-  viewMode.value === "airport" ? "当前机场视角" : "无人机",
+  viewMode.value === "airport" ? "当前机场视角" : "无人机视角",
 );
 
 const immersiveBtnLabel = computed(() =>
