@@ -190,6 +190,14 @@
     </div>
 
     <footer class="card-footer">
+      <!-- <button
+        type="button"
+        class="footer-btn btn-neutral"
+        :class="{ 'btn-neutral--active': props.manualControlVisible }"
+        @click="handleManualControlToggle"
+      >
+        {{ props.manualControlVisible ? "退出操控" : "手动操控" }}
+      </button> -->
       <button
         type="button"
         class="footer-btn btn-neutral"
@@ -250,6 +258,8 @@ const props = defineProps({
   companionTaskTitle: { type: String, default: "" },
   /** 由父页控制：沉浸伴飞时仅显示地图 + 本视频 */
   immersiveFlight: { type: Boolean, default: false },
+  /** 由父页控制：地图上的手动操控面板显隐 */
+  manualControlVisible: { type: Boolean, default: false },
   /** 设备级拉流地址（接口 streamUrl），为空时用环境变量 VIDEO_CONFIG */
   streamUrl: { type: String, default: "" },
   playUrl: { type: String, default: "" },
@@ -265,13 +275,21 @@ const props = defineProps({
   roll: { type: [Number, String], default: undefined },
 });
 
-const emit = defineEmits(["toggle-immersive", "recall"]);
+const emit = defineEmits([
+  "toggle-immersive",
+  "toggle-manual-control",
+  "recording-change",
+  "recall",
+]);
 
 let pc;
 const systemStore = useSystemStore();
 const videoPlayerRef = ref(null);
 const videoWrapRef = ref(null);
 const streamSource = ref("raw");
+const mediaRecorderRef = ref(null);
+const recordedChunksRef = ref([]);
+const isRecording = ref(false);
 
 const resolvedStreamUrl = computed(() => {
   if (streamSource.value === "ai" && props.aiPlayUrl) {
@@ -434,6 +452,102 @@ const handleScreenshot = () => {
   }, "image/png");
 };
 
+function resolveRecordingMimeType() {
+  const candidates = [
+    "video/webm;codecs=vp9",
+    "video/webm;codecs=vp8",
+    "video/webm",
+  ];
+  for (const type of candidates) {
+    if (window.MediaRecorder?.isTypeSupported?.(type)) {
+      return type;
+    }
+  }
+  return "";
+}
+
+const startLocalRecording = () => {
+  if (isRecording.value) {
+    ElMessage.warning("录像已在进行中");
+    return false;
+  }
+  const stream = videoPlayerRef.value?.srcObject;
+  if (!(stream instanceof MediaStream) || !stream.getVideoTracks().length) {
+    ElMessage.warning("暂无可录制视频流");
+    return false;
+  }
+  if (!window.MediaRecorder) {
+    ElMessage.error("当前浏览器不支持录像");
+    return false;
+  }
+  try {
+    recordedChunksRef.value = [];
+    const mimeType = resolveRecordingMimeType();
+    const recorder = mimeType
+      ? new MediaRecorder(stream, { mimeType })
+      : new MediaRecorder(stream);
+    recorder.ondataavailable = (evt) => {
+      if (evt.data && evt.data.size > 0) {
+        recordedChunksRef.value.push(evt.data);
+      }
+    };
+    recorder.onstop = () => {
+      const chunks = recordedChunksRef.value;
+      recordedChunksRef.value = [];
+      mediaRecorderRef.value = null;
+      isRecording.value = false;
+      emit("recording-change", false);
+      if (!chunks.length) return;
+      const blobType = recorder.mimeType || "video/webm";
+      const blob = new Blob(chunks, { type: blobType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `drone-record-${Date.now()}.webm`;
+      a.click();
+      URL.revokeObjectURL(url);
+      ElMessage.success("录像已保存");
+    };
+    recorder.start(1000);
+    mediaRecorderRef.value = recorder;
+    isRecording.value = true;
+    emit("recording-change", true);
+    ElMessage.success("开始录像");
+    return true;
+  } catch (error) {
+    console.warn("开始录像失败", error);
+    ElMessage.error("开始录像失败");
+    mediaRecorderRef.value = null;
+    recordedChunksRef.value = [];
+    isRecording.value = false;
+    emit("recording-change", false);
+    return false;
+  }
+};
+
+const stopLocalRecording = ({ silent = false } = {}) => {
+  const recorder = mediaRecorderRef.value;
+  if (!recorder || recorder.state === "inactive") {
+    if (isRecording.value) {
+      isRecording.value = false;
+      emit("recording-change", false);
+    }
+    if (!silent) ElMessage.warning("当前没有进行中的录像");
+    return false;
+  }
+  try {
+    isRecording.value = false;
+    emit("recording-change", false);
+    recorder.stop();
+    if (!silent) ElMessage.info("录像结束，正在导出");
+    return true;
+  } catch (error) {
+    console.warn("停止录像失败", error);
+    if (!silent) ElMessage.error("结束录像失败");
+    return false;
+  }
+};
+
 const requestStopFollow = async () => {
   const id = String(props.targetDeviceId || "").trim();
   const droneId = String(props.droneId || "").trim();
@@ -470,10 +584,19 @@ const {
   exitVideoFullscreen,
 } = useVideoFullscreen(videoWrapRef, videoPlayerRef);
 
-defineExpose({ exitVideoFullscreen });
+defineExpose({
+  exitVideoFullscreen,
+  captureCurrentFrame: handleScreenshot,
+  startLocalRecording,
+  stopLocalRecording,
+});
 
 const handleImmersiveToggle = () => {
   emit("toggle-immersive");
+};
+
+const handleManualControlToggle = () => {
+  emit("toggle-manual-control", !props.manualControlVisible);
 };
 
 const handleRecall = async () => {
@@ -493,12 +616,22 @@ const handleRecall = async () => {
   }
 };
 
+watch(
+  () => props.immersiveFlight,
+  (val) => {
+    if (val && props.manualControlVisible) {
+      emit("toggle-manual-control", false);
+    }
+  },
+);
+
 onMounted(() => {
   if (!isOffline.value) initPlayVideo();
 });
 
 watch(resolvedStreamUrl, () => {
   if (isOffline.value) return;
+  stopLocalRecording({ silent: true });
   // 切换播放源时关闭旧连接，重新拉流
   try {
     if (pc) {
@@ -514,6 +647,10 @@ watch(resolvedStreamUrl, () => {
 });
 
 onUnmounted(() => {
+  stopLocalRecording({ silent: true });
+  if (props.manualControlVisible) {
+    emit("toggle-manual-control", false);
+  }
   try {
     if (pc) {
       pc.getSenders?.()?.forEach((s) => s.track?.stop());
@@ -1027,6 +1164,11 @@ onUnmounted(() => {
     background: rgba(85, 142, 252, 0.14);
     border-color: #6d9fff;
   }
+}
+
+.btn-neutral--active {
+  background: rgba(85, 142, 252, 0.18);
+  border-color: #80aaff;
 }
 
 .btn-primary {

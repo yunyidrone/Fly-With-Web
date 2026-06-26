@@ -16,10 +16,17 @@
         @open-robot-stream="openRobotStream"
         @immersive-escort-switch="onImmersiveEscortSwitch"
       />
-      <div v-show="!immersiveFlight" class="map-legend-host">
+      <div v-show="!immersiveFlight && !manualControlVisible" class="map-legend-host">
         <MapLegend
           @lockdown="mapRef?.triggerLockdown()"
           @toggle="(e) => mapRef?.toggleLayerVisibility(e)"
+        />
+      </div>
+      <div v-show="!immersiveFlight && manualControlVisible" class="map-legend-host">
+        <ManualControlPanel
+          :recording-active="manualRecordingActive"
+          @close="closeManualControl"
+          @control-event="handleManualControlEvent"
         />
       </div>
     </div>
@@ -106,7 +113,10 @@
               :escort-start-time="streamEscortStartTime"
               :companion-task-title="streamCompanionTaskTitle"
               :immersive-flight="immersiveFlight"
+              :manual-control-visible="manualControlVisible"
               @toggle-immersive="onToggleImmersive"
+              @toggle-manual-control="onToggleManualControl"
+              @recording-change="onDroneRecordingChange"
               @recall="handleStreamRecall"
             />
         </div>
@@ -149,6 +159,7 @@ import { ElMessage } from "element-plus";
 import TiandituMap from "@/components/TiandituMap.vue";
 import HomeHeader from "@/components/HomeHeader.vue";
 import MapLegend from "@/components/MapLegend.vue";
+import ManualControlPanel from "@/components/ManualControlPanel.vue";
 import LeftSidebarTabs from "@/components/LeftSidebarTabs.vue";
 import PlanUpcomingAlert from "@/components/plan-panel/PlanUpcomingAlert.vue";
 import PlanHistoryPanel from "@/components/plan-panel/PlanHistoryPanel.vue";
@@ -213,6 +224,8 @@ const streamDrone = ref(null);
 const robotStreamVisible = ref(false);
 const streamRobot = ref(null);
 const immersiveFlight = ref(false);
+const manualControlVisible = ref(false);
+const manualRecordingActive = ref(false);
 
 const deviceStore = useDeviceStore();
 const flightPlanStore = useFlightPlanStore();
@@ -319,6 +332,9 @@ watch(
 
 function onToggleImmersive() {
   const willEnter = !immersiveFlight.value;
+  if (willEnter) {
+    manualControlVisible.value = false;
+  }
   immersiveFlight.value = willEnter;
 
   const targetId = streamTargetId.value;
@@ -334,6 +350,43 @@ function onToggleImmersive() {
   } else {
     mapRef.value?.setImmersiveMapFocus?.(false);
   }
+}
+
+function onToggleManualControl(nextVisible) {
+  manualControlVisible.value = Boolean(nextVisible && droneStreamVisible.value);
+}
+
+function closeManualControl() {
+  manualControlVisible.value = false;
+}
+
+function handleManualControlEvent(event) {
+  if (!event || event.type !== "action") return;
+  if (!droneStreamVisible.value) {
+    ElMessage.warning("请先打开无人机视频");
+    return;
+  }
+  if (event.action === "takePhoto") {
+    droneStreamRef.value?.captureCurrentFrame?.();
+    return;
+  }
+  if (event.action === "startRecord") {
+    const started = droneStreamRef.value?.startLocalRecording?.();
+    if (started) {
+      manualRecordingActive.value = true;
+    }
+    return;
+  }
+  if (event.action === "stopRecord") {
+    const stopped = droneStreamRef.value?.stopLocalRecording?.();
+    if (stopped) {
+      manualRecordingActive.value = false;
+    }
+  }
+}
+
+function onDroneRecordingChange(recording) {
+  manualRecordingActive.value = Boolean(recording);
 }
 
 watch(immersiveFlight, () => {
@@ -604,6 +657,8 @@ const closeDroneStream = () => {
     mapRef.value?.setImmersiveMapFocus?.(false);
   }
   streamDroneWasEscorting = false;
+  manualControlVisible.value = false;
+  manualRecordingActive.value = false;
   droneStreamVisible.value = false;
   immersiveFlight.value = false;
   streamDrone.value = null;
