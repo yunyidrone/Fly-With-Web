@@ -328,6 +328,7 @@ import dtJyPng from "@/assets/images/dt_jy.png";
 import dbWrjPng from "@/assets/images/db_wrj.png";
 import dbJyPng from "@/assets/images/db_jy.png";
 import dbJcPng from "@/assets/images/db_jc.png";
+import boatPng from "@/assets/images/boat.png";
 import dtJqrPng from "@/assets/images/dt_jqr.png";
 import sosSvg from "@/assets/images/sos.svg";
 import { TEST_POLICE_VEHICLES, TEST_DRONES } from "@/config/test-devices.js";
@@ -397,6 +398,8 @@ const overlapDevicePopup = reactive({
   hovering: false,
   items: [],
 });
+
+const TEMP_BOAT_TARGET_SN = "13900084989";
 
 const overlapDevicePopupStyle = computed(() => ({
   left: `${overlapDevicePopup.left}px`,
@@ -533,7 +536,13 @@ function getTargetPopupItem(deviceId) {
     (t) => String(t?.id || "") === id,
   );
   const type = resolveTargetType(target);
-  const iconSrc = type === 2 ? dbJyPng : type === 3 ? dtJqrPng : dbJcPng;
+  const iconSrc = isBoatTarget(target)
+    ? boatPng
+    : type === 2
+      ? dbJyPng
+      : type === 3
+        ? dtJqrPng
+        : dbJcPng;
   return {
     key: `target:${id}`,
     kind: "target",
@@ -1466,6 +1475,11 @@ function resolveTargetType(target) {
   return Number.isFinite(type) ? type : 1;
 }
 
+function isBoatTarget(target) {
+  const sn = String(target?.sn || target?.mqttSn || "").trim();
+  return sn === TEMP_BOAT_TARGET_SN;
+}
+
 function getTargetTypeLabel(target) {
   const type = resolveTargetType(target);
   if (type === 2) return "警员";
@@ -1550,6 +1564,10 @@ const vehicleManager = {
     const vehicle = this.vehicles.get(deviceId);
     if (!vehicle?.entity) return;
     const entity = vehicle.entity;
+    if (!entity.model && entity.billboard) {
+      applyBillboardTargetHighlight(entity, selected);
+      return;
+    }
 
     if (selected) {
       entity.model.silhouetteColor = VEHICLE_HIGHLIGHT_COLOR;
@@ -1571,9 +1589,17 @@ const vehicleManager = {
   },
 
   // 为指定设备创建车辆实体
-  createVehicle(viewer, deviceId, labelText = deviceId) {
+  createVehicle(viewer, deviceId, labelText = deviceId, options = {}) {
+    const { billboardImage = "" } = options;
+    const useBillboard = Boolean(billboardImage);
     if (this.vehicles.has(deviceId)) {
-      return this.vehicles.get(deviceId);
+      const existing = this.vehicles.get(deviceId);
+      const existingUseBillboard = Boolean(existing?.entity?.billboard && !existing?.entity?.model);
+      if (existingUseBillboard !== useBillboard) {
+        this.removeVehicle(deviceId);
+      } else {
+        return existing;
+      }
     }
 
     const positionProp = new Cesium.SampledPositionProperty();
@@ -1615,7 +1641,18 @@ const vehicleManager = {
           return lastValidOrientation;
         }
       }, false),
-      ...getVehicleShapeGraphics(),
+      ...(useBillboard
+        ? {
+            billboard: {
+              image: billboardImage,
+              width: 34,
+              height: 34,
+              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+              heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            },
+          }
+        : getVehicleShapeGraphics()),
       path: {
         show: routeLayerVisible,
         width: 5,
@@ -5059,7 +5096,9 @@ const handleCarBoxMessage = (topic, data) => {
     } else {
       officerManager.removeOfficer(deviceId);
       robotManager.removeRobot(deviceId);
-      vehicleManager.createVehicle(mainViewer, deviceId, label);
+      vehicleManager.createVehicle(mainViewer, deviceId, label, {
+        billboardImage: isBoatTarget(target) ? boatPng : "",
+      });
       vehicleManager.updateVehicleLabel(deviceId, label);
       vehicleManager.updateVehiclePosition(deviceId, longitude, latitude, 0);
     }
@@ -5131,7 +5170,9 @@ function syncStoreDevicesToMap() {
     if (targetType === 1 || !Number.isFinite(targetType)) {
       officerManager.removeOfficer(id);
       robotManager.removeRobot(id);
-      vehicleManager.createVehicle(mainViewer, id, label);
+      vehicleManager.createVehicle(mainViewer, id, label, {
+        billboardImage: isBoatTarget(target) ? boatPng : "",
+      });
       vehicleManager.updateVehicleLabel(id, label);
       vehicleManager.updateVehiclePosition(id, lng, lat, 0);
       const vehicle = vehicleManager.vehicles.get(id);

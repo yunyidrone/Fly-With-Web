@@ -158,13 +158,21 @@ export function normalizeTargetRecord(raw) {
     return null;
   };
   const normalizedId = id !== "" && id != null ? String(id) : stableFallbackId;
+  const normalizedSn =
+    typeof snSrc === "string" ? snSrc.trim() : String(snSrc || "");
+  const TEMP_TARGET_NAME_BY_SN = {
+    "13900084991": "浙J2878",
+    "13900084989": "船",
+  };
+  const temporaryName = TEMP_TARGET_NAME_BY_SN[normalizedSn];
   return {
     id: normalizedId,
     name:
-      typeof nameSrc === "string" && nameSrc.trim()
+      temporaryName ||
+      (typeof nameSrc === "string" && nameSrc.trim()
         ? nameSrc.trim()
-        : String(id || "目标"),
-    sn: typeof snSrc === "string" ? snSrc.trim() : String(snSrc || ""),
+        : String(id || "目标")),
+    sn: normalizedSn,
     type: Number(raw?.type ?? raw?.targetType ?? raw?.category ?? 1) || 1,
     lng: pickCoord(raw.longitude) ?? pickCoord(raw.lng) ?? null, // 121.428
     lat: pickCoord(raw.latitude) ?? pickCoord(raw.lat) ?? null, // 28.653
