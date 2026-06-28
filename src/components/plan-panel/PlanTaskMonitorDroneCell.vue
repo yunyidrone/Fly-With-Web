@@ -218,21 +218,6 @@ const aiEventSlots = computed(() => {
 const videoWrapRef = ref(null);
 const viewMode = ref("drone");
 
-const effectivePlayUrl = computed(() => {
-  if (isOffline.value) return "";
-  return String(props.playUrl || "").trim();
-});
-
-const { videoRef } = useWebrtcPlayUrl(() => effectivePlayUrl.value, {
-  allowEnvFallback: false,
-});
-
-const {
-  isPseudoFullscreen,
-  enterVideoFullscreen,
-  exitVideoFullscreen,
-} = useVideoFullscreen(videoWrapRef, videoRef);
-
 /** MQTT 写入 deviceStore 后此处自动刷新（勿 spread store 对象） */
 const liveDrone = useLiveDroneTelemetry(
   () => props.droneId,
@@ -312,6 +297,21 @@ const isEscorting = computed(() => display.value.rawStatus === 2);
 const isReturning = computed(() => display.value.rawStatus === 3);
 const showRecall = computed(() => isEscorting.value || isReturning.value);
 const showNoTask = computed(() => isOffline.value || isStandby.value);
+
+const effectivePlayUrl = computed(() => {
+  if (isOffline.value) return "";
+  return String(props.playUrl || "").trim();
+});
+
+const { videoRef } = useWebrtcPlayUrl(() => effectivePlayUrl.value, {
+  allowEnvFallback: false,
+});
+
+const {
+  isPseudoFullscreen,
+  enterVideoFullscreen,
+  exitVideoFullscreen,
+} = useVideoFullscreen(videoWrapRef, videoRef);
 
 const perspectiveVideoText = computed(() =>
   viewMode.value === "airport" ? "当前机场视角" : "无人机视角",

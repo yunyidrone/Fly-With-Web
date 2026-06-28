@@ -50,7 +50,7 @@
           <div
             v-else
             class="plan-task-monitor__grid"
-            :class="`plan-task-monitor__grid--${gridMode}`"
+            :style="gridStyle"
           >
             <PlanTaskMonitorDroneCell
               v-for="cell in cells"
@@ -142,12 +142,17 @@ function applyPlanMetaFromSources(planId, detail) {
   planStartModeLabel.value = resolvePlanStartModeLabel(normalized);
 }
 
-const gridMode = computed(() => {
+const gridColumnCount = computed(() => {
   const n = cells.value.length;
-  if (n <= 1) return "1";
-  if (n === 2) return "2";
-  return "4";
+  if (n <= 1) return 1;
+  if (n <= 4) return 2;
+  if (n <= 9) return 3;
+  return 4;
 });
+
+const gridStyle = computed(() => ({
+  "--ptm-grid-columns": String(gridColumnCount.value),
+}));
 
 function close() {
   visible.value = false;
@@ -243,7 +248,7 @@ async function loadMonitorData() {
     applyPlanMetaFromSources(planId, detail);
     const slots = unwrapPlanAlgorithmDataList(detail)
       .map((raw, index) => normalizePlanAlgorithmSlot(raw, index))
-      .slice(0, 4);
+      .filter(Boolean);
     if (!slots.length) {
       errorText.value = "";
       cells.value = [];
@@ -276,6 +281,8 @@ async function loadMonitorData() {
       }),
     );
     cells.value = built.filter((c) => c.droneId || c.playUrl);
+    // 测试代码，测试一下多台无人机显示情况
+    // cells.value = [...cells.value, ...cells.value, ...cells.value, cells.value[0]];
   } catch (e) {
     errorText.value = e?.message || "加载计划详情失败";
     cells.value = [];
@@ -336,10 +343,6 @@ watch(
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  // border-radius: 10px;
-  // border: 1px solid #30363b;
-  // background: rgba(3, 6, 10, 0.92);
-  // backdrop-filter: blur(8px);
   overflow: hidden;
 
   &--wide-left {
@@ -486,21 +489,10 @@ watch(
   gap: 10px;
   flex: 1;
   min-height: 0;
-
-  &--1 {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr;
-  }
-
-  &--2 {
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr;
-  }
-
-  &--4 {
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-  }
+  overflow: auto;
+  align-content: start;
+  grid-template-columns: repeat(var(--ptm-grid-columns, 1), minmax(0, 1fr));
+  grid-auto-rows: minmax(420px, 1fr);
 }
 
 .ptm-fade-enter-active,
