@@ -116,7 +116,7 @@ function isGeneratedDroneId(id) {
  * @property {number} [latitude]
  * @property {number} [lng]
  * @property {number} [lat]
- * @property {number|string} [type] 1车 2人 3机器人
+ * @property {number|string} [type] 1车 2人 3机器人 4无人艇
  * @property {number|string} [robotId]
  * @property {number|string} [communityId]
  */
@@ -161,8 +161,8 @@ export function normalizeTargetRecord(raw) {
   const normalizedSn =
     typeof snSrc === "string" ? snSrc.trim() : String(snSrc || "");
   const TEMP_TARGET_NAME_BY_SN = {
-    "13900084991": "浙J2878",
-    "13900084989": "船",
+    "13900083991": "浙J2878",
+    "13900083989": "船",
   };
   const temporaryName = TEMP_TARGET_NAME_BY_SN[normalizedSn];
   return {

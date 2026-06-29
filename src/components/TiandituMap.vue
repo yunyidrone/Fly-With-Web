@@ -399,7 +399,7 @@ const overlapDevicePopup = reactive({
   items: [],
 });
 
-const TEMP_BOAT_TARGET_SN = "13900084989";
+const TEMP_BOAT_TARGET_SN = "13900083989";
 
 const overlapDevicePopupStyle = computed(() => ({
   left: `${overlapDevicePopup.left}px`,
@@ -430,8 +430,8 @@ function resolveTargetDisplayPosition(deviceId) {
   const target = (Array.isArray(deviceStore.targets) ? deviceStore.targets : []).find(
     (t) => String(t?.id) === String(deviceId),
   );
-  const lng = Number(target?.longitude);
-  const lat = Number(target?.latitude);
+  const lng = Number(target?.lng ?? target?.longitude);
+  const lat = Number(target?.lat ?? target?.latitude);
   if (Number.isFinite(lng) && Number.isFinite(lat) && (lng !== 0 || lat !== 0)) {
     return { longitude: lng, latitude: lat, height: 0 };
   }
@@ -812,7 +812,8 @@ async function applyEscortFollowAction(action, targetId, droneSn, droneId) {
 }
 
 function resolvePolicePopupDroneSelection() {
-  const targetId = policeVehiclePopup.deviceId;
+  const targetId = resolveCanonicalTargetId(policeVehiclePopup.deviceId) ||
+    String(policeVehiclePopup.deviceId || "").trim();
   const selectedId = policeVehiclePopup.selectedDroneId;
   const selected = (policeVehiclePopup.drones || []).find(
     (d) => String(d?.id ?? d?.sn ?? "") === String(selectedId),
@@ -851,6 +852,35 @@ function resolveVehicleTargetSn(vehicleData) {
   ).trim();
 }
 
+/** 按 MQTT 主题 sn / 地图 deviceId / 目标 id 在 store 中查找伴飞目标 */
+function findTargetByMqttKey(key) {
+  const trimmed = String(key || "").trim();
+  if (!trimmed) return null;
+  const targets = Array.isArray(deviceStore.targets) ? deviceStore.targets : [];
+  return (
+    targets.find((t) => String(t?.id || "").trim() === trimmed) ||
+    targets.find((t) => {
+      const keys = [
+        t?.sn,
+        t?.mqttSn,
+        t?.raw?.sn,
+        t?.raw?.terminalPhone,
+        t?.raw?.deviceSn,
+        t?.raw?.targetSn,
+        t?.raw?.vehicleSn,
+      ];
+      return keys.some((v) => String(v || "").trim() === trimmed);
+    }) ||
+    null
+  );
+}
+
+/** 接口 targetId 一律使用 store 中的目标 id，禁止把终端 sn 当作 targetId */
+function resolveCanonicalTargetId(deviceKey) {
+  const target = findTargetByMqttKey(deviceKey);
+  return target?.id ? String(target.id) : "";
+}
+
 function toFiniteNumber(v) {
   if (typeof v === "number" && Number.isFinite(v)) return v;
   if (typeof v === "string" && v.trim() !== "") {
@@ -868,13 +898,14 @@ function extractReadySuggestedDronesFromResponse(res) {
 }
 
 function buildSuggestDronesQuery(targetId, devicePosition) {
+  const canonicalTargetId = resolveCanonicalTargetId(targetId);
   const longitude = toFiniteNumber(devicePosition?.longitude);
   const latitude = toFiniteNumber(devicePosition?.latitude);
-  if (!targetId || !Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+  if (!canonicalTargetId || !Number.isFinite(longitude) || !Number.isFinite(latitude)) {
     return null;
   }
   return {
-    targetId,
+    targetId: canonicalTargetId,
     longitude,
     latitude,
   };
@@ -1481,10 +1512,13 @@ function isBoatTarget(target) {
 }
 
 function getTargetTypeLabel(target) {
+  if (isBoatTarget(target)) return "船";
   const type = resolveTargetType(target);
+  if (type === 1) return "警车";
   if (type === 2) return "警员";
   if (type === 3) return "机器人";
-  return "警车";
+  if (type === 4) return "车辆";
+  return "未知";
 }
 
 const getVehicleDeviceIdFromEntity = (entity) => {
@@ -4165,16 +4199,19 @@ const showTestVehicleDialog = (deviceId, position) => {
  * @description: 接口目标详情浮层（警车 / 警员 / 机器人，锚定在目标旁）
  */
 const showApiVehiclePopup = async (deviceId, position) => {
-  const resolvedPosition = position || resolveTargetDisplayPosition(deviceId);
+  const canonicalTargetId = resolveCanonicalTargetId(deviceId) || String(deviceId || "").trim();
+  const resolvedPosition = position || resolveTargetDisplayPosition(canonicalTargetId);
   if (!resolvedPosition) return;
 
-  const vehicleData = (Array.isArray(deviceStore.targets) ? deviceStore.targets : []).find(
-    (v) => String(v.id) === String(deviceId),
-  );
+  const vehicleData =
+    findTargetByMqttKey(deviceId) ||
+    (Array.isArray(deviceStore.targets) ? deviceStore.targets : []).find(
+      (v) => String(v.id) === String(canonicalTargetId),
+    );
   if (!(await ensureTargetBindAllowed(resolveVehicleTargetSn(vehicleData)))) return;
 
-  policeVehiclePopup.deviceId = deviceId;
-  policeVehiclePopup.vehicleName = vehicleData?.name || deviceId;
+  policeVehiclePopup.deviceId = canonicalTargetId;
+  policeVehiclePopup.vehicleName = vehicleData?.name || canonicalTargetId;
   policeVehiclePopup.targetTypeLabel = getTargetTypeLabel(vehicleData);
   policeVehiclePopup.alertInfo =
     String(vehicleData?.raw?.description || "").trim() || "暂无描述";
@@ -4185,7 +4222,7 @@ const showApiVehiclePopup = async (deviceId, position) => {
 
   updatePolicePopupScreenPosition();
   attachPolicePopupTracker();
-  loadSuggestedDronesForPopup(deviceId, resolvedPosition);
+  loadSuggestedDronesForPopup(canonicalTargetId, resolvedPosition);
 };
 
 /**
@@ -5003,14 +5040,21 @@ const showAlarmDialog = async (deviceId, devicePosition, terminalPhone) => {
   const sn = String(terminalPhone ?? "").trim();
   if (!(await ensureTargetBindAllowed(sn))) return;
 
-  const vehicleData = (Array.isArray(deviceStore.targets) ? deviceStore.targets : []).find(
-    (v) => String(v.id) === String(deviceId),
-  );
-  const vehicleName = vehicleData?.name || deviceId;
+  const canonicalTargetId = resolveCanonicalTargetId(deviceId);
+  if (!canonicalTargetId) {
+    console.warn("告警伴飞：未在目标列表中解析到 targetId，跳过 suggestList", deviceId);
+    return;
+  }
+
+  const vehicleData = findTargetByMqttKey(deviceId) ||
+    (Array.isArray(deviceStore.targets) ? deviceStore.targets : []).find(
+      (v) => String(v.id) === String(canonicalTargetId),
+    );
+  const vehicleName = vehicleData?.name || canonicalTargetId;
   const targetTypeLabel = getTargetTypeLabel(vehicleData);
   const suggestedList = mapSuggestedDronesForSelect(
     await getReadySuggestedDrones(
-      buildSuggestDronesQuery(deviceId, devicePosition),
+      buildSuggestDronesQuery(canonicalTargetId, devicePosition),
       true,
     ),
   );
@@ -5027,7 +5071,7 @@ const showAlarmDialog = async (deviceId, devicePosition, terminalPhone) => {
   const hasSuggestedDrones = suggestedList.length > 0;
   const isImmersive = Boolean(props.immersiveFlight);
   const action = await promptAlarmEscortAction({
-    deviceId,
+    deviceId: canonicalTargetId,
     vehicleName,
     targetTypeLabel,
     optionsHtml,
@@ -5037,7 +5081,7 @@ const showAlarmDialog = async (deviceId, devicePosition, terminalPhone) => {
   if (!action) return;
 
   const { selectedId, droneSn } = readAlarmDroneSelection(suggestedList);
-  await applyEscortFollowAction(action, deviceId, droneSn, selectedId);
+  await applyEscortFollowAction(action, canonicalTargetId, droneSn, selectedId);
 };
 
 /**
@@ -5059,12 +5103,10 @@ const handleCarBoxMessage = (topic, data) => {
     console.warn("⚠️ 无法从主题中提取设备号:", topic);
     return;
   }
-  // 按 SN 查找伴飞目标，统一使用 target.id 作为车辆 ID
-  const target = (Array.isArray(deviceStore.targets) ? deviceStore.targets : []).find(
-    (t) => String(t?.sn || "").trim() === sn,
-  );
-  const deviceId = String(target?.id || sn);
-  if (target && sn && deviceId !== sn) {
+  // 按 SN / 终端号查找伴飞目标，接口一律使用 target.id
+  const target = findTargetByMqttKey(sn);
+  const mapDeviceId = target?.id ? String(target.id) : sn;
+  if (target && sn && mapDeviceId !== sn) {
     target.mqttSn = sn;
     vehicleManager.removeVehicle(sn);
   }
@@ -5078,47 +5120,47 @@ const handleCarBoxMessage = (topic, data) => {
       target.lat = latitude;
       target.lng = longitude;
     }
-    const label = target?.name || deviceId;
+    const label = target?.name || mapDeviceId;
     const targetType = resolveTargetType(target);
 
     if (targetType === 2) {
-      vehicleManager.removeVehicle(deviceId);
-      robotManager.removeRobot(deviceId);
-      officerManager.createOfficer(mainViewer, deviceId, label);
-      officerManager.updateOfficerLabel(deviceId, label);
-      officerManager.updateOfficerPosition(deviceId, longitude, latitude, 0);
+      vehicleManager.removeVehicle(mapDeviceId);
+      robotManager.removeRobot(mapDeviceId);
+      officerManager.createOfficer(mainViewer, mapDeviceId, label);
+      officerManager.updateOfficerLabel(mapDeviceId, label);
+      officerManager.updateOfficerPosition(mapDeviceId, longitude, latitude, 0);
     } else if (targetType === 3) {
-      vehicleManager.removeVehicle(deviceId);
-      officerManager.removeOfficer(deviceId);
-      robotManager.createRobot(mainViewer, deviceId, label);
-      robotManager.updateRobotLabel(deviceId, label);
-      robotManager.updateRobotPosition(deviceId, longitude, latitude, 0);
+      vehicleManager.removeVehicle(mapDeviceId);
+      officerManager.removeOfficer(mapDeviceId);
+      robotManager.createRobot(mainViewer, mapDeviceId, label);
+      robotManager.updateRobotLabel(mapDeviceId, label);
+      robotManager.updateRobotPosition(mapDeviceId, longitude, latitude, 0);
     } else {
-      officerManager.removeOfficer(deviceId);
-      robotManager.removeRobot(deviceId);
-      vehicleManager.createVehicle(mainViewer, deviceId, label, {
-        billboardImage: isBoatTarget(target) ? boatPng : "",
+      officerManager.removeOfficer(mapDeviceId);
+      robotManager.removeRobot(mapDeviceId);
+      vehicleManager.createVehicle(mainViewer, mapDeviceId, label, {
+        billboardImage: targetType === 4 || isBoatTarget(target) ? boatPng : "",
       });
-      vehicleManager.updateVehicleLabel(deviceId, label);
-      vehicleManager.updateVehiclePosition(deviceId, longitude, latitude, 0);
+      vehicleManager.updateVehicleLabel(mapDeviceId, label);
+      vehicleManager.updateVehiclePosition(mapDeviceId, longitude, latitude, 0);
     }
 
-    if (shouldRefreshFollowOnMqtt(deviceId)) {
-      const locked = resolveFollowTargetEntity(deviceId);
+    if (shouldRefreshFollowOnMqtt(mapDeviceId)) {
+      const locked = resolveFollowTargetEntity(mapDeviceId);
       if (locked?.entity) {
-        followVehicleEntity(locked.entity, deviceId, { resetViewFrom: false });
+        followVehicleEntity(locked.entity, mapDeviceId, { resetViewFrom: false });
       }
     }
 
     // 伴飞待锁目标：实体刚创建或位置更新时尝试补锁
-    tryApplyPendingEscortLock(deviceId);
+    tryApplyPendingEscortLock(mapDeviceId);
   }
 
-  if (alarmFlag && alarmFlag !== 0) {
-    void showAlarmDialog(deviceId, { longitude, latitude }, terminalPhone);
+  if (alarmFlag && alarmFlag !== 0 && target?.id) {
+    void showAlarmDialog(String(target.id), { longitude, latitude }, terminalPhone);
   }
 
-  systemStore.addCarMessage({ ...data, deviceId });
+  systemStore.addCarMessage({ ...data, deviceId: mapDeviceId });
 };
 
 /**
@@ -5167,11 +5209,11 @@ function syncStoreDevicesToMap() {
       return;
     }
 
-    if (targetType === 1 || !Number.isFinite(targetType)) {
+    if (targetType === 1 || targetType === 4 || !Number.isFinite(targetType)) {
       officerManager.removeOfficer(id);
       robotManager.removeRobot(id);
       vehicleManager.createVehicle(mainViewer, id, label, {
-        billboardImage: isBoatTarget(target) ? boatPng : "",
+        billboardImage: targetType === 4 || isBoatTarget(target) ? boatPng : "",
       });
       vehicleManager.updateVehicleLabel(id, label);
       vehicleManager.updateVehiclePosition(id, lng, lat, 0);
