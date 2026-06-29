@@ -5139,7 +5139,7 @@ const handleCarBoxMessage = (topic, data) => {
       officerManager.removeOfficer(mapDeviceId);
       robotManager.removeRobot(mapDeviceId);
       vehicleManager.createVehicle(mainViewer, mapDeviceId, label, {
-        billboardImage: targetType === 4 || isBoatTarget(target) ? boatPng : "",
+        billboardImage: isBoatTarget(target) ? boatPng : "",
       });
       vehicleManager.updateVehicleLabel(mapDeviceId, label);
       vehicleManager.updateVehiclePosition(mapDeviceId, longitude, latitude, 0);
@@ -5213,7 +5213,7 @@ function syncStoreDevicesToMap() {
       officerManager.removeOfficer(id);
       robotManager.removeRobot(id);
       vehicleManager.createVehicle(mainViewer, id, label, {
-        billboardImage: targetType === 4 || isBoatTarget(target) ? boatPng : "",
+        billboardImage: isBoatTarget(target) ? boatPng : "",
       });
       vehicleManager.updateVehicleLabel(id, label);
       vehicleManager.updateVehiclePosition(id, lng, lat, 0);
