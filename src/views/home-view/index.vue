@@ -448,6 +448,21 @@ function isDroneCurrentlyEscorting(drone) {
   return false;
 }
 
+function isDroneCurrentlyReturning(drone) {
+  if (!drone) return false;
+  if (Number(drone.status) === 3 || Number(drone.rawStatus) === 3) return true;
+  if (drone.status === "returning") return true;
+  return String(drone.statusText || "").trim() === "返航中";
+}
+
+function isDroneCurrentlyStandby(drone) {
+  if (!drone) return false;
+  if (Number(drone.status) === 1 || Number(drone.rawStatus) === 1) return true;
+  if (drone.status === "standby") return true;
+  const text = String(drone.statusText || "").trim();
+  return text === "待命" || text === "就绪";
+}
+
 function findReplacementEscortDrone(preferredTargetId, excludeDroneId) {
   const preferred = String(preferredTargetId || "").trim();
   if (!preferred) return null;
@@ -466,6 +481,8 @@ function findReplacementEscortDrone(preferredTargetId, excludeDroneId) {
 let streamSwitchInFlight = false;
 /** 当前视频弹窗内无人机曾处于伴飞，用于识别「伴飞 → 其他」状态跃迁 */
 let streamDroneWasEscorting = false;
+/** 当前视频弹窗内无人机曾处于返航中，用于识别「返航中 → 就绪」状态跃迁 */
+let streamDroneWasReturning = false;
 
 function syncMapAfterStreamDroneSwitch(replacement) {
   if (!replacement?.id) return;
@@ -479,7 +496,28 @@ function syncMapAfterStreamDroneSwitch(replacement) {
   }
 }
 
-/** 视频弹窗：当前无人机从伴飞变为其他状态时，尝试切换到同目标的其他伴飞机，否则关闭 */
+/** 仅在「返航中 -> 就绪」时提示并关闭监控弹窗 */
+function checkAndCloseStreamOnReturnToStandby(liveDrone) {
+  if (!droneStreamVisible.value || !streamDrone.value?.id) return false;
+  const live = liveDrone || streamDroneLive.value || streamDrone.value;
+  const currentlyReturning = isDroneCurrentlyReturning(live);
+  const currentlyStandby = isDroneCurrentlyStandby(live);
+
+  if (currentlyReturning) {
+    streamDroneWasReturning = true;
+    return false;
+  }
+
+  if (!streamDroneWasReturning || !currentlyStandby) return false;
+  streamDroneWasReturning = false;
+  ElMessage.info("任务已经完成，即将主动关闭监控");
+  setTimeout(() => {
+    closeDroneStream();
+  }, 2000);
+  return true;
+}
+
+/** 视频弹窗：当前无人机从伴飞变为其他状态时，尝试切换到同目标的其他伴飞机 */
 async function checkAndSwitchEscortStreamDrone({
   closeIfNoReplacement = false,
 } = {}) {
@@ -491,17 +529,24 @@ async function checkAndSwitchEscortStreamDrone({
 
   if (currentlyEscorting) {
     streamDroneWasEscorting = true;
+    checkAndCloseStreamOnReturnToStandby(live);
     return;
   }
 
-  if (!streamDroneWasEscorting) return;
+  if (!streamDroneWasEscorting) {
+    if (closeIfNoReplacement) checkAndCloseStreamOnReturnToStandby(live);
+    return;
+  }
   streamDroneWasEscorting = false;
 
   const currentId = String(streamDrone.value.id);
   const currentTargetId =
     resolveEscortTargetId(live) || resolveEscortTargetId(streamDrone.value);
 
-  if (!currentTargetId) return;
+  if (!currentTargetId) {
+    if (closeIfNoReplacement) checkAndCloseStreamOnReturnToStandby(live);
+    return;
+  }
 
   const replacement = findReplacementEscortDrone(currentTargetId, currentId);
 
@@ -520,10 +565,7 @@ async function checkAndSwitchEscortStreamDrone({
   }
 
   if (closeIfNoReplacement) {
-    ElMessage.info("任务已经完成，即将主动关闭监控");
-    setTimeout(() => {
-      closeDroneStream();
-    }, 2000);
+    checkAndCloseStreamOnReturnToStandby(live);
   }
 }
 
@@ -539,6 +581,25 @@ watch(
       void checkAndSwitchEscortStreamDrone({ closeIfNoReplacement: true });
     } else if (escorting === true) {
       streamDroneWasEscorting = true;
+    }
+  },
+);
+
+watch(
+  () => {
+    if (!droneStreamVisible.value || !streamDrone.value?.id) return null;
+    const live = streamDroneLive.value || streamDrone.value;
+    return {
+      returning: isDroneCurrentlyReturning(live),
+      standby: isDroneCurrentlyStandby(live),
+    };
+  },
+  (state, prevState) => {
+    if (!state) return;
+    if (prevState?.returning === true && state.standby === true) {
+      checkAndCloseStreamOnReturnToStandby();
+    } else if (state.returning === true) {
+      streamDroneWasReturning = true;
     }
   },
 );
@@ -609,6 +670,9 @@ const openDroneStream = async (device) => {
   streamDroneWasEscorting = isDroneCurrentlyEscorting(
     liveFromStore ? { ...streamDrone.value, ...liveFromStore } : streamDrone.value,
   );
+  streamDroneWasReturning = isDroneCurrentlyReturning(
+    liveFromStore ? { ...streamDrone.value, ...liveFromStore } : streamDrone.value,
+  );
 };
 
 /** 沉浸中「开始伴飞并跳转」：先退出沉浸，再切视频（锁车由地图侧 submitStartFollow 完成） */
@@ -657,6 +721,7 @@ const closeDroneStream = () => {
     mapRef.value?.setImmersiveMapFocus?.(false);
   }
   streamDroneWasEscorting = false;
+  streamDroneWasReturning = false;
   manualControlVisible.value = false;
   manualRecordingActive.value = false;
   droneStreamVisible.value = false;

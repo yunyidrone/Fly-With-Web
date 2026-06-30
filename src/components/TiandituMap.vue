@@ -1512,6 +1512,8 @@ function isBoatTarget(target) {
 }
 
 function getTargetTypeLabel(target) {
+  // 目标类型  1警车2警员3机器人4车辆(第三方推送的)
+  // isBoatTarget 临时需求，后期要删除
   if (isBoatTarget(target)) return "船";
   const type = resolveTargetType(target);
   if (type === 1) return "警车";
