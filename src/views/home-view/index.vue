@@ -285,19 +285,38 @@ function onPlanViewAllocation(plan) {
 const DRONE_LIST_POLL_INTERVAL = 10000;
 
 let droneListTimer = null;
+let initialFetchTimeoutId = null;
+let initialFetchIdleId = null;
+let initialFetchDone = false;
+
+function runInitialDeviceFetchOnce() {
+  if (initialFetchDone) return;
+  initialFetchDone = true;
+  if (!deviceStore.dronesLoadedFromApi) {
+    deviceStore.fetchDroneList();
+  }
+  if (!deviceStore.targetsLoadedFromApi) {
+    deviceStore.fetchTargetList();
+  }
+  if (!flightPlanStore.plansLoadedFromApi) {
+    flightPlanStore.fetchAllPlanList();
+  }
+}
 
 onMounted(() => {
   ensureDroneOsdMqtt();
   flightPlanStore.initCustomLocationTree();
-  flightPlanStore.fetchAllPlanList();
   flightPlanStore.startPlanTaskWatcher();
 
-  // 等地图完成首帧渲染后再拉数据，避免阻塞首次绘制
-  const schedule = window.requestIdleCallback || ((fn) => setTimeout(fn, 0));
-  schedule(() => {
-    deviceStore.fetchDroneList();
-    deviceStore.fetchTargetList();
-  });
+  // 等地图完成首帧渲染后再拉数据，避免阻塞首次绘制；并用超时兜底避免 idle 回调饥饿
+  if (typeof window.requestIdleCallback === "function") {
+    initialFetchIdleId = window.requestIdleCallback(runInitialDeviceFetchOnce, {
+      timeout: 1200,
+    });
+    initialFetchTimeoutId = window.setTimeout(runInitialDeviceFetchOnce, 1200);
+  } else {
+    initialFetchTimeoutId = window.setTimeout(runInitialDeviceFetchOnce, 0);
+  }
 
   // 每 10 秒刷新无人机列表状态（合并策略保留 MQTT 动态字段）
   droneListTimer = setInterval(async () => {
@@ -310,6 +329,18 @@ onMounted(() => {
 
 onUnmounted(() => {
   flightPlanStore.stopPlanTaskWatcher();
+  if (initialFetchTimeoutId != null) {
+    window.clearTimeout(initialFetchTimeoutId);
+    initialFetchTimeoutId = null;
+  }
+  if (
+    initialFetchIdleId != null &&
+    typeof window.cancelIdleCallback === "function"
+  ) {
+    window.cancelIdleCallback(initialFetchIdleId);
+    initialFetchIdleId = null;
+  }
+  initialFetchDone = false;
   if (droneListTimer) {
     clearInterval(droneListTimer);
     droneListTimer = null;
