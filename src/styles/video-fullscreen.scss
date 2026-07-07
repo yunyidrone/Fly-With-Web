@@ -56,3 +56,18 @@
   cursor: pointer;
   backdrop-filter: blur(4px);
 }
+
+@media (max-width: 767px) {
+  /* 伪全屏：退出按钮放左上，避免与右上角「原始流 / AI 流」重叠 */
+  .video-pseudo-fullscreen__exit {
+    top: max(10px, env(safe-area-inset-top, 0px));
+    left: max(10px, env(safe-area-inset-left, 0px));
+    right: auto;
+    z-index: 4;
+  }
+
+  .video-pseudo-fullscreen .video-overlay-top {
+    padding: max(10px, env(safe-area-inset-top, 0px)) 10px 8px 92px;
+    box-sizing: border-box;
+  }
+}

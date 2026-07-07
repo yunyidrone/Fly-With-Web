@@ -16,12 +16,6 @@
         @open-robot-stream="openRobotStream"
         @immersive-escort-switch="onImmersiveEscortSwitch"
       />
-      <div v-show="!immersiveFlight && !manualControlVisible" class="map-legend-host">
-        <MapLegend
-          @lockdown="mapRef?.triggerLockdown()"
-          @toggle="(e) => mapRef?.toggleLayerVisibility(e)"
-        />
-      </div>
       <div v-show="!immersiveFlight && manualControlVisible" class="map-legend-host">
         <ManualControlPanel
           :recording-active="manualRecordingActive"
@@ -29,6 +23,14 @@
           @control-event="handleManualControlEvent"
         />
       </div>
+    </div>
+
+    <!-- 图例叠在页面层，高于左侧 dock(z-index:100)，避免底部被透明侧栏挡住点击 -->
+    <div v-show="!immersiveFlight && !manualControlVisible" class="map-legend-host">
+      <MapLegend
+        @lockdown="mapRef?.triggerLockdown()"
+        @toggle="(e) => mapRef?.toggleLayerVisibility(e)"
+      />
     </div>
 
     <!-- 顶部覆盖层 -->
@@ -803,6 +805,15 @@ const closeRobotStream = () => {
   box-sizing: border-box;
   border-right: 1px solid rgba(48, 54, 59, 0.85);
 }
+
+.map-legend-host {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 101;
+  pointer-events: none;
+}
 </style>
 
 <style lang="scss">
@@ -921,6 +932,14 @@ const closeRobotStream = () => {
   &--history {
     width: calc(100vw - 48px);
     max-width: calc(100vw - 48px);
+  }
+}
+
+@media (max-width: 767px) {
+  /* 底部为地图图例预留空间，避免无人设备/飞行计划面板底部被遮挡 */
+  .home-left-dock {
+    max-height: calc(100dvh - 110px - 76px);
+    height: calc(100dvh - 110px - 76px);
   }
 }
 </style>

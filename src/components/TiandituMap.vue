@@ -3110,7 +3110,9 @@ function scheduleRestoreLockedFollow() {
 
 /**
  * @description: 锁定相机跟随目标（车辆 / 警员 / 机器人），使目标保持在视野中心
- * @param {{ force3D?: boolean, resetViewFrom?: boolean }} [options] resetViewFrom 为 false 时保留用户已调整的跟随距离
+ * @param {{ force3D?: boolean, resetViewFrom?: boolean }} [options]
+ *   force3D 原用于跟车时自动切 3D，现已禁用，视角仅由用户手动 2D/3D 按钮控制
+ *   resetViewFrom 为 false 时保留用户已调整的跟随距离
  */
 const followVehicleEntity = (entity, deviceId, { force3D = false, resetViewFrom = true } = {}) => {
   if (!mainViewer || mainViewer.isDestroyed?.() || !entity) return;
@@ -3118,9 +3120,11 @@ const followVehicleEntity = (entity, deviceId, { force3D = false, resetViewFrom 
   if (deviceId != null) {
     followedVehicleDeviceId = String(deviceId);
   }
-  if (force3D) {
-    isPitch2D.value = false;
-  }
+  // 默认保持 2D，仅用户手动点击 2D/3D 按钮切换视角
+  // 原逻辑：force3D 为 true 时自动切 3D（锁定/伴飞跟车）
+  // if (force3D) {
+  //   isPitch2D.value = false;
+  // }
 
   if (resetViewFrom) {
     applyEntityTrackViewFrom(entity, isPitch2D.value);
@@ -3754,7 +3758,9 @@ const toggleLockMode = () => {
     return;
   }
 
-  followVehicleEntity(target.entity, target.deviceId, { force3D: true });
+  // 原逻辑：手动锁定跟车时自动切 3D
+  // followVehicleEntity(target.entity, target.deviceId, { force3D: true });
+  followVehicleEntity(target.entity, target.deviceId);
 };
 
 /**
@@ -3869,8 +3875,10 @@ const runningToPointWithTimeForCar = (lng, lat, speed = 15) => {
   if (isFirstPoint) {
     mainViewer.trackedEntity = carEntity;
     isLockMode.value = true;
-    switchTrackedView(mainViewer, carEntity, false);
-    isPitch2D.value = false;
+    switchTrackedView(mainViewer, carEntity, isPitch2D.value);
+    // 原逻辑：测试路径首个点位时自动切 3D
+    // switchTrackedView(mainViewer, carEntity, false);
+    // isPitch2D.value = false;
     // drawVerticalLine(mainViewer, lng, lat, DRONE_HEIGHT, Cesium.Color.LAWNGREEN);
     isFirstPoint = false;
   }
@@ -3974,8 +3982,10 @@ const updateEntityPosition = (entityProp, lng, lat, height) => {
   if (isFirstPoint) {
     mainViewer.trackedEntity = carEntity;
     isLockMode.value = true;
-    switchTrackedView(mainViewer, carEntity, false);
-    isPitch2D.value = false;
+    switchTrackedView(mainViewer, carEntity, isPitch2D.value);
+    // 原逻辑：测试路径首个点位时自动切 3D
+    // switchTrackedView(mainViewer, carEntity, false);
+    // isPitch2D.value = false;
     isFirstPoint = false;
   }
 
@@ -4086,8 +4096,10 @@ const initClickControl = (viewer) => {
         // runningToPointWithTimeForCar(lng, lat);
         mainViewer.trackedEntity = carEntity;
         isLockMode.value = true;
-        switchTrackedView(mainViewer, carEntity, false);
-        isPitch2D.value = false;
+        switchTrackedView(mainViewer, carEntity, isPitch2D.value);
+        // 原逻辑：地图选点测试首个点位时自动切 3D
+        // switchTrackedView(mainViewer, carEntity, false);
+        // isPitch2D.value = false;
         isFirstPoint = false;
       } else {
         // moveToNewPointAlongRoad(viewer, lng, lat);
@@ -4745,7 +4757,9 @@ function lockToEscortTarget(targetId) {
 
   const resolved = resolveFollowTargetEntity(id);
   if (resolved?.entity) {
-    followVehicleEntity(resolved.entity, id, { force3D: true });
+    // 原逻辑：伴飞锁定目标时自动切 3D
+    // followVehicleEntity(resolved.entity, id, { force3D: true });
+    followVehicleEntity(resolved.entity, id);
     pendingEscortLockTargetId = null;
     return true;
   }
@@ -6323,6 +6337,14 @@ onUnmounted(() => {
     display: flex;
     border: 2px solid #ffffff;
     box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+  }
+}
+
+@media (max-width: 767px) {
+  .custom-controls {
+    z-index: 102;
+    bottom: 12px;
+    right: 10px;
   }
 }
 

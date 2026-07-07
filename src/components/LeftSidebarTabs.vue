@@ -2,7 +2,13 @@
  * 左侧 Tab：无人设备 / 飞行计划，内嵌 ResourcePanel、PlanPanel
 -->
 <template>
-  <aside class="left-sidebar-tabs" :class="{ 'left-sidebar-tabs--docked': docked }">
+  <aside
+    class="left-sidebar-tabs"
+    :class="{
+      'left-sidebar-tabs--docked': docked,
+      'left-sidebar-tabs--open': activeTab != null,
+    }"
+  >
     <div class="left-sidebar-tabs__head" role="tablist" aria-label="侧栏模块">
       <div
         class="btn-wrap"
@@ -120,8 +126,15 @@ $sidebar-width: calc(#{$tab-btn-width} * 2 + #{$tab-head-gap});
     flex-shrink: 0;
     width: $sidebar-width;
     max-width: min($sidebar-width, calc(100vw - 48px));
-    height: 100%;
+    align-self: flex-start;
+    height: auto;
     max-height: 100%;
+
+    /* 仅展开面板时拉满高度；收起时只占 Tab 条，避免透明区域挡住底部图例点击 */
+    &.left-sidebar-tabs--open {
+      align-self: stretch;
+      height: 100%;
+    }
   }
 
   .btn-wrap {
@@ -255,6 +268,12 @@ $sidebar-width: calc(#{$tab-btn-width} * 2 + #{$tab-head-gap});
     display: flex;
     flex-direction: column;
     overflow: hidden;
+  }
+}
+
+@media (max-width: 767px) {
+  .left-sidebar-tabs {
+    max-height: calc(100dvh - 110px - 120px);
   }
 }
 </style>

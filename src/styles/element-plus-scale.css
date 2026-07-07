@@ -1,5 +1,7 @@
 /**
- * Element Plus 随视口缩放（设计基准宽 1920px）
+ * Element Plus 随视口缩放
+ * PC（≥768px）：设计基准宽 1920px，与改前一致
+ * 移动端（<768px）：基准宽 520px，与 rem 对齐，避免按 375 放大后撑破布局
  * 字号用 min() 设死上限不放大；组件尺寸继续随视口微调
  */
 :root {
@@ -17,6 +19,12 @@
   --el-component-size-large: calc(40px * var(--app-ui-scale));
   --el-component-size: calc(32px * var(--app-ui-scale));
   --el-component-size-small: calc(24px * var(--app-ui-scale));
+}
+
+@media (max-width: 521px) {
+  :root {
+    --app-ui-scale: clamp(0.6, calc(100vw / 520), 0.85);
+  }
 }
 
 /* 未走 CSS 变量的组件文案兜底（含 teleport 到 body 的浮层） */
