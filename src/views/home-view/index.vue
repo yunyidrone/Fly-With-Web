@@ -28,8 +28,9 @@
     <!-- 图例叠在页面层，高于左侧 dock(z-index:100)，避免底部被透明侧栏挡住点击 -->
     <div v-show="!immersiveFlight && !manualControlVisible" class="map-legend-host">
       <MapLegend
-        @lockdown="mapRef?.triggerLockdown()"
-        @toggle="(e) => mapRef?.toggleLayerVisibility(e)"
+        ref="mapLegendRef"
+        @lockdown="onLockdown"
+        @toggle="onLegendToggle"
       />
     </div>
 
@@ -180,6 +181,22 @@ import { useFlightPlanStore } from "@/stores/flightPlan.js";
 import { AccompanyingFlyService } from "@/api";
 
 const mapRef = ref(null);
+const mapLegendRef = ref(null);
+
+async function onLegendToggle(event) {
+  const result = await mapRef.value?.toggleLayerVisibility(event);
+  if (result?.revert) {
+    mapLegendRef.value?.setItemActive?.(event.key, false);
+  }
+}
+
+async function onLockdown() {
+  const result = await mapRef.value?.triggerLockdown();
+  if (result?.hasPoints) {
+    mapLegendRef.value?.setItemActive?.("checkpoint", true);
+  }
+}
+
 const robotStreamRef = ref(null);
 const droneStreamRef = ref(null);
 const leftSidebarRef = ref(null);

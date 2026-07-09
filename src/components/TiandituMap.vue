@@ -5960,7 +5960,13 @@ const drawDynamicCar = (viewer, dynamicCarList) => {
     dynamicCarEntities.push(entity);
   });
 };
-const { triggerLockdown, clearLockdownMarkers, lockdownEntities } = useLockdown(
+const {
+  triggerLockdown: runLockdown,
+  ensureCheckpointLayer,
+  setCheckpointVisibility,
+  clearLockdownMarkers,
+  lockdownEntities,
+} = useLockdown(
   {
     getViewer: () => mainViewer,
     getDronePositionProp: () => dronePositionProp,
@@ -5987,7 +5993,7 @@ const { triggerLockdown, clearLockdownMarkers, lockdownEntities } = useLockdown(
   },
 );
 
-const toggleLayerVisibility = ({ key, active }) => {
+const toggleLayerVisibility = async ({ key, active }) => {
   if (!mainViewer) return;
 
   const setEntitiesShow = (entities, show) => {
@@ -6011,7 +6017,23 @@ const toggleLayerVisibility = ({ key, active }) => {
       if (carEntity) carEntity.show = active;
       break;
     case "checkpoint":
-      setEntitiesShow(lockdownEntities, active);
+      if (!active) {
+        setCheckpointVisibility(false);
+        break;
+      }
+      {
+        const result = await ensureCheckpointLayer();
+        if (!result.ok) {
+          ElMessage.error("获取封控点失败");
+          return { revert: true };
+        }
+        if (!result.hasPoints) {
+          ElMessage.warning("暂无封控点");
+          return { revert: true };
+        }
+        setCheckpointVisibility(true);
+        ElMessage.success("已开启卡点");
+      }
       break;
     case "route":
       routeLayerVisible = active;
@@ -6046,6 +6068,19 @@ const toggleLayerVisibility = ({ key, active }) => {
       });
       break;
   }
+};
+
+const triggerLockdown = async () => {
+  const result = await runLockdown();
+  if (!result.ok) {
+    ElMessage.error("获取封控点失败");
+    return result;
+  }
+  if (!result.hasPoints) {
+    ElMessage.warning("暂无封控点");
+    return result;
+  }
+  return result;
 };
 
 const recallDrone = async (device) => {

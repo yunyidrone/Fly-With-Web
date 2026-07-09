@@ -80,7 +80,7 @@
         </div>
         <div class="task-block__lines">
           <div class="task-block__line">
-            <span class="meta-k">伴飞开始时间：</span>{{ escortStartText }}
+            <span class="meta-k">伴飞开始时间：</span>{{ showNoTask ? '—' : escortStartText }}
           </div>
           <div class="task-block__line">
             <span class="meta-k">伴飞目标设备：</span>{{ targetDeviceLabel }}
@@ -328,7 +328,7 @@ const showRecall = computed(() => isEscorting.value);
 const showNoTask = computed(() => isOffline.value || isStandby.value);
 
 const perspectiveVideoText = computed(() =>
-  viewMode.value === "airport" ? "当前机场视角" : "无人机视角",
+  viewMode.value === "airport" ? "当前机场视角" : "无人机",
 );
 
 const immersiveBtnLabel = computed(() =>

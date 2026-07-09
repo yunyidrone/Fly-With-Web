@@ -314,7 +314,7 @@ const {
 } = useVideoFullscreen(videoWrapRef, videoRef);
 
 const perspectiveVideoText = computed(() =>
-  viewMode.value === "airport" ? "当前机场视角" : "无人机视角",
+  viewMode.value === "airport" ? "当前机场视角" : "无人机",
 );
 
 function formatCoord(v) {

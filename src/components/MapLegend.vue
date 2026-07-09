@@ -257,7 +257,9 @@ const toggleItem = (item) => {
   emit("toggle", { key: item.key, active: item.active });
 
   if (item.key === "checkpoint") {
-    ElMessage.success(item.active ? "已开启卡点" : "已关闭卡点");
+    if (!item.active) {
+      ElMessage.success("已关闭卡点");
+    }
   } else if (item.key === "route") {
     ElMessage.success(item.active ? "已开启伴飞路线" : "已关闭伴飞路线");
   }
@@ -273,12 +275,15 @@ const cancelLockdown = () => {
 
 const confirmLockdown = () => {
   showLockdownConfirm.value = false;
-  const checkpointItem = legendItems.value.find((item) => item.key === "checkpoint");
-  if (checkpointItem && !checkpointItem.active) {
-    checkpointItem.active = true;
-  }
   emit("lockdown");
 };
+
+function setItemActive(key, active) {
+  const item = legendItems.value.find((entry) => entry.key === key);
+  if (item) item.active = active;
+}
+
+defineExpose({ setItemActive });
 
 /** 恢复默认：图例开关回到初始状态并同步地图图层显隐 */
 function restoreDefault() {
