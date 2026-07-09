@@ -173,8 +173,8 @@
       v-if="overlapDevicePopup.visible"
       class="overlap-device-popup"
       :style="overlapDevicePopupStyle"
-      @mouseenter="overlapDevicePopup.hovering = true"
-      @mouseleave="overlapDevicePopup.hovering = false"
+      @mouseenter="onOverlapPopupMouseEnter"
+      @mouseleave="onOverlapPopupMouseLeave"
       @click.stop
     >
       <button
@@ -370,6 +370,12 @@ const POLICE_POPUP_WIDTH = 280;
 const POLICE_POPUP_OFFSET = 16;
 const OVERLAP_POPUP_WIDTH = 230;
 const OVERLAP_POPUP_OFFSET = 12;
+const OVERLAP_DEVICE_HIT_WIDTH = 56;
+const OVERLAP_DEVICE_HIT_HEIGHT = 56;
+const OVERLAP_HIDE_DELAY_MS = 300;
+const OVERLAP_POPUP_SAFE_PADDING = 16;
+const OVERLAP_MOVE_THROTTLE_MS = 50;
+const OVERLAP_POPUP_ITEM_HEIGHT = 36;
 
 const policeVehiclePopup = reactive({
   visible: false,
@@ -407,6 +413,9 @@ const overlapDevicePopupStyle = computed(() => ({
 }));
 
 let policePopupPostRenderRemove = null;
+let overlapHideTimer = null;
+let lastOverlapPointer = { x: 0, y: 0 };
+let lastOverlapPickAt = 0;
 
 function resolveTargetMapEntry(deviceId) {
   const id = String(deviceId || "").trim();
@@ -508,10 +517,190 @@ const closePoliceVehiclePopup = () => {
   detachPolicePopupTracker();
 };
 
+function clearOverlapHideTimer() {
+  if (overlapHideTimer) {
+    clearTimeout(overlapHideTimer);
+    overlapHideTimer = null;
+  }
+}
+
 function hideOverlapDevicePopup() {
+  clearOverlapHideTimer();
   overlapDevicePopup.visible = false;
   overlapDevicePopup.hovering = false;
   overlapDevicePopup.items = [];
+}
+
+function scheduleHideOverlapDevicePopup() {
+  clearOverlapHideTimer();
+  overlapHideTimer = setTimeout(() => {
+    overlapHideTimer = null;
+    if (overlapDevicePopup.hovering) return;
+    if (isPointerInOverlapPopupSafeZone(lastOverlapPointer)) return;
+    hideOverlapDevicePopup();
+  }, OVERLAP_HIDE_DELAY_MS);
+}
+
+function onOverlapPopupMouseEnter() {
+  overlapDevicePopup.hovering = true;
+  clearOverlapHideTimer();
+}
+
+function onOverlapPopupMouseLeave() {
+  overlapDevicePopup.hovering = false;
+  scheduleHideOverlapDevicePopup();
+}
+
+function getOverlapPopupHeight() {
+  const count = overlapDevicePopup.items.length || 0;
+  return Math.min(count * OVERLAP_POPUP_ITEM_HEIGHT + 12, 240);
+}
+
+function isPointerInOverlapPopupSafeZone(pointer) {
+  if (!overlapDevicePopup.visible || !pointer) return false;
+  const pad = OVERLAP_POPUP_SAFE_PADDING;
+  const left = overlapDevicePopup.left - pad;
+  const top = overlapDevicePopup.top - pad;
+  const width = OVERLAP_POPUP_WIDTH + pad * 2;
+  const height = getOverlapPopupHeight() + pad * 2;
+  return (
+    pointer.x >= left &&
+    pointer.x <= left + width &&
+    pointer.y >= top &&
+    pointer.y <= top + height
+  );
+}
+
+function getEntityScreenPosition(entity) {
+  if (!mainViewer || mainViewer.isDestroyed?.() || !entity?.position) return null;
+  const pos =
+    typeof entity.position.getValue === "function"
+      ? entity.position.getValue(mainViewer.clock.currentTime)
+      : entity.position;
+  if (!Cesium.defined(pos)) return null;
+  return Cesium.SceneTransforms.worldToWindowCoordinates(mainViewer.scene, pos);
+}
+
+function isMapEntityVisible(entity) {
+  return Boolean(entity && entity.show !== false);
+}
+
+function isPointerInDeviceHitRect(pointer, center, anchor = "center") {
+  if (!pointer || !center) return false;
+  const halfW = OVERLAP_DEVICE_HIT_WIDTH / 2;
+  const left = center.x - halfW;
+  const right = center.x + halfW;
+  let top;
+  let bottom;
+  if (anchor === "bottom") {
+    bottom = center.y + 4;
+    top = center.y - OVERLAP_DEVICE_HIT_HEIGHT;
+  } else {
+    const halfH = OVERLAP_DEVICE_HIT_HEIGHT / 2;
+    top = center.y - halfH;
+    bottom = center.y + halfH;
+  }
+  return pointer.x >= left && pointer.x <= right && pointer.y >= top && pointer.y <= bottom;
+}
+
+function resolveStoreDroneByEntityKey(entityKey) {
+  const key = String(entityKey || "").trim();
+  if (!key) return null;
+  return (
+    deviceStore.drones.find((drone) => getDroneEntityKey(drone) === key) ||
+    deviceStore.drones.find((drone) => String(drone?.mqttSn || "") === key) ||
+    deviceStore.drones.find((drone) => String(drone?.id || "") === key) ||
+    deviceStore.drones.find((drone) => String(drone?.sn || "") === key) ||
+    null
+  );
+}
+
+function resolveEntityHitAnchor(entity) {
+  if (entity?.billboard && !entity?.model) return "bottom";
+  return "center";
+}
+
+function addOverlapPopupItem(dedup, item) {
+  if (item && !dedup.has(item.key)) dedup.set(item.key, item);
+}
+
+function collectOverlapItemsByScreenHit(screenPosition) {
+  const dedup = new Map();
+  if (!mainViewer || mainViewer.isDestroyed?.() || !screenPosition) return [];
+
+  droneTestManager.drones.forEach((drone, entityKey) => {
+    const entity = drone?.entity;
+    if (!isMapEntityVisible(entity)) return;
+    const center = getEntityScreenPosition(entity);
+    if (!isPointerInDeviceHitRect(screenPosition, center, "center")) return;
+    addOverlapPopupItem(dedup, getDronePopupItem(resolveStoreDroneByEntityKey(entityKey)));
+  });
+
+  vehicleManager.vehicles.forEach((vehicle, deviceId) => {
+    const entity = vehicle?.entity;
+    if (!isMapEntityVisible(entity)) return;
+    const center = getEntityScreenPosition(entity);
+    if (!isPointerInDeviceHitRect(screenPosition, center, resolveEntityHitAnchor(entity))) return;
+    addOverlapPopupItem(dedup, getTargetPopupItem(deviceId));
+  });
+
+  officerManager.officers.forEach((officer, deviceId) => {
+    const entity = officer?.entity;
+    if (!isMapEntityVisible(entity)) return;
+    const center = getEntityScreenPosition(entity);
+    if (!isPointerInDeviceHitRect(screenPosition, center, resolveEntityHitAnchor(entity))) return;
+    addOverlapPopupItem(dedup, getTargetPopupItem(deviceId));
+  });
+
+  robotManager.robots.forEach((robot, deviceId) => {
+    const entity = robot?.entity;
+    if (!isMapEntityVisible(entity)) return;
+    const center = getEntityScreenPosition(entity);
+    if (!isPointerInDeviceHitRect(screenPosition, center, resolveEntityHitAnchor(entity))) return;
+    addOverlapPopupItem(dedup, getTargetPopupItem(deviceId));
+  });
+
+  return [...dedup.values()];
+}
+
+function showOverlapDevicePopup(screenPosition, items) {
+  if (!items?.length) return;
+  overlapDevicePopup.items = items;
+  overlapDevicePopup.visible = true;
+  updateOverlapDevicePopupPosition(screenPosition);
+  if (screenPosition) {
+    lastOverlapPointer = { x: Number(screenPosition.x || 0), y: Number(screenPosition.y || 0) };
+  }
+  clearOverlapHideTimer();
+}
+
+function updateOverlapPopupFromPointer(screenPosition, { force = false } = {}) {
+  if (!screenPosition) return;
+  lastOverlapPointer = { x: Number(screenPosition.x || 0), y: Number(screenPosition.y || 0) };
+
+  if (overlapDevicePopup.hovering) return;
+  if (overlapDevicePopup.visible && isPointerInOverlapPopupSafeZone(lastOverlapPointer)) {
+    clearOverlapHideTimer();
+    return;
+  }
+
+  const now = Date.now();
+  if (!force && now - lastOverlapPickAt < OVERLAP_MOVE_THROTTLE_MS) {
+    return;
+  }
+  lastOverlapPickAt = now;
+
+  const items = collectOverlapPopupItems(screenPosition);
+  if (items.length >= 2) {
+    showOverlapDevicePopup(screenPosition, items);
+    return;
+  }
+
+  if (overlapDevicePopup.visible) {
+    scheduleHideOverlapDevicePopup();
+  } else {
+    clearOverlapHideTimer();
+  }
 }
 
 function updateOverlapDevicePopupPosition(screenPosition) {
@@ -568,23 +757,25 @@ function getDronePopupItem(drone) {
 
 function collectOverlapPopupItems(screenPosition) {
   if (!mainViewer || mainViewer.isDestroyed?.() || !screenPosition) return [];
-  const picked = mainViewer.scene.drillPick(screenPosition, 20) || [];
+
   const dedup = new Map();
+  collectOverlapItemsByScreenHit(screenPosition).forEach((item) => addOverlapPopupItem(dedup, item));
+
+  const picked = mainViewer.scene.drillPick(screenPosition, 20) || [];
   picked.forEach((entry) => {
     const entity = entry?.id;
-    if (!entity) return;
+    if (!entity || !isMapEntityVisible(entity)) return;
     const drone = getDroneDeviceFromEntity(entity);
     if (drone) {
-      const droneItem = getDronePopupItem(drone);
-      if (droneItem && !dedup.has(droneItem.key)) dedup.set(droneItem.key, droneItem);
+      addOverlapPopupItem(dedup, getDronePopupItem(drone));
       return;
     }
     const deviceId = getVehicleDeviceIdFromEntity(entity);
     const targetEntry = deviceId ? resolveTargetMapEntry(deviceId) : null;
     if (!targetEntry) return;
-    const targetItem = getTargetPopupItem(deviceId);
-    if (targetItem && !dedup.has(targetItem.key)) dedup.set(targetItem.key, targetItem);
+    addOverlapPopupItem(dedup, getTargetPopupItem(deviceId));
   });
+
   return [...dedup.values()];
 }
 
@@ -4143,6 +4334,12 @@ const initVehicleClickHandler = (viewer) => {
   vehicleClickHandler.setInputAction((click) => {
     // 当允许添加位置时，不处理车辆点击
     if (isAllowAddLocation.value) return;
+
+    const overlapItems = collectOverlapPopupItems(click.position);
+    if (overlapItems.length >= 2) {
+      showOverlapDevicePopup(click.position, overlapItems);
+      return;
+    }
     hideOverlapDevicePopup();
 
     // 拾取点击的对象
@@ -4174,15 +4371,7 @@ const initVehicleClickHandler = (viewer) => {
       hideOverlapDevicePopup();
       return;
     }
-    if (overlapDevicePopup.hovering) return;
-    const items = collectOverlapPopupItems(movement?.endPosition);
-    if (items.length >= 2) {
-      overlapDevicePopup.items = items;
-      overlapDevicePopup.visible = true;
-      updateOverlapDevicePopupPosition(movement?.endPosition);
-      return;
-    }
-    hideOverlapDevicePopup();
+    updateOverlapPopupFromPointer(movement?.endPosition);
   }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 };
 
