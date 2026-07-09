@@ -370,8 +370,8 @@ const POLICE_POPUP_WIDTH = 280;
 const POLICE_POPUP_OFFSET = 16;
 const OVERLAP_POPUP_WIDTH = 230;
 const OVERLAP_POPUP_OFFSET = 12;
-const OVERLAP_DEVICE_HIT_WIDTH = 56;
-const OVERLAP_DEVICE_HIT_HEIGHT = 56;
+const OVERLAP_DEVICE_HIT_WIDTH = 40;
+const OVERLAP_DEVICE_HIT_HEIGHT = 40;
 const OVERLAP_HIDE_DELAY_MS = 300;
 const OVERLAP_POPUP_SAFE_PADDING = 16;
 const OVERLAP_MOVE_THROTTLE_MS = 50;
@@ -661,6 +661,34 @@ function collectOverlapItemsByScreenHit(screenPosition) {
   });
 
   return [...dedup.values()];
+}
+
+/** 屏幕热区命中唯一设备时，用于 pick 未命中（如模型空隙）的点击兜底 */
+function resolveDeviceClickByScreenHit(screenPosition) {
+  const items = collectOverlapItemsByScreenHit(screenPosition);
+  if (items.length !== 1) return null;
+  const item = items[0];
+  if (item.kind === "drone") {
+    return { kind: "drone", drone: item.drone };
+  }
+  if (item.kind === "target") {
+    return { kind: "target", deviceId: item.id };
+  }
+  return null;
+}
+
+function handleMapDeviceScreenHit(screenPosition) {
+  const hit = resolveDeviceClickByScreenHit(screenPosition);
+  if (!hit) return false;
+  if (hit.kind === "drone" && hit.drone) {
+    handleDroneSelect(hit.drone);
+    return true;
+  }
+  if (hit.kind === "target" && hit.deviceId) {
+    handleTargetSelectById(hit.deviceId);
+    return true;
+  }
+  return false;
 }
 
 function showOverlapDevicePopup(screenPosition, items) {
@@ -4342,7 +4370,7 @@ const initVehicleClickHandler = (viewer) => {
     }
     hideOverlapDevicePopup();
 
-    // 拾取点击的对象
+    // 拾取点击的对象；模型空隙等 pick 未命中时，用屏幕热区兜底
     const pickedObject = viewer.scene.pick(click.position);
 
     if (Cesium.defined(pickedObject) && pickedObject.id) {
@@ -4360,6 +4388,10 @@ const initVehicleClickHandler = (viewer) => {
         handleTargetSelectById(deviceId);
         return;
       }
+    }
+
+    if (handleMapDeviceScreenHit(click.position)) {
+      return;
     }
 
     clearTargetSelection();
