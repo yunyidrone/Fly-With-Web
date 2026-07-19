@@ -969,7 +969,7 @@ const closeRobotStream = () => {
   position: fixed;
   left: 24px;
   top: 90px;
-  z-index: 100;
+  z-index: 102;
   display: flex;
   flex-direction: row;
   align-items: stretch;
