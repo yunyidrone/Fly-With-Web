@@ -12,6 +12,7 @@
         ref="mapRef"
         :active-escort-drone-id="activeEscortDroneId"
         :immersive-flight="immersiveFlight"
+        :render-suspended="taskViewVisible"
         @open-drone-stream="openDroneStream"
         @open-robot-stream="openRobotStream"
         @immersive-escort-switch="onImmersiveEscortSwitch"
@@ -83,6 +84,17 @@
       :wide-left="planHistoryVisible"
       @recall="onTaskMonitorRecall"
     />
+
+    <!-- 任务查看（全屏覆盖层；home 在底层保活。入口待定，下方按钮为临时触发） -->
+    <!-- <TaskView v-model:visible="taskViewVisible" /> -->
+    <!-- <button
+      v-show="!immersiveFlight && !taskViewVisible"
+      type="button"
+      class="task-view-temp-entry"
+      @click="taskViewVisible = true"
+    >
+      查看任务
+    </button> -->
 
     <!-- 无人机视频：无全屏遮罩，仅固定卡片，不阻挡地图操作 -->
     <Teleport to="body">
@@ -169,6 +181,7 @@ import PlanHistoryPanel from "@/components/plan-panel/PlanHistoryPanel.vue";
 import PlanTaskMonitorView from "@/components/plan-panel/PlanTaskMonitorView.vue";
 
 const PlanPanel = defineAsyncComponent(() => import("@/components/PlanPanel.vue"));
+const TaskView = defineAsyncComponent(() => import("@/views/task-view/index.vue"));
 // const AreaDrawPopup = defineAsyncComponent(() => import("@/components/AreaDrawPopup.vue"));
 const ResourcePanel = defineAsyncComponent(() => import("@/components/ResourcePanel.vue"));
 const DroneStream = defineAsyncComponent(() => import("@/components/DroneStream.vue"));
@@ -245,6 +258,7 @@ const streamRobot = ref(null);
 const immersiveFlight = ref(false);
 const manualControlVisible = ref(false);
 const manualRecordingActive = ref(false);
+const taskViewVisible = ref(false);
 
 const deviceStore = useDeviceStore();
 const flightPlanStore = useFlightPlanStore();
@@ -326,6 +340,9 @@ onMounted(() => {
   ensureDroneOsdMqtt();
   flightPlanStore.initCustomLocationTree();
   flightPlanStore.startPlanTaskWatcher();
+
+  // 后台预加载任务查看覆盖层 chunk，避免首次打开时与第二套 Cesium 冷启动叠加
+  void import("@/views/task-view/index.vue");
 
   // 等地图完成首帧渲染后再拉数据，避免阻塞首次绘制；并用超时兜底避免 idle 回调饥饿
   if (typeof window.requestIdleCallback === "function") {
@@ -830,6 +847,28 @@ const closeRobotStream = () => {
   bottom: 0;
   z-index: 101;
   pointer-events: none;
+}
+
+/* 任务查看临时入口按钮（入口方案确定后可移除/替换位置） */
+.task-view-temp-entry {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 200;
+  height: 40px;
+  padding: 0 18px;
+  border: 1px solid #558efc;
+  border-radius: 44px;
+  background: rgba(3, 6, 10, 0.72);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.task-view-temp-entry:hover {
+  background: rgba(85, 142, 252, 0.2);
+  border-color: #6d9fff;
 }
 </style>
 

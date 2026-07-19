@@ -8,7 +8,7 @@
 <template>
   <div class="map-container">
     <!-- cesium container -->
-    <div id="cesiumContainer"></div>
+    <div ref="cesiumContainerRef" class="cesium-container"></div>
     <!-- 加载遮罩 -->
     <div v-if="isLoading" class="map-loading-overlay">
       <div class="map-loading-spinner"></div>
@@ -344,6 +344,10 @@ const props = defineProps({
   activeEscortDroneId: { type: String, default: "" },
   /** 是否处于沉浸伴飞（告警弹窗在沉浸中会展示「开始伴飞并跳转」） */
   immersiveFlight: { type: Boolean, default: false },
+  /** 伴生地图实例（如任务查看覆盖层）：不重复订阅 MQTT，卸载时不影响主地图连接 */
+  companion: { type: Boolean, default: false },
+  /** 暂停默认渲染循环（主地图在覆盖层打开时可设为 true，避免双 WebGL 实例首帧冲突） */
+  renderSuspended: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(["open-drone-stream", "open-robot-stream", "immersive-escort-switch"]);
@@ -352,6 +356,9 @@ const isDev = import.meta.env.DEV;
 
 // 加载状态
 const isLoading = ref(true);
+
+/** Cesium 容器 DOM 引用（用元素实例替代写死 id，允许多个地图实例并存） */
+const cesiumContainerRef = ref(null);
 
 /** 开发环境：打开机器人视频测试窗 */
 function openTestRobotStream() {
@@ -1550,6 +1557,38 @@ function flyToInitialDroneOverview() {
     },
     duration: 0.8,
   });
+}
+
+/**
+ * 新增能力：相机聚焦到指定无人机（供任务查看等外部实例调用）。
+ * 仅新增，不改变任何既有行为；home 不调用即无影响。
+ */
+function focusDrone(droneId, { duration = 0.8, height } = {}) {
+  const id = String(droneId || "").trim();
+  if (!id || !mainViewer || mainViewer.isDestroyed?.()) return false;
+  const drone =
+    deviceStore.drones.find((d) => String(d?.id || "") === id) ||
+    deviceStore.drones.find((d) => String(d?.sn || "") === id) ||
+    deviceStore.drones.find((d) => String(d?.mqttSn || "") === id);
+  if (!drone) return false;
+  const lng = Number(drone.longitude ?? drone.lng);
+  const lat = Number(drone.latitude ?? drone.lat);
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return false;
+  if (lng === 0 && lat === 0) return false;
+  mainViewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(
+      lng,
+      lat,
+      height ?? MAP_CONFIG.mapDefaultRange,
+    ),
+    orientation: {
+      heading: Cesium.Math.toRadians(0),
+      pitch: Cesium.Math.toRadians(-90),
+      roll: 0,
+    },
+    duration,
+  });
+  return true;
 }
 
 function applyTargetVisualHighlight(deviceId) {
@@ -2829,6 +2868,68 @@ const scheduleAfterFirstPaint = (callback) => {
   });
 };
 
+/** 等待 Cesium 容器具备有效尺寸后再初始化，避免 0×0  framebuffer 触发 WebGL 报错 */
+function waitForNonZeroSize(el, timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    if (!el) {
+      resolve(false);
+      return;
+    }
+    const hasSize = () => el.clientWidth > 0 && el.clientHeight > 0;
+    if (hasSize()) {
+      resolve(true);
+      return;
+    }
+
+    let settled = false;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      ro?.disconnect();
+      clearTimeout(timer);
+      resolve(ok);
+    };
+
+    const ro =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => {
+            if (hasSize()) finish(true);
+          })
+        : null;
+    ro?.observe(el);
+
+    const timer = setTimeout(() => finish(hasSize()), timeoutMs);
+  });
+}
+
+/** 尺寸就绪后再等两帧，避免 flex/过渡首帧 canvas 仍为 0×0 */
+async function waitForStableSize(el, timeoutMs = 3000) {
+  const ok = await waitForNonZeroSize(el, timeoutMs);
+  if (!ok) return false;
+  await new Promise((r) => requestAnimationFrame(r));
+  await new Promise((r) => requestAnimationFrame(r));
+  return Boolean(el && el.clientWidth > 0 && el.clientHeight > 0);
+}
+
+function resizeMapView() {
+  if (!mainViewer || mainViewer.isDestroyed?.()) return;
+  mainViewer.resize();
+  mainViewer.scene.requestRender();
+}
+
+function startRenderLoop() {
+  if (!mainViewer || mainViewer.isDestroyed?.()) return;
+  if (props.renderSuspended) return;
+  mainViewer.useDefaultRenderLoop = true;
+  mainViewer.scene.requestRender();
+}
+
+function applyRenderSuspended(suspended) {
+  if (!mainViewer || mainViewer.isDestroyed?.()) return;
+  mainViewer.useDefaultRenderLoop = !suspended;
+  if (!suspended) resizeMapView();
+}
+
 let modelsPreloaded = false;
 const preloadModels = () => {
   if (modelsPreloaded) return;
@@ -2875,7 +2976,9 @@ const initDeferredViewerFeatures = (viewer) => {
   initVehicleClickHandler(viewer);
 
   warmUpPicker(viewer);
-  warmUpMessageBox();
+  if (!props.companion) {
+    warmUpMessageBox();
+  }
 };
 
 /**
@@ -2884,10 +2987,11 @@ const initDeferredViewerFeatures = (viewer) => {
  */
 const initViewer = () => {
   // initialize cesium Viewer
-  mainViewer = new Cesium.Viewer("cesiumContainer", {
+  mainViewer = new Cesium.Viewer(cesiumContainerRef.value, {
     resolutionScale: window.devicePixelRatio || 1,
     sceneMode: Cesium.SceneMode.SCENE3D,
     shouldAnimate: true,
+    useDefaultRenderLoop: false,
     sceneModePicker: false,
     navigationHelpButton: false,
     geocoder: false,
@@ -6340,6 +6444,8 @@ defineExpose({
   lockEscortTargetOnImmersive,
   setImmersiveMapFocus,
   clearDroneSelectionCircle,
+  focusDrone,
+  resizeMapView,
 });
 
 watch(
@@ -6408,23 +6514,37 @@ watch(
   { deep: true, immediate: true },
 );
 
-onMounted(() => {
+onMounted(async () => {
   try {
+    await waitForStableSize(cesiumContainerRef.value);
     initViewer();
+    resizeMapView();
+    startRenderLoop();
   } finally {
     isLoading.value = false;
   }
-  // 地图首屏优先，MQTT 连接放到 Viewer 初始化之后再启动。
-  setTimeout(() => {
-    initialMqttConnect();
-  }, 0);
+  if (!props.companion) {
+    // 地图首屏优先，MQTT 连接放到 Viewer 初始化之后再启动。
+    setTimeout(() => {
+      initialMqttConnect();
+    }, 0);
+  }
 });
+
+watch(
+  () => props.renderSuspended,
+  (suspended) => {
+    applyRenderSuspended(suspended);
+  },
+);
 
 onUnmounted(() => {
   syncEscortTargetHighlight("");
   hideOverlapDevicePopup();
-  mqttService.unsubscribe("carBox/+/location");
-  subscribeEscortDroneOsd._subscribed = false;
+  if (!props.companion) {
+    mqttService.unsubscribe("carBox/+/location");
+    subscribeEscortDroneOsd._subscribed = false;
+  }
   officerManager.clearAll();
   robotManager.clearAll();
   clearLockdownMarkers();
@@ -6459,7 +6579,7 @@ onUnmounted(() => {
 
 <style lang="scss" scoped>
 .map-container,
-#cesiumContainer {
+.cesium-container {
   position: relative;
   width: 100%;
   height: 100%;
