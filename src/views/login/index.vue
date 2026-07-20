@@ -7,8 +7,8 @@
         <div class="login-v2__top-spacer" />
 
         <header class="login-v2__brand">
-          <h1 class="login-v2__title">伴飞调度中心</h1>
-          <p class="login-v2__subtitle">ESCORT FLIGHT DISPATCH CENTER</p>
+          <h1 class="login-v2__title">伴飞客户端调度中心</h1>
+          <p class="login-v2__subtitle">Companion Flight Client Dispatch Center</p>
         </header>
 
         <div class="login-v2__title-gap" />
@@ -169,14 +169,14 @@ $primary-color-light: #6b79ff;
 .login-v2 {
   --design-w: 1920;
   --design-h: 1080;
-  --panel-w: 688;
+  --panel-w: 792;
 
   --login-panel-width: calc(var(--panel-w) / var(--design-w) * 100%);
-  --login-pad-x: calc(78 / var(--panel-w) * 100%);
+  --login-pad-x: calc(130 / var(--panel-w) * 100%);
   --login-space-title-gap: calc(74 / var(--design-h) * 100vh);
 
   --login-title-size: clamp(28px, calc(48 / var(--design-h) * 100vh), 48px);
-  --login-subtitle-size: clamp(12px, calc(14 / var(--design-h) * 100vh), 14px);
+  --login-subtitle-size: clamp(12px, calc(18 / var(--design-h) * 100vh), 18px);
   --login-subtitle-gap: calc(12 / var(--design-h) * 100vh);
   --login-label-size: clamp(20px, calc(16 / var(--design-h) * 100vh), 16px);
   --login-field-gap: calc(54 / var(--design-h) * 100vh);
@@ -214,17 +214,14 @@ $primary-color-light: #6b79ff;
 }
 
 .login-v2__panel {
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
   z-index: 1;
   width: var(--login-panel-width);
   height: 100%;
-  background: linear-gradient(
-    90deg,
-    rgba(2, 8, 20, 0.92) 0%,
-    rgba(2, 8, 20, 0.78) 72%,
-    rgba(2, 8, 20, 0.35) 100%
-  );
-  backdrop-filter: blur(2px);
+  background: linear-gradient( 270deg, rgba(3,6,10,0) 0%, rgba(19,20,23,0.85) 50%);
+  // background: linear-gradient(90deg, rgba(3,6,10,0) 0%, rgba(19,20,23,0.85) 50%);
 }
 
 .login-v2__content {
@@ -263,7 +260,7 @@ $primary-color-light: #6b79ff;
 .login-v2__title {
   margin: 0;
   color: rgba(255, 255, 255, 0.9);
-  font-family: "Alibaba PuHuiTi", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: Alibaba PuHuiTi, Alibaba PuHuiTi;
   font-size: var(--login-title-size);
   font-style: normal;
   font-weight: 700;
@@ -274,11 +271,10 @@ $primary-color-light: #6b79ff;
 .login-v2__subtitle {
   margin: var(--login-subtitle-gap) 0 0;
   color: rgba(255, 255, 255, 0.55);
-  font-family: "Alibaba PuHuiTi", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: Alibaba PuHuiTi, Alibaba PuHuiTi;
   font-size: var(--login-subtitle-size);
   font-weight: 400;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  letter-spacing: 0.15em;
 }
 
 .login-v2__form {
@@ -309,8 +305,9 @@ $primary-color-light: #6b79ff;
 }
 
 .login-v2__form-item :deep(.el-form-item__error) {
-  padding-top: calc(6 / var(--design-h) * 100vh);
+  padding-top: calc(10 / var(--design-h) * 100vh);
   color: #f56c6c;
+  font-size: 16px;
 }
 
 .login-v2__input {
@@ -319,8 +316,6 @@ $primary-color-light: #6b79ff;
   --el-input-hover-bg-color: transparent;
   --el-input-focus-bg-color: transparent;
   --el-input-disabled-bg-color: transparent;
-  --el-text-color-placeholder: rgba(255, 255, 255, 0.65);
-  --el-input-placeholder-color: rgba(255, 255, 255, 0.65);
 }
 
 .login-v2__input :deep(.el-input__wrapper) {
@@ -393,6 +388,7 @@ $primary-color-light: #6b79ff;
   overflow: hidden;
   color: #fff;
   caret-color: #fff;
+  -webkit-text-fill-color: #fff;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: "Alibaba PuHuiTi", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -418,11 +414,9 @@ $primary-color-light: #6b79ff;
   transition: background-color 99999s ease-out 0s;
 }
 
-.login-v2__input :deep(.el-input__inner::placeholder),
-.login-v2__input :deep(input::placeholder) {
+.login-v2__input :deep(.el-input__inner::placeholder) {
   overflow: hidden;
   color: rgba(255, 255, 255, 0.65);
-  -webkit-text-fill-color: rgba(255, 255, 255, 0.65);
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: "Alibaba PuHuiTi", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -531,21 +525,6 @@ $primary-color-light: #6b79ff;
   font-style: normal;
   font-weight: 500;
   letter-spacing: var(--login-btn-letter);
-  --el-button-bg-color: #{$primary-color};
-  --el-button-border-color: #{$primary-color};
-  --el-button-hover-bg-color: #{$primary-color};
-  --el-button-hover-border-color: #{$primary-color};
-  --el-button-hover-text-color: #fff;
-  --el-button-active-bg-color: #{$primary-color-dark};
-  --el-button-active-border-color: #{$primary-color-dark};
-  background-color: $primary-color;
-
-  &:hover:not(.is-disabled),
-  &:focus:not(.is-disabled) {
-    opacity: 0.85;
-    background-color: $primary-color;
-    border-color: $primary-color;
-  }
 }
 
 .login-v2__hint {

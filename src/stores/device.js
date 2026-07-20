@@ -116,7 +116,7 @@ function isGeneratedDroneId(id) {
  * @property {number} [latitude]
  * @property {number} [lng]
  * @property {number} [lat]
- * @property {number|string} [type] 1车 2人 3机器人 4无人艇
+ * @property {number|string} [type] 1车 2人 3机器人 4车辆（第三方推送）5学生证 6肩灯
  * @property {number|string} [robotId]
  * @property {number|string} [communityId]
  */

@@ -112,6 +112,7 @@ import dbWrgPng from "@/assets/images/db_wrg.png";
 import dbWrtPng from "@/assets/images/db_wrt.png";
 import dbJyPng from "@/assets/images/db_jy.png";
 import dbJqrPng from "@/assets/images/db_jqr.png";
+import dbJdPng from "@/assets/images/db_jd.png";
 import dbJcPng from "@/assets/images/db_jc.png";
 import dbKdPng from "@/assets/images/db_kd.png";
 import dbBflxPng from "@/assets/images/db_bflx.png";
@@ -126,6 +127,7 @@ const DEFAULT_LEGEND_ACTIVE = {
   unmannedBoat: false,
   officer: false,
   robot: false,
+  shoulderLight: false,
   policeCar: true,
   checkpoint: false,
   route: false,
@@ -137,6 +139,7 @@ const STATIC_LEGEND_ITEMS = [
   { key: "unmannedBoat", iconSrc: dbWrtPng, label: "无人艇", active: false },
   { key: "officer", iconSrc: dbJyPng, label: "警员", active: false },
   { key: "robot", iconSrc: dbJqrPng, label: "机器人", active: false },
+  { key: "shoulderLight", iconSrc: dbJdPng, label: "肩灯", active: false },
   { key: "policeCar", iconSrc: dbJcPng, label: "警车", active: true },
   { key: "checkpoint", iconSrc: dbKdPng, label: "卡点", active: false },
   { key: "route", iconSrc: dbBflxPng, label: "伴飞路线", active: false },
@@ -178,6 +181,8 @@ function resolveLegendKey(item, expectedType) {
 
   if (expectedType === 2) {
     if (rawKey === "robot" || rawKey === "jqr" || /机器人|jqr/.test(text)) return "robot";
+    if (rawKey === "shoulderLight" || rawKey === "jd" || /肩灯|shoulder.?light|jd/.test(text))
+      return "shoulderLight";
     if (rawKey === "police" || rawKey === "officer" || /警员|人员|officer|police.?man|jy/.test(text)) return "officer";
     if (rawKey === "car" || rawKey === "policeCar" || /警车|车辆|car|vehicle|police.?car|jc/.test(text))
       return "policeCar";
@@ -188,7 +193,12 @@ function resolveLegendKey(item, expectedType) {
 
 function resolveLegendIcon(item, legendKey) {
   const rawKey = String(item?.key ?? "").trim();
-  const iconFileKey = rawKey === "robot" || legendKey === "robot" ? "jqr" : rawKey;
+  const iconFileKey =
+    rawKey === "robot" || legendKey === "robot"
+      ? "jqr"
+      : rawKey === "shoulderLight" || legendKey === "shoulderLight"
+        ? "jd"
+        : rawKey;
   return (
     legendIconModules[`../assets/images/db_${iconFileKey}.png`] ||
     {
@@ -197,6 +207,7 @@ function resolveLegendIcon(item, legendKey) {
       unmannedBoat: dbWrtPng,
       officer: dbJyPng,
       robot: dbJqrPng,
+      shoulderLight: dbJdPng,
       policeCar: dbJcPng,
     }[legendKey]
   );
@@ -232,14 +243,26 @@ async function loadLegendItems() {
       1,
     );
     const targetItems = buildLegendItemsFromSource(normalizeLegendPayload(targetData), 2);
+    const hasConfigItems = resourceItems.length || targetItems.length;
+    const resolvedTargetItems = !hasConfigItems || targetItems.some((item) => item.key === "shoulderLight")
+      ? targetItems
+      : [
+          ...targetItems,
+          {
+            key: "shoulderLight",
+            iconSrc: dbJdPng,
+            label: "肩灯",
+            active: DEFAULT_LEGEND_ACTIVE.shoulderLight,
+          },
+        ];
     const dividerItem = { key: "divider", label: "", iconSrc: "", active: false };
     const nextItems = [
       ...resourceItems,
-      ...(resourceItems.length && targetItems.length ? [dividerItem] : []),
-      ...targetItems,
+      ...(resourceItems.length && resolvedTargetItems.length ? [dividerItem] : []),
+      ...resolvedTargetItems,
       ...STATIC_LEGEND_EXTRA_ITEMS,
     ];
-    if (resourceItems.length || targetItems.length) {
+    if (hasConfigItems) {
       legendItems.value = nextItems.map((item) => ({ ...item }));
     }
   } catch (_) {

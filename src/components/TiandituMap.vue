@@ -328,6 +328,7 @@ import dtJyPng from "@/assets/images/dt_jy.png";
 import dbWrjPng from "@/assets/images/db_wrj.png";
 import dbJyPng from "@/assets/images/db_jy.png";
 import dbJcPng from "@/assets/images/db_jc.png";
+import dbJdPng from "@/assets/images/db_jd.png";
 import boatPng from "@/assets/images/boat.png";
 import dtJqrPng from "@/assets/images/dt_jqr.png";
 import sosSvg from "@/assets/images/sos.svg";
@@ -431,6 +432,7 @@ function resolveTargetMapEntry(deviceId) {
     vehicleManager.vehicles.get(id) ||
     officerManager.officers.get(id) ||
     robotManager.robots.get(id) ||
+    shoulderLightManager.shoulderLights.get(id) ||
     null
   );
 }
@@ -667,6 +669,14 @@ function collectOverlapItemsByScreenHit(screenPosition) {
     addOverlapPopupItem(dedup, getTargetPopupItem(deviceId));
   });
 
+  shoulderLightManager.shoulderLights.forEach((shoulderLight, deviceId) => {
+    const entity = shoulderLight?.entity;
+    if (!isMapEntityVisible(entity)) return;
+    const center = getEntityScreenPosition(entity);
+    if (!isPointerInDeviceHitRect(screenPosition, center, resolveEntityHitAnchor(entity))) return;
+    addOverlapPopupItem(dedup, getTargetPopupItem(deviceId));
+  });
+
   return [...dedup.values()];
 }
 
@@ -766,7 +776,9 @@ function getTargetPopupItem(deviceId) {
       ? dbJyPng
       : type === 3
         ? dtJqrPng
-        : dbJcPng;
+        : type === 6
+          ? dbJdPng
+          : dbJcPng;
   return {
     key: `target:${id}`,
     kind: "target",
@@ -1354,6 +1366,8 @@ const OFFICER_NORMAL_PATH_COLOR =
   Cesium.Color.fromCssColorString("#66ccff");
 const ROBOT_NORMAL_PATH_COLOR =
   Cesium.Color.fromCssColorString("#88ddff");
+const SHOULDER_LIGHT_NORMAL_PATH_COLOR =
+  Cesium.Color.fromCssColorString("#ffdd66");
 const VEHICLE_LABEL_COLOR = Cesium.Color.fromCssColorString("#4564c9");
 const DRONE_LABEL_COLOR = Cesium.Color.fromCssColorString("#0EF2F2");
 const DRONE_LABEL_COLOR_ESCORTING = Cesium.Color.fromCssColorString("#52C41A");
@@ -1412,6 +1426,12 @@ function clearTargetVisualHighlight(deviceId) {
   const robot = robotManager.robots.get(id);
   if (robot?.entity) {
     applyBillboardTargetHighlight(robot.entity, false);
+    return;
+  }
+
+  const shoulderLight = shoulderLightManager.shoulderLights.get(id);
+  if (shoulderLight?.entity) {
+    applyBillboardTargetHighlight(shoulderLight.entity, false);
   }
 }
 
@@ -1612,6 +1632,12 @@ function applyTargetVisualHighlight(deviceId) {
   const robot = robotManager.robots.get(id);
   if (robot?.entity) {
     applyBillboardTargetHighlight(robot.entity, true);
+    return;
+  }
+
+  const shoulderLight = shoulderLightManager.shoulderLights.get(id);
+  if (shoulderLight?.entity) {
+    applyBillboardTargetHighlight(shoulderLight.entity, true);
   }
 }
 
@@ -1683,6 +1709,15 @@ function refreshTargetLabel(deviceId) {
       robot.baseLabel,
       highlighted,
     );
+    return;
+  }
+
+  const shoulderLight = shoulderLightManager.shoulderLights.get(targetId);
+  if (shoulderLight?.entity?.label) {
+    shoulderLight.entity.label.text = formatTargetDisplayLabel(
+      shoulderLight.baseLabel,
+      highlighted,
+    );
   }
 }
 
@@ -1714,12 +1749,22 @@ function applyTargetEscortHighlight(deviceId, active) {
   }
 
   const robot = robotManager.robots.get(targetId);
-  if (!robot?.entity) return;
+  if (robot?.entity) {
+    if (active) {
+      applyBillboardTargetHighlight(robot.entity, true);
+    } else if (selectedTargetDeviceId !== targetId) {
+      applyBillboardTargetHighlight(robot.entity, false);
+    }
+    return;
+  }
+
+  const shoulderLight = shoulderLightManager.shoulderLights.get(targetId);
+  if (!shoulderLight?.entity) return;
 
   if (active) {
-    applyBillboardTargetHighlight(robot.entity, true);
+    applyBillboardTargetHighlight(shoulderLight.entity, true);
   } else if (selectedTargetDeviceId !== targetId) {
-    applyBillboardTargetHighlight(robot.entity, false);
+    applyBillboardTargetHighlight(shoulderLight.entity, false);
   }
 }
 
@@ -1770,7 +1815,7 @@ function isBoatTarget(target) {
 }
 
 function getTargetTypeLabel(target) {
-  // 目标类型  1警车2警员3机器人4车辆(第三方推送的)
+  // 目标类型  1警车2警员3机器人4车辆(第三方推送的)6肩灯
   // isBoatTarget 临时需求，后期要删除
   if (isBoatTarget(target)) return "船";
   const type = resolveTargetType(target);
@@ -1778,6 +1823,7 @@ function getTargetTypeLabel(target) {
   if (type === 2) return "警员";
   if (type === 3) return "机器人";
   if (type === 4) return "车辆";
+  if (type === 6) return "肩灯";
   return "未知";
 }
 
@@ -2289,6 +2335,127 @@ const robotManager = {
   },
 };
 
+// 肩灯目标管理（type=6，billboard + 采样位置 + 轨迹）
+const shoulderLightManager = {
+  shoulderLights: new Map(),
+
+  createShoulderLight(viewer, deviceId, labelText = deviceId) {
+    if (this.shoulderLights.has(deviceId)) {
+      return this.shoulderLights.get(deviceId);
+    }
+
+    const positionProp = new Cesium.SampledPositionProperty();
+    positionProp.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+    positionProp.backwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
+    positionProp.setInterpolationOptions({
+      interpolationDegree: 1,
+      interpolationAlgorithm: Cesium.HermitePolynomialApproximation,
+    });
+
+    const defaultPathMaterial = new Cesium.PolylineGlowMaterialProperty({
+      glowPower: 0.2,
+      taperPower: 0.7,
+      color: SHOULDER_LIGHT_NORMAL_PATH_COLOR,
+    });
+
+    const entity = viewer.entities.add({
+      availability: new Cesium.TimeIntervalCollection([
+        new Cesium.TimeInterval({
+          start: viewer.clock.startTime,
+          stop: Cesium.JulianDate.fromIso8601("9999-12-31T23:59:59Z"),
+        }),
+      ]),
+      position: positionProp,
+      properties: {
+        deviceId,
+        deviceName: labelText || deviceId,
+        targetType: 6,
+      },
+      billboard: {
+        image: dbJdPng,
+        width: 34,
+        height: 34,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: labelText || deviceId,
+        font: "14px sans-serif",
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        pixelOffset: new Cesium.Cartesian2(0, -38),
+        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      path: {
+        show: routeLayerVisible,
+        width: 4,
+        material: defaultPathMaterial,
+        leadTime: 0,
+        trailTime: 999999,
+      },
+      viewFrom: getVehicleViewFrom(false),
+      show: targetLayerVisibility.shoulderLight,
+    });
+
+    this.shoulderLights.set(deviceId, {
+      entity,
+      positionProp,
+      lastPosition: null,
+      defaultPathMaterial,
+      baseLabel: labelText || deviceId,
+    });
+    return this.shoulderLights.get(deviceId);
+  },
+
+  updateShoulderLightPosition(deviceId, longitude, latitude, height = 0) {
+    const shoulderLight = this.shoulderLights.get(deviceId);
+    if (!shoulderLight) return;
+
+    const currentTime = mainViewer.clock.currentTime;
+    const newPosition = Cesium.Cartesian3.fromDegrees(
+      longitude,
+      latitude,
+      height,
+    );
+    shoulderLight.positionProp.addSample(currentTime, newPosition);
+    shoulderLight.lastPosition = { longitude, latitude, height };
+  },
+
+  updateShoulderLightLabel(deviceId, labelText) {
+    const shoulderLight = this.shoulderLights.get(deviceId);
+    if (!shoulderLight?.entity?.label) return;
+    shoulderLight.baseLabel = labelText || deviceId;
+    shoulderLight.entity.label.text = formatTargetDisplayLabel(
+      shoulderLight.baseLabel,
+      escortTargetHighlight.targetId === String(deviceId)
+        ? escortTargetHighlight.droneName
+        : "",
+    );
+    if (shoulderLight.entity.properties?.deviceName) {
+      shoulderLight.entity.properties.deviceName = labelText || deviceId;
+    }
+  },
+
+  removeShoulderLight(deviceId) {
+    const shoulderLight = this.shoulderLights.get(deviceId);
+    if (!shoulderLight) return;
+    mainViewer?.entities?.remove(shoulderLight.entity);
+    this.shoulderLights.delete(deviceId);
+  },
+
+  clearAll() {
+    this.shoulderLights.forEach((shoulderLight) => {
+      mainViewer?.entities?.remove(shoulderLight.entity);
+    });
+    this.shoulderLights.clear();
+  },
+};
+
 function horizontalDistanceMeters(lng1, lat1, lng2, lat2) {
   const c1 = Cesium.Cartesian3.fromDegrees(lng1, lat1, 0);
   const c2 = Cesium.Cartesian3.fromDegrees(lng2, lat2, 0);
@@ -2609,6 +2776,7 @@ const targetLayerVisibility = reactive({
   policeCar: true,
   officer: false,
   robot: false,
+  shoulderLight: false,
 });
 
 // refs
@@ -3309,6 +3477,9 @@ function resolveFollowTargetEntity(deviceId) {
   const robot = robotManager.robots.get(id);
   if (robot?.entity) return { entity: robot.entity, deviceId: id };
 
+  const shoulderLight = shoulderLightManager.shoulderLights.get(id);
+  if (shoulderLight?.entity) return { entity: shoulderLight.entity, deviceId: id };
+
   return null;
 }
 
@@ -3491,6 +3662,10 @@ function resolveManualFollowTarget() {
     if (resolved) return resolved;
   }
   for (const id of robotManager.robots.keys()) {
+    const resolved = resolveFollowTargetEntity(id);
+    if (resolved) return resolved;
+  }
+  for (const id of shoulderLightManager.shoulderLights.keys()) {
     const resolved = resolveFollowTargetEntity(id);
     if (resolved) return resolved;
   }
@@ -5151,6 +5326,9 @@ function applyImmersiveMapEntityVisibility() {
   robotManager.robots.forEach((robot, id) => {
     if (robot?.entity) robot.entity.show = String(id) === targetId;
   });
+  shoulderLightManager.shoulderLights.forEach((shoulderLight, id) => {
+    if (shoulderLight?.entity) shoulderLight.entity.show = String(id) === targetId;
+  });
   droneTestManager.drones.forEach((drone, id) => {
     if (drone?.entity) drone.entity.show = droneKeys.has(String(id));
   });
@@ -5191,6 +5369,9 @@ function restoreMapVisibilityAfterImmersive() {
   });
   robotManager.robots.forEach((robot) => {
     if (robot?.entity) robot.entity.show = targetLayerVisibility.robot;
+  });
+  shoulderLightManager.shoulderLights.forEach((shoulderLight) => {
+    if (shoulderLight?.entity) shoulderLight.entity.show = targetLayerVisibility.shoulderLight;
   });
   droneTestManager.drones.forEach((drone) => {
     if (drone?.entity) drone.entity.show = true;
@@ -5467,18 +5648,28 @@ const handleCarBoxMessage = (topic, data) => {
     if (targetType === 2) {
       vehicleManager.removeVehicle(mapDeviceId);
       robotManager.removeRobot(mapDeviceId);
+      shoulderLightManager.removeShoulderLight(mapDeviceId);
       officerManager.createOfficer(mainViewer, mapDeviceId, label);
       officerManager.updateOfficerLabel(mapDeviceId, label);
       officerManager.updateOfficerPosition(mapDeviceId, longitude, latitude, 0);
     } else if (targetType === 3) {
       vehicleManager.removeVehicle(mapDeviceId);
       officerManager.removeOfficer(mapDeviceId);
+      shoulderLightManager.removeShoulderLight(mapDeviceId);
       robotManager.createRobot(mainViewer, mapDeviceId, label);
       robotManager.updateRobotLabel(mapDeviceId, label);
       robotManager.updateRobotPosition(mapDeviceId, longitude, latitude, 0);
+    } else if (targetType === 6) {
+      vehicleManager.removeVehicle(mapDeviceId);
+      officerManager.removeOfficer(mapDeviceId);
+      robotManager.removeRobot(mapDeviceId);
+      shoulderLightManager.createShoulderLight(mainViewer, mapDeviceId, label);
+      shoulderLightManager.updateShoulderLightLabel(mapDeviceId, label);
+      shoulderLightManager.updateShoulderLightPosition(mapDeviceId, longitude, latitude, 0);
     } else {
       officerManager.removeOfficer(mapDeviceId);
       robotManager.removeRobot(mapDeviceId);
+      shoulderLightManager.removeShoulderLight(mapDeviceId);
       vehicleManager.createVehicle(mainViewer, mapDeviceId, label, {
         billboardImage: isBoatTarget(target) ? boatPng : "",
       });
@@ -5518,6 +5709,7 @@ function syncStoreDevicesToMap() {
     : [];
   const activeOfficerIds = new Set();
   const activeRobotIds = new Set();
+  const activeShoulderLightIds = new Set();
   targetList.forEach((target) => {
     if (!target?.id) return;
     const lng = Number(target.lng);
@@ -5530,6 +5722,7 @@ function syncStoreDevicesToMap() {
       activeOfficerIds.add(id);
       vehicleManager.removeVehicle(id);
       robotManager.removeRobot(id);
+      shoulderLightManager.removeShoulderLight(id);
       officerManager.createOfficer(mainViewer, id, label);
       officerManager.updateOfficerLabel(id, label);
       officerManager.updateOfficerPosition(id, lng, lat, 0);
@@ -5542,6 +5735,7 @@ function syncStoreDevicesToMap() {
       activeRobotIds.add(id);
       vehicleManager.removeVehicle(id);
       officerManager.removeOfficer(id);
+      shoulderLightManager.removeShoulderLight(id);
       robotManager.createRobot(mainViewer, id, label);
       robotManager.updateRobotLabel(id, label);
       robotManager.updateRobotPosition(id, lng, lat, 0);
@@ -5550,9 +5744,23 @@ function syncStoreDevicesToMap() {
       return;
     }
 
+    if (targetType === 6) {
+      activeShoulderLightIds.add(id);
+      vehicleManager.removeVehicle(id);
+      officerManager.removeOfficer(id);
+      robotManager.removeRobot(id);
+      shoulderLightManager.createShoulderLight(mainViewer, id, label);
+      shoulderLightManager.updateShoulderLightLabel(id, label);
+      shoulderLightManager.updateShoulderLightPosition(id, lng, lat, 0);
+      const shoulderLight = shoulderLightManager.shoulderLights.get(id);
+      if (shoulderLight?.entity) shoulderLight.entity.show = targetLayerVisibility.shoulderLight;
+      return;
+    }
+
     if (targetType === 1 || targetType === 4 || !Number.isFinite(targetType)) {
       officerManager.removeOfficer(id);
       robotManager.removeRobot(id);
+      shoulderLightManager.removeShoulderLight(id);
       vehicleManager.createVehicle(mainViewer, id, label, {
         billboardImage: isBoatTarget(target) ? boatPng : "",
       });
@@ -5572,6 +5780,12 @@ function syncStoreDevicesToMap() {
   Array.from(robotManager.robots.keys()).forEach((id) => {
     if (!activeRobotIds.has(id)) {
       robotManager.removeRobot(id);
+    }
+  });
+
+  Array.from(shoulderLightManager.shoulderLights.keys()).forEach((id) => {
+    if (!activeShoulderLightIds.has(id)) {
+      shoulderLightManager.removeShoulderLight(id);
     }
   });
 
@@ -6374,6 +6588,9 @@ const toggleLayerVisibility = async ({ key, active }) => {
       robotManager.robots.forEach((robot) => {
         if (robot.entity?.path) robot.entity.path.show = active;
       });
+      shoulderLightManager.shoulderLights.forEach((shoulderLight) => {
+        if (shoulderLight.entity?.path) shoulderLight.entity.path.show = active;
+      });
       droneTestManager.drones.forEach((drone) => {
         if (drone.entity?.path) drone.entity.path.show = active;
       });
@@ -6390,6 +6607,12 @@ const toggleLayerVisibility = async ({ key, active }) => {
       targetLayerVisibility.robot = active;
       robotManager.robots.forEach((robot) => {
         if (robot.entity) robot.entity.show = active;
+      });
+      break;
+    case "shoulderLight":
+      targetLayerVisibility.shoulderLight = active;
+      shoulderLightManager.shoulderLights.forEach((shoulderLight) => {
+        if (shoulderLight.entity) shoulderLight.entity.show = active;
       });
       break;
   }
@@ -6547,6 +6770,7 @@ onUnmounted(() => {
   }
   officerManager.clearAll();
   robotManager.clearAll();
+  shoulderLightManager.clearAll();
   clearLockdownMarkers();
   closePoliceVehiclePopup();
   selectedTargetDeviceId = null;
