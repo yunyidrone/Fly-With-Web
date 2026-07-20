@@ -1,0 +1,277 @@
+<template>
+  <el-container class="admin-layout backend-admin-root">
+    <el-aside :width="asideWidth" class="admin-layout__aside">
+      <div class="admin-layout__logo">
+        <img class="admin-layout__logo-icon" :src="logoImage" alt="伴飞后台管理 logo" />
+        <span v-if="!appStore.sidebarCollapsed" class="admin-layout__logo-text">
+          {{ appTitle }}
+        </span>
+      </div>
+
+      <el-scrollbar class="admin-layout__menu-scroll">
+        <el-menu
+          :default-active="activeMenu"
+          :default-openeds="defaultOpeneds"
+          :collapse="appStore.sidebarCollapsed"
+          :collapse-transition="false"
+          background-color="#001529"
+          text-color="rgba(255,255,255,0.75)"
+          active-text-color="#fff"
+          router
+        >
+          <template v-for="entry in visibleMenuTree" :key="entry.key || entry.route?.path">
+            <el-sub-menu v-if="entry.type === 'group'" :index="entry.key">
+              <template #title>
+                <el-icon><component :is="entry.icon" /></el-icon>
+                <span>{{ entry.title }}</span>
+              </template>
+              <el-menu-item
+                v-for="child in entry.children"
+                :key="child.route.path"
+                :index="resolveMenuIndex(child.route)"
+              >
+                {{ child.route.meta.title }}
+              </el-menu-item>
+            </el-sub-menu>
+
+            <el-menu-item
+              v-else
+              :index="resolveMenuIndex(entry.route)"
+            >
+              <el-icon v-if="entry.icon"><component :is="entry.icon" /></el-icon>
+              <template #title>{{ entry.title || entry.route.meta.title }}</template>
+            </el-menu-item>
+          </template>
+        </el-menu>
+      </el-scrollbar>
+    </el-aside>
+
+    <el-container class="admin-layout__main-wrap">
+      <el-header class="admin-layout__header">
+        <div class="admin-layout__header-left">
+          <el-button link @click="appStore.toggleSidebar()">
+            <el-icon :size="20">
+              <Fold v-if="!appStore.sidebarCollapsed" />
+              <Expand v-else />
+            </el-icon>
+          </el-button>
+          <el-breadcrumb separator="/">
+            <el-breadcrumb-item>{{ appTitle }}</el-breadcrumb-item>
+            <el-breadcrumb-item v-if="currentTitle">{{ currentTitle }}</el-breadcrumb-item>
+          </el-breadcrumb>
+        </div>
+
+        <div class="admin-layout__header-right">
+          <el-dropdown trigger="click" @command="handleCommand">
+            <span class="admin-layout__user">
+              <el-avatar :size="28">{{ avatarText }}</el-avatar>
+              <span class="admin-layout__username">{{ authStore.displayName }}</span>
+              <el-icon><ArrowDown /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="profile">个人中心</el-dropdown-item>
+                <el-dropdown-item command="frontend">伴飞调度</el-dropdown-item>
+                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+      </el-header>
+
+      <el-main class="admin-layout__content">
+        <router-view v-slot="{ Component }">
+          <transition name="fade-transform" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
+      </el-main>
+    </el-container>
+  </el-container>
+</template>
+
+<script setup>
+import { computed } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { Fold, Expand, ArrowDown } from "@element-plus/icons-vue";
+import { useAppStore } from "@backend/stores/app.js";
+import { useAuthStore } from "@backend/stores/auth.js";
+import { BACKEND_BASE, getMenuTree, MONITOR_BASE, INFRA_BASE } from "@backend/router/routes.js";
+import { canAccessMenuRoute } from "@backend/utils/permission.js";
+import { appConfig } from "@backend/config/network.js";
+import { ROLES } from "@backend/config/constants.js";
+import logoImage from "@/assets/images/logo.png";
+
+const route = useRoute();
+const router = useRouter();
+const appStore = useAppStore();
+const authStore = useAuthStore();
+
+const appTitle = appConfig.title;
+const demoUser = { orgIsGrassroots: false };
+
+const asideWidth = computed(() =>
+  appStore.sidebarCollapsed ? "64px" : "220px",
+);
+
+const visibleMenuTree = computed(() =>
+  getMenuTree(
+    appConfig.skipAuth ? ROLES.SUPER_ADMIN : authStore.role,
+    appConfig.skipAuth ? demoUser : authStore.user,
+    (item, role, user) =>
+      canAccessMenuRoute(
+        item,
+        role,
+        user,
+      ),
+  ),
+);
+
+const defaultOpeneds = computed(() => {
+  if (route.path.startsWith(MONITOR_BASE)) return ["monitor"];
+  if (route.path.startsWith(INFRA_BASE)) return ["infra"];
+  return [];
+});
+
+const activeMenu = computed(
+  () => route.meta?.activeMenu || route.path,
+);
+
+const currentTitle = computed(() => route.meta?.title || "");
+
+const avatarText = computed(() =>
+  (authStore.displayName || "U").slice(0, 1).toUpperCase(),
+);
+
+function resolveMenuIndex(item) {
+  const p = String(item.path || "");
+  return p.startsWith("/") ? p : `${BACKEND_BASE}/${p}`;
+}
+
+async function handleCommand(command) {
+  if (command === "profile") {
+    router.push(`${BACKEND_BASE}/account`);
+    return;
+  }
+  if (command === "frontend") {
+    router.push("/");
+    return;
+  }
+  if (command === "logout") {
+    await authStore.logout();
+    router.push("/login");
+  }
+}
+</script>
+
+<style scoped lang="scss">
+.admin-layout {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.admin-layout__aside {
+  display: flex;
+  flex-direction: column;
+  background: $sidebar-bg;
+  transition: width 0.2s;
+  overflow: hidden;
+}
+
+.admin-layout__logo {
+  height: $header-height;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  background: $primary-color;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 5px 20px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.admin-layout__logo-text {
+  letter-spacing: 0.5px;
+}
+
+.admin-layout__logo-icon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.admin-layout__menu-scroll {
+  padding: 30px 0;
+  flex: 1;
+}
+
+.admin-layout__aside :deep(.el-menu) {
+  border-right: none;
+}
+
+.admin-layout__aside :deep(.el-menu-item.is-active) {
+  background-color: $sidebar-active-bg !important;
+}
+
+.admin-layout__main-wrap {
+  min-width: 0;
+}
+
+.admin-layout__header {
+  height: $header-height;
+  background: #fff;
+  border-bottom: 1px solid #ebeef5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+}
+
+.admin-layout__header-left,
+.admin-layout__header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-layout__user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: #606266;
+}
+
+.admin-layout__username {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-layout__content {
+  background: $page-bg;
+  padding: $content-padding;
+  overflow: auto;
+}
+
+.fade-transform-enter-active,
+.fade-transform-leave-active {
+  transition: all 0.2s ease;
+}
+
+.fade-transform-enter-from {
+  opacity: 0;
+  transform: translateX(12px);
+}
+
+.fade-transform-leave-to {
+  opacity: 0;
+  transform: translateX(-12px);
+}
+</style>

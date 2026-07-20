@@ -25,9 +25,12 @@ export default defineConfig(({ mode, command }) => {
       cesium(),
       AutoImport({
         resolvers: [ElementPlusResolver()],
+        imports: ["vue", "vue-router", "pinia"],
+        dts: false,
       }),
       Components({
         resolvers: [ElementPlusResolver()],
+        dts: false,
       }),
     ],
     define: {
@@ -37,8 +40,21 @@ export default defineConfig(({ mode, command }) => {
     resolve: {
       alias: {
         "@": resolve(__dirname, "./src"),
+        "@backend": resolve(__dirname, "./src/backend-admin"),
         "@zip.js/zip.js/lib/zip-no-worker.js": resolve(__dirname, "node_modules/@zip.js/zip.js/dist/zip.js"),
         "@zip.js/zip.js": resolve(__dirname, "node_modules/@zip.js/zip.js"),
+      },
+    },
+    css: {
+      preprocessorOptions: {
+        scss: {
+          additionalData: (source, filename) => {
+            if (filename.includes("/src/backend-admin/") || filename.includes("\\src\\backend-admin\\")) {
+              return `@use "@backend/styles/variables.scss" as *;\n${source}`;
+            }
+            return source;
+          },
+        },
       },
     },
     optimizeDeps: {

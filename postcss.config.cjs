@@ -5,6 +5,7 @@ module.exports = {
       propList: ['*'],
       minPixelValue: 2,
       exclude: /node_modules/i,
+      selectorBlackList: ['login-v2'],
     },
   },
 };

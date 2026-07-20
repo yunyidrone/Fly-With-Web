@@ -23,10 +23,9 @@
         <div class="user-avatar-slot" aria-hidden="true">
           <img class="user-avatar-img" src="../assets/images/account.png" alt="" />
         </div>
-        <div class="datetime-block">
-          <div class="datetime-block__time">{{ timeStr }}</div>
-          <div class="datetime-block__date">{{ dateStr }}</div>
-        </div>
+        <!-- <button type="button" class="backend-btn" title="进入后台管理" @click="handleEnterBackend">
+          <span>后台管理</span>
+        </button> -->
         <!-- 设置 -->
         <!-- <button
           type="button"
@@ -48,39 +47,20 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref } from "vue";
+import { useRouter } from "vue-router";
 import SettingsDrawer from "@/components/SettingsDrawer.vue";
 
 const settingsVisible = ref(false);
+const router = useRouter();
 
-const timeStr = ref("");
-const dateStr = ref("");
-let timer = null;
-
-const tick = () => {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  const h = String(now.getHours()).padStart(2, "0");
-  const min = String(now.getMinutes()).padStart(2, "0");
-  const s = String(now.getSeconds()).padStart(2, "0");
-  timeStr.value = `${h}:${min}:${s}`;
-  dateStr.value = `${y}-${m}-${d}`;
-};
+function handleEnterBackend() {
+  router.push("/backend");
+}
 
 function handleReload() {
   window.location.reload();
 }
-
-onMounted(() => {
-  tick();
-  timer = setInterval(tick, 1000);
-});
-
-onUnmounted(() => {
-  if (timer) clearInterval(timer);
-});
 </script>
 
 <style lang="scss" scoped>
@@ -187,6 +167,35 @@ onUnmounted(() => {
   }
 }
 
+.backend-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  font-family: "Alibaba PuHuiTi", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+
+  &:hover {
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.75);
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  i {
+    font-size: 16px;
+  }
+}
+
 /* 右侧用户图占位 56×56 */
 .user-avatar-slot {
   width: 56px;
@@ -207,32 +216,4 @@ onUnmounted(() => {
   display: block;
 }
 
-.datetime-block {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 4px;
-  font-variant-numeric: tabular-nums;
-}
-
-.datetime-block__time {
-  font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
-  font-size: 20px;
-  font-style: normal;
-  font-weight: 400;
-  line-height: normal;
-  color: #ffffff;
-  text-align: left;
-}
-
-.datetime-block__date {
-  font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
-  font-size: 20px;
-  font-style: normal;
-  font-weight: 400;
-  line-height: normal;
-  color: #ffffff;
-  text-align: left;
-}
 </style>

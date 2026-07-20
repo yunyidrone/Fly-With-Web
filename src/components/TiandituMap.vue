@@ -328,7 +328,7 @@ import dtJyPng from "@/assets/images/dt_jy.png";
 import dbWrjPng from "@/assets/images/db_wrj.png";
 import dbJyPng from "@/assets/images/db_jy.png";
 import dbJcPng from "@/assets/images/db_jc.png";
-import dbJdPng from "@/assets/images/db_jd.png";
+import dtJdPng from "@/assets/images/dt_jd.png";
 import boatPng from "@/assets/images/boat.png";
 import dtJqrPng from "@/assets/images/dt_jqr.png";
 import sosSvg from "@/assets/images/sos.svg";
@@ -777,7 +777,7 @@ function getTargetPopupItem(deviceId) {
       : type === 3
         ? dtJqrPng
         : type === 6
-          ? dbJdPng
+          ? dtJdPng
           : dbJcPng;
   return {
     key: `target:${id}`,
@@ -1367,10 +1367,39 @@ const OFFICER_NORMAL_PATH_COLOR =
 const ROBOT_NORMAL_PATH_COLOR =
   Cesium.Color.fromCssColorString("#88ddff");
 const SHOULDER_LIGHT_NORMAL_PATH_COLOR =
-  Cesium.Color.fromCssColorString("#ffdd66");
-const VEHICLE_LABEL_COLOR = Cesium.Color.fromCssColorString("#4564c9");
+  Cesium.Color.fromCssColorString("#72d2ff");
+const VEHICLE_LABEL_COLOR = Cesium.Color.fromCssColorString("#289EFF");
 const DRONE_LABEL_COLOR = Cesium.Color.fromCssColorString("#0EF2F2");
 const DRONE_LABEL_COLOR_ESCORTING = Cesium.Color.fromCssColorString("#52C41A");
+
+/** 地图 pin 类图标原始尺寸（保持宽高比，避免被压扁） */
+const SHOULDER_LIGHT_ICON_SIZE = { width: 98, height: 125 };
+const PIN_BILLBOARD_BASE_WIDTH = 52;
+const PIN_BILLBOARD_HIGHLIGHT_WIDTH = 56;
+
+function getPinBillboardSize(nativeWidth, nativeHeight, displayWidth) {
+  return {
+    width: displayWidth,
+    height: Math.round(displayWidth * (nativeHeight / nativeWidth)),
+  };
+}
+
+function getShoulderLightBillboardSize(selected = false) {
+  return getPinBillboardSize(
+    SHOULDER_LIGHT_ICON_SIZE.width,
+    SHOULDER_LIGHT_ICON_SIZE.height,
+    selected ? PIN_BILLBOARD_HIGHLIGHT_WIDTH : PIN_BILLBOARD_BASE_WIDTH,
+  );
+}
+
+function resolveEntityTargetType(entity) {
+  const targetType = entity?.properties?.targetType;
+  if (!targetType) return undefined;
+  if (typeof targetType.getValue === "function") {
+    return targetType.getValue(mainViewer?.clock?.currentTime);
+  }
+  return targetType;
+}
 
 const escortTargetHighlight = reactive({
   targetId: null,
@@ -1386,22 +1415,33 @@ const DRONE_SELECTION_CIRCLE_COLOR = Cesium.Color.fromCssColorString("#FFC300");
 
 function applyBillboardTargetHighlight(entity, selected) {
   if (!entity?.billboard || !entity?.label) return;
+
+  const isShoulderLight = resolveEntityTargetType(entity) === 6;
+  const pinSize = isShoulderLight ? getShoulderLightBillboardSize(selected) : null;
+  const billboardWidth = pinSize?.width ?? (selected ? 46 : 34);
+  const billboardHeight = pinSize?.height ?? (selected ? 46 : 34);
+  const labelOffsetY = pinSize
+    ? -(billboardHeight + (selected ? 6 : 4))
+    : selected
+      ? -46
+      : -38;
+
   if (selected) {
-    entity.billboard.width = 46;
-    entity.billboard.height = 46;
+    entity.billboard.width = billboardWidth;
+    entity.billboard.height = billboardHeight;
     entity.label.fillColor = VEHICLE_HIGHLIGHT_COLOR;
     entity.label.outlineColor = Cesium.Color.BLACK;
     entity.label.outlineWidth = 3;
     entity.label.font = "bold 15px Microsoft YaHei, sans-serif";
-    entity.label.pixelOffset = new Cesium.Cartesian2(0, -46);
+    entity.label.pixelOffset = new Cesium.Cartesian2(0, labelOffsetY);
   } else {
-    entity.billboard.width = 34;
-    entity.billboard.height = 34;
-    entity.label.fillColor = Cesium.Color.WHITE;
+    entity.billboard.width = billboardWidth;
+    entity.billboard.height = billboardHeight;
+    entity.label.fillColor = isShoulderLight ? VEHICLE_LABEL_COLOR : Cesium.Color.WHITE;
     entity.label.outlineColor = Cesium.Color.BLACK;
     entity.label.outlineWidth = 2;
     entity.label.font = "14px sans-serif";
-    entity.label.pixelOffset = new Cesium.Cartesian2(0, -38);
+    entity.label.pixelOffset = new Cesium.Cartesian2(0, labelOffsetY);
   }
 }
 
@@ -2358,6 +2398,8 @@ const shoulderLightManager = {
       color: SHOULDER_LIGHT_NORMAL_PATH_COLOR,
     });
 
+    const shoulderLightBillboardSize = getShoulderLightBillboardSize(false);
+
     const entity = viewer.entities.add({
       availability: new Cesium.TimeIntervalCollection([
         new Cesium.TimeInterval({
@@ -2372,9 +2414,9 @@ const shoulderLightManager = {
         targetType: 6,
       },
       billboard: {
-        image: dbJdPng,
-        width: 34,
-        height: 34,
+        image: dtJdPng,
+        width: shoulderLightBillboardSize.width,
+        height: shoulderLightBillboardSize.height,
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
         heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
@@ -2382,12 +2424,15 @@ const shoulderLightManager = {
       label: {
         text: labelText || deviceId,
         font: "14px sans-serif",
-        fillColor: Cesium.Color.WHITE,
+        fillColor: VEHICLE_LABEL_COLOR,
         outlineColor: Cesium.Color.BLACK,
         outlineWidth: 2,
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-        pixelOffset: new Cesium.Cartesian2(0, -38),
+        pixelOffset: new Cesium.Cartesian2(
+          0,
+          -(shoulderLightBillboardSize.height + 4),
+        ),
         heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
@@ -3186,10 +3231,10 @@ const initViewer = () => {
 
   mainViewer.scene.logarithmicDepthBuffer = true;
 
-  // 修复标注图标锯齿问题
-  // if (mainViewer.scene.postProcessStages) {
-  //   mainViewer.scene.postProcessStages.fxaa.enabled = false;
-  // }
+  // 修复标注图标锯齿问题：开启 FXAA，改善 pin 类 billboard 缩放边缘
+  if (mainViewer.scene.postProcessStages?.fxaa) {
+    mainViewer.scene.postProcessStages.fxaa.enabled = true;
+  }
 
   // 关闭大气/雾效，避免整体偏色（发紫/发蓝）。
   mainViewer.scene.skyAtmosphere.show = false;

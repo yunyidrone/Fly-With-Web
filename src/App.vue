@@ -28,7 +28,7 @@ import { useMqtt } from "@/composables/useMqtt.js";
 <template>
   <router-view v-slot="{ Component, route }">
     <transition :name="route.meta.transition || 'fade'" mode="out-in" appear>
-      <component :is="Component" :key="route.path" />
+      <component :is="Component" :key="route.matched?.[0]?.path || route.path" />
     </transition>
   </router-view>
 </template>

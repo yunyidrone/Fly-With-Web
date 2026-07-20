@@ -141,20 +141,43 @@ async function submit() {
   try {
     await authStore.login(form);
     persistRememberAccount();
-    const redirect = route.query.redirect || "/dashboard";
+    const redirect = route.query.redirect || "/";
     router.replace(String(redirect));
   } finally {
     loading.value = false;
   }
 }
 
+const MOBILE_LOGIN_ROOT_FONT = "16px";
+
+function applyPageScrollLock() {
+  const isMobile = window.matchMedia("(max-width: 768px)").matches;
+  const overflow = isMobile ? "auto" : "hidden";
+  document.documentElement.style.overflow = overflow;
+  document.body.style.overflow = overflow;
+}
+
+function applyLoginMobileLayout() {
+  const isMobile = window.matchMedia("(max-width: 768px)").matches;
+  if (isMobile) {
+    document.documentElement.style.fontSize = MOBILE_LOGIN_ROOT_FONT;
+    return;
+  }
+  document.documentElement.style.fontSize = "";
+  window.dispatchEvent(new Event("resize"));
+}
+
 onMounted(() => {
-  document.documentElement.style.overflow = "hidden";
-  document.body.style.overflow = "hidden";
+  applyLoginMobileLayout();
+  applyPageScrollLock();
+  window.addEventListener("resize", applyLoginMobileLayout);
   loadRememberedAccount();
 });
 
 onUnmounted(() => {
+  window.removeEventListener("resize", applyLoginMobileLayout);
+  document.documentElement.style.fontSize = "";
+  window.dispatchEvent(new Event("resize"));
   document.documentElement.style.overflow = "";
   document.body.style.overflow = "";
 });
@@ -515,8 +538,9 @@ $primary-color-light: #6b79ff;
 .login-v2__submit {
   width: 100%;
   height: var(--login-btn-height);
-  border: none;
-  border-radius: var(--login-radius);
+  border: 1px solid #fff;
+  border-radius: 6px;
+  background: #3047ff;
   overflow: hidden;
   color: #fff;
   text-overflow: ellipsis;
@@ -525,6 +549,23 @@ $primary-color-light: #6b79ff;
   font-style: normal;
   font-weight: 500;
   letter-spacing: var(--login-btn-letter);
+  --el-button-bg-color: #3047ff;
+  --el-button-border-color: #fff;
+  --el-button-text-color: #fff;
+  --el-button-hover-bg-color: #3047ff;
+  --el-button-hover-border-color: #fff;
+  --el-button-hover-text-color: #fff;
+  --el-button-active-bg-color: #3047ff;
+  --el-button-active-border-color: #fff;
+  --el-button-active-text-color: #fff;
+}
+
+.login-v2__submit:hover,
+.login-v2__submit:focus,
+.login-v2__submit:active {
+  background: #3047ff;
+  border-color: #fff;
+  color: #fff;
 }
 
 .login-v2__hint {
@@ -532,5 +573,148 @@ $primary-color-light: #6b79ff;
   color: rgba(255, 255, 255, 0.45);
   font-size: var(--login-hint-size);
   line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .login-v2 {
+    --login-panel-width: 100%;
+    --login-pad-x: 40px;
+    --login-space-title-gap: 36px;
+    --login-title-size: 36px;
+    --login-subtitle-size: 14px;
+    --login-subtitle-gap: 14px;
+    --login-label-size: 18px;
+    --login-field-gap: 32px;
+    --login-label-gap: 16px;
+    --login-input-height: 56px;
+    --login-remember-size: 17px;
+    --login-remember-gap: 12px;
+    --login-remember-box: 22px;
+    --login-remember-margin-top: 28px;
+    --login-remember-margin-bottom: 36px;
+    --login-btn-height: 56px;
+    --login-btn-size: 20px;
+    --login-btn-letter: 2px;
+    --login-radius: 10px;
+    --login-hint-size: 15px;
+    --login-hint-gap: 20px;
+
+    font-size: 16px;
+    position: relative;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .login-v2__bg {
+    position: fixed;
+    background-size: cover;
+    background-position: center;
+  }
+
+  .login-v2__panel {
+    position: relative;
+    width: 100%;
+    min-height: 100dvh;
+    background: linear-gradient(
+      180deg,
+      rgba(2, 8, 20, 0.55) 0%,
+      rgba(2, 8, 20, 0.88) 45%,
+      rgba(2, 8, 20, 0.95) 100%
+    );
+  }
+
+  .login-v2__content {
+    min-height: 100dvh;
+    padding: max(48px, env(safe-area-inset-top)) var(--login-pad-x)
+      max(56px, env(safe-area-inset-bottom));
+    justify-content: center;
+    overflow: visible;
+  }
+
+  .login-v2__form-wrap {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .login-v2__top-spacer,
+  .login-v2__bottom-spacer {
+    flex: 0 0 0;
+    display: none;
+  }
+
+  .login-v2__title {
+    letter-spacing: 0.02em;
+    word-break: break-word;
+  }
+
+  .login-v2__subtitle {
+    letter-spacing: 0.06em;
+    line-height: 1.5;
+    word-break: break-word;
+  }
+
+  .login-v2__form-item :deep(.el-form-item__error) {
+    padding-top: 8px;
+    font-size: 14px;
+  }
+
+  .login-v2__input :deep(.el-input__wrapper) {
+    width: 100%;
+    padding: 0 18px 0 22px !important;
+  }
+
+  .login-v2__input :deep(.el-input__prefix) {
+    margin: 0 18px 0 0;
+  }
+
+  .login-v2__input :deep(.el-input__inner),
+  .login-v2__input :deep(input) {
+    font-size: 18px;
+    line-height: var(--login-input-height);
+  }
+
+  .login-v2__input :deep(.el-input__inner::placeholder) {
+    font-size: 18px;
+  }
+
+  .login-v2__input-icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .login-v2__submit {
+    height: var(--login-btn-height) !important;
+    min-height: var(--login-btn-height);
+    font-size: var(--login-btn-size) !important;
+    line-height: 1;
+    border: 1px solid #fff !important;
+    border-radius: 6px !important;
+    background: #3047ff !important;
+  }
+
+  .login-v2__submit :deep(span) {
+    font-size: 20px;
+  }
+
+  .login-v2__remember-input:checked + .login-v2__remember-box::after {
+    width: 4px;
+    height: 7px;
+    border-width: 0 2px 2px 0;
+  }
+
+  .login-v2__hint {
+    text-align: center;
+    word-break: break-word;
+  }
+}
+
+@media (max-width: 375px) {
+  .login-v2 {
+    --login-pad-x: 36px;
+    --login-title-size: 32px;
+    --login-subtitle-size: 13px;
+  }
 }
 </style>

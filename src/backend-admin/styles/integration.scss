@@ -1,0 +1,72 @@
+@use "./variables.scss" as *;
+
+.backend-admin-root {
+  --el-color-primary: #29408a;
+  --el-color-primary-rgb: 41, 64, 138;
+  --el-color-primary-light-3: #6779b1;
+  --el-color-primary-light-5: #94a0c5;
+  --el-color-primary-light-7: #bfc6da;
+  --el-color-primary-light-8: #d4d9e7;
+  --el-color-primary-light-9: #eaecf3;
+  --el-color-primary-dark-2: #21346e;
+  font-family: "PingFang SC", "PingFang SC", sans-serif;
+  color: #303133;
+  --el-text-color-primary: #303133;
+  --el-text-color-regular: #606266;
+  --el-text-color-secondary: #909399;
+  --el-radio-text-color: #606266;
+  -webkit-font-smoothing: antialiased;
+}
+
+.backend-admin-root,
+.backend-admin-root *::before,
+.backend-admin-root *::after {
+  box-sizing: border-box;
+}
+
+.backend-admin-root :not(i):not(.el-icon) {
+  font-family: "PingFang SC", "PingFang SC", sans-serif;
+}
+
+.backend-admin-root .el-radio__label,
+.backend-admin-root .el-checkbox__label,
+.backend-admin-root .el-form-item__label {
+  color: #606266;
+}
+
+.backend-admin-root .el-radio.is-checked .el-radio__label {
+  color: var(--el-color-primary);
+}
+
+.backend-admin-root a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.backend-admin-root .page-card {
+  background: #fff;
+  border-radius: 4px;
+  padding: $content-padding;
+}
+
+.backend-admin-root .page-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.backend-admin-root .page-toolbar__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.backend-admin-root .page-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
