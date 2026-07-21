@@ -63,7 +63,7 @@
           :current-page="query.current"
           :page-size="query.pageSize"
           :total="total"
-          :page-sizes="[5, 10, 20, 50]"
+          :page-sizes="[10, 20, 50, 100]"
           layout="total, sizes, prev, pager, next, jumper"
           background
           @current-change="onPageChange"
@@ -88,7 +88,7 @@ const DEMO_LOCATIONS = [
 const loading = ref(false);
 const records = ref([]);
 const total = ref(0);
-const query = reactive({ current: 1, pageSize: 5 });
+const query = reactive({ current: 1, pageSize: 10 });
 
 async function load() {
   loading.value = true;
@@ -133,7 +133,7 @@ onMounted(load);
 </script>
 
 <style scoped lang="scss">
-@import "./infra-page.scss";
+@use "./infra-page.scss";
 
 .text-primary {
   color: var(--el-color-primary);

@@ -1,5 +1,4 @@
 import { defineStore } from "pinia";
-import { login as loginApi, logout as logoutApi, fetchMe } from "@/api/auth.js";
 import { setToken, clearToken, getToken } from "@/utils/auth-token.js";
 import { ROLES } from "@/config/constants.js";
 import { isSuperAdmin } from "@/utils/permission.js";
@@ -28,28 +27,30 @@ export const useAuthStore = defineStore("auth", {
 
   actions: {
     async login(form) {
-      const data = await loginApi(form);
-      this.token = data.token;
-      this.user = data.user;
-      setToken(data.token);
-      if (!isSuperAdmin(data.user?.role)) {
-        this.currentOrgId = data.user.orgId;
-      } else {
-        this.currentOrgId = "all";
-      }
+      const username = String(form?.username ?? "").trim();
+      const token = `local-${username || "user"}-${Date.now()}`;
+      const user = {
+        username,
+        displayName: username,
+        role: ROLES.SUPER_ADMIN,
+      };
+      this.token = token;
+      this.user = user;
+      setToken(token);
+      this.currentOrgId = "all";
     },
 
     async fetchProfile() {
       if (!this.token) return;
-      this.user = await fetchMe();
+      if (this.user) return;
+      this.user = {
+        username: "用户",
+        displayName: "用户",
+        role: ROLES.SUPER_ADMIN,
+      };
     },
 
     async logout() {
-      try {
-        await logoutApi();
-      } catch {
-        // 登出接口失败也清理本地态
-      }
       this.resetAuth();
     },
 

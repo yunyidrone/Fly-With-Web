@@ -70,3 +70,49 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* Select 下拉选中项主题色（popper 挂到 body，用 :has 限定后台） */
+body:has(.backend-admin-root) .el-select-dropdown {
+  --el-color-primary: #{$primary-color};
+}
+
+body:has(.backend-admin-root) .el-select-dropdown__item.is-selected,
+body:has(.backend-admin-root) .el-select-dropdown__item.selected {
+  color: $primary-color !important;
+  font-weight: 600;
+}
+
+body:has(.backend-admin-root) .el-select-dropdown__item.is-selected .el-icon,
+body:has(.backend-admin-root) .el-select-dropdown__item.selected .el-icon {
+  color: $primary-color !important;
+}
+
+.backend-admin-root .el-select .el-select__selected-item {
+  color: $primary-color;
+}
+
+.backend-admin-root .el-select .el-select__placeholder.is-transparent {
+  color: $primary-color;
+}
+
+/* 头部账号下拉（个人中心 / 伴飞调度） */
+body:has(.backend-admin-root) .backend-admin-header-dropdown.el-popper {
+  --el-color-primary: #{$primary-color};
+}
+
+body:has(.backend-admin-root) .backend-admin-header-dropdown .el-dropdown-menu__item {
+  color: #606266;
+  font-weight: 400;
+}
+
+body:has(.backend-admin-root) .backend-admin-header-dropdown .el-dropdown-menu__item:not(.el-dropdown-menu__item--logout):not(.is-disabled):hover,
+body:has(.backend-admin-root) .backend-admin-header-dropdown .el-dropdown-menu__item:not(.el-dropdown-menu__item--logout):not(.is-disabled):focus {
+  color: $primary-color !important;
+  background-color: var(--el-color-primary-light-9);
+}
+
+body:has(.backend-admin-root) .backend-admin-header-dropdown .el-dropdown-menu__item--logout:not(.is-disabled):hover,
+body:has(.backend-admin-root) .backend-admin-header-dropdown .el-dropdown-menu__item--logout:not(.is-disabled):focus {
+  color: #f56c6c !important;
+  background-color: #fef0f0;
+}

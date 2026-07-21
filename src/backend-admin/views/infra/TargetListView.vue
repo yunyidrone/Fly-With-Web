@@ -36,6 +36,42 @@
     </div>
 
     <div class="infra-page__section infra-page__section--content">
+      <div class="infra-page__filters">
+        <el-select
+          v-model="query.type"
+          class="infra-page__filter-item infra-page__filter-item--type"
+          placeholder="全部类型"
+          clearable
+          @change="search"
+          @clear="search"
+        >
+          <el-option
+            v-for="item in targetTypeOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
+        <el-input
+          v-model="query.name"
+          class="infra-page__filter-item infra-page__filter-item--name"
+          placeholder="目标设备名称"
+          clearable
+          @keyup.enter="search"
+          @clear="search"
+        />
+        <el-input
+          v-model="query.sn"
+          class="infra-page__filter-item infra-page__filter-item--sn"
+          placeholder="SN号"
+          clearable
+          @keyup.enter="search"
+          @clear="search"
+        />
+        <el-button type="primary" @click="search">查询</el-button>
+        <el-button @click="resetFilters">重置</el-button>
+      </div>
+
       <el-table v-loading="loading" :data="records" stripe>
         <el-table-column prop="id" label="设备ID" min-width="120" show-overflow-tooltip />
         <el-table-column prop="name" label="目标设备名称" min-width="160" show-overflow-tooltip>
@@ -81,7 +117,7 @@
           :current-page="query.current"
           :page-size="query.pageSize"
           :total="total"
-          :page-sizes="[5, 10, 20, 50]"
+          :page-sizes="[10, 20, 50, 100]"
           layout="total, sizes, prev, pager, next, jumper"
           background
           @current-change="onPageChange"
@@ -94,25 +130,26 @@
 
 <script setup>
 import { onMounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { deleteTarget, fetchTargetPage } from "@backend/api/target.js";
 import { fetchOrgTree } from "@backend/api/org.js";
 import { useTableQuery } from "@backend/composables/useTableQuery.js";
+import { TARGET_TYPE_OPTIONS } from "@backend/config/constants.js";
 import { INFRA_BASE } from "@backend/router/routes.js";
 import { useAuthStore } from "@backend/stores/auth.js";
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
+const targetTypeOptions = TARGET_TYPE_OPTIONS;
 
 const orgOptions = ref([]);
 const selectedOrgId = ref(null);
 
-const { loading, records, total, query, load, onPageChange, onSizeChange } = useTableQuery(
-  fetchTargetPage,
-  { pageSize: 5, orgId: "" },
-);
+const { loading, records, total, query, load, search, reset, onPageChange, onSizeChange } =
+  useTableQuery(fetchTargetPage, { pageSize: 10, orgId: "", name: "", sn: "", type: "" });
 
 function flattenOrgTree(nodes, result = []) {
   for (const node of nodes || []) {
@@ -151,14 +188,39 @@ function syncOrgQuery() {
   query.orgId = selectedOrgId.value != null ? selectedOrgId.value : "";
 }
 
+function applyRouteQuery() {
+  const typeRaw = route.query.type;
+  if (typeRaw != null && typeRaw !== "") {
+    const typeNum = Number(typeRaw);
+    query.type = Number.isFinite(typeNum) && typeNum > 0 ? typeNum : "";
+  }
+
+  const orgIdRaw = route.query.orgId;
+  if (orgIdRaw != null && orgIdRaw !== "") {
+    selectedOrgId.value = orgIdRaw;
+    if (authStore.isSuperAdmin) {
+      authStore.setCurrentOrgId(orgIdRaw);
+    }
+  }
+}
+
 function handleOrgChange(orgId) {
   selectedOrgId.value = orgId;
   if (authStore.isSuperAdmin) {
     authStore.setCurrentOrgId(orgId);
   }
   syncOrgQuery();
-  query.current = 1;
-  load();
+  search();
+}
+
+function resetFilters() {
+  reset({
+    pageSize: query.pageSize,
+    orgId: query.orgId,
+    name: "",
+    sn: "",
+    type: "",
+  });
 }
 
 function goCreate() {
@@ -193,20 +255,21 @@ watch(
     if (String(selectedOrgId.value) !== String(value)) {
       selectedOrgId.value = value;
       syncOrgQuery();
-      load();
+      search();
     }
   },
 );
 
 onMounted(async () => {
   await loadOrgOptions();
+  applyRouteQuery();
   syncOrgQuery();
   await load();
 });
 </script>
 
 <style scoped lang="scss">
-@import "./infra-page.scss";
+@use "./infra-page.scss";
 
 .infra-page__section--org {
   padding: 12px 16px;
@@ -214,6 +277,21 @@ onMounted(async () => {
 
 .infra-page__org-select {
   width: 220px;
+
+  :deep(.el-select__wrapper) {
+    min-height: 36px;
+    height: 36px;
+    box-sizing: border-box;
+  }
+}
+
+.infra-page__filter-item--type {
+  width: 180px;
+}
+
+.infra-page__filter-item--name,
+.infra-page__filter-item--sn {
+  width: 200px;
 }
 
 .text-primary {

@@ -21,6 +21,7 @@ export const networkConfig = {
   contentType: "application/json;charset=utf-8",
   requestTimeout: 300000, // 最长请求时间
   successCode: 2000, // 正常code
+  unauthorizedCode: 4010,
   noPermissionCode: -1, // 无权限code
   throttleTime: 1000, // 节流时长
 };

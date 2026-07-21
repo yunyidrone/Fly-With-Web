@@ -10,8 +10,11 @@ import axiosRetry from "axios-retry";
 import { networkConfig } from "@/config/network.js";
 import { isEmpty, cloneDeep } from "lodash-es";
 import { ElMessage } from "element-plus";
+import appRouter from "@/router";
+import { getToken, clearToken } from "@/utils/auth-token.js";
+import { useAuthStore } from "@/stores/auth.js";
 
-const { baseURL, contentType, requestTimeout, successCode, invalidCode, throttleTime } =
+const { baseURL, contentType, requestTimeout, successCode, invalidCode, throttleTime, unauthorizedCode } =
   networkConfig;
 
 /** 与 network.js 中 successCode 一致，业务层勿再写死 2000 */
@@ -112,10 +115,10 @@ client.interceptors.request.use(
       };
     }
 
-    // const token = getToken();
-    // if (token && config?.headers) {
-    //   config.headers.Authorization = "Bearer " + token;
-    // }
+    const token = getToken();
+    if (token && config?.headers) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     // 检查当前请求的URL是否需要添加参数
     const needAddParams = REASON_API_NEED_ORGID.some((api) => config.url.includes(api));
     const userStore = JSON.parse(localStorage.getItem("user"));
@@ -196,6 +199,25 @@ client.interceptors.response.use(
     let { code, message, msg, ...rest } = payload;
     const errorMsg = msg || message;
     const silent = response.config?.meta?.silent === true;
+
+    if (Number(code) === Number(unauthorizedCode)) {
+      clearToken();
+      try {
+        useAuthStore().resetAuth();
+      } catch {
+        // pinia 未初始化时忽略
+      }
+      const loginPath = "/login";
+      if (appRouter.currentRoute.value.path !== loginPath) {
+        appRouter.push({
+          path: loginPath,
+          query: { redirect: appRouter.currentRoute.value.fullPath },
+        });
+      }
+      if (!silent) ElMessage.warning(errorMsg || "登录已失效，请重新登录");
+      return Promise.reject(new ApiBusinessError(errorMsg, code, payload));
+    }
+
     // 只在错误时提示，成功时不弹出消息避免干扰用户
     if (!isApiSuccess(payload) && !silent) {
       ElMessage.warning(errorMsg || "请求失败");

@@ -8,7 +8,6 @@
   <header class="home-header">
     <div class="home-header__inner">
       <div class="home-header__left">
-        <!-- 左侧 Logo 占位 36×36，有切图后改为 <img src="..." alt="" /> -->
         <div class="brand-logo-slot" aria-hidden="true">
           <img class="brand-logo-img" src="../assets/images/logo.png" alt="" />
         </div>
@@ -19,23 +18,42 @@
       </div>
 
       <div class="home-header__right">
-        <!-- 右侧头像占位 56×56，有切图后改为 <img ... /> -->
-        <div class="user-avatar-slot" aria-hidden="true">
-          <img class="user-avatar-img" src="../assets/images/account.png" alt="" />
-        </div>
-        <!-- <button type="button" class="backend-btn" title="进入后台管理" @click="handleEnterBackend">
-          <span>后台管理</span>
-        </button> -->
-        <!-- 设置 -->
-        <!-- <button
-          type="button"
-          class="settings-btn"
-          title="设置"
-          aria-label="设置"
-          @click="settingsVisible = true"
+        <div
+          ref="userMenuRef"
+          class="user-menu"
+          :class="{ 'user-menu--open': userMenuOpen }"
         >
-          <i class="ri-settings-3-line" />
-        </button> -->
+          <button
+            type="button"
+            class="user-menu-trigger"
+            :class="{ 'user-menu-trigger--open': userMenuOpen }"
+            @click="toggleUserMenu"
+          >
+            <div class="user-avatar-slot" aria-hidden="true">
+              <img class="user-avatar-img" src="../assets/images/account.png" alt="" />
+            </div>
+            <span class="user-menu-trigger__name">{{ displayName }}</span>
+            <i
+              class="ri-arrow-down-s-line user-menu-trigger__arrow"
+              :class="{ 'user-menu-trigger__arrow--open': userMenuOpen }"
+            />
+          </button>
+
+          <Transition name="user-menu-fade">
+            <div v-show="userMenuOpen" class="user-menu__panel">
+              <button type="button" class="user-menu__item" @click="handleEnterBackend">
+                <i class="ri-settings-3-line user-menu__item-icon" aria-hidden="true" />
+                <span>后台管理</span>
+              </button>
+              <div class="user-menu__divider" aria-hidden="true" />
+              <button type="button" class="user-menu__item user-menu__item--danger" @click="handleLogout">
+                <i class="ri-logout-box-r-line user-menu__item-icon" aria-hidden="true" />
+                <span>退出登录</span>
+              </button>
+            </div>
+          </Transition>
+        </div>
+
         <button type="button" class="reload-btn" title="重新加载页面" @click="handleReload">
           <i class="ri-refresh-line" />
         </button>
@@ -47,20 +65,57 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { useAuthStore } from "@/stores/auth.js";
 import SettingsDrawer from "@/components/SettingsDrawer.vue";
 
 const settingsVisible = ref(false);
+const userMenuOpen = ref(false);
+const userMenuRef = ref(null);
 const router = useRouter();
+const authStore = useAuthStore();
+
+const displayName = computed(
+  () => authStore.displayName || authStore.user?.username || "账号",
+);
+
+function toggleUserMenu() {
+  userMenuOpen.value = !userMenuOpen.value;
+}
+
+function closeUserMenu() {
+  userMenuOpen.value = false;
+}
+
+function onDocumentClick(event) {
+  if (!userMenuRef.value?.contains(event.target)) {
+    closeUserMenu();
+  }
+}
+
+async function handleLogout() {
+  closeUserMenu();
+  await authStore.logout();
+  router.push("/login");
+}
 
 function handleEnterBackend() {
+  closeUserMenu();
   router.push("/backend");
 }
 
 function handleReload() {
   window.location.reload();
 }
+
+onMounted(() => {
+  document.addEventListener("click", onDocumentClick);
+});
+
+onUnmounted(() => {
+  document.removeEventListener("click", onDocumentClick);
+});
 </script>
 
 <style lang="scss" scoped>
@@ -70,7 +125,7 @@ function handleReload() {
   top: 24px;
   left: 24px;
   right: 24px;
-  z-index: 100;
+  z-index: 10000;
   pointer-events: none;
 }
 
@@ -88,7 +143,6 @@ function handleReload() {
   gap: 12px;
 }
 
-/* 左侧 Logo 占位 36×36 */
 .brand-logo-slot {
   width: 36px;
   height: 36px;
@@ -105,7 +159,6 @@ function handleReload() {
   display: block;
 }
 
-/* 中英文同一栏宽，左右齐平，视觉长度接近 */
 .brand-text {
   display: flex;
   flex-direction: column;
@@ -147,7 +200,130 @@ function handleReload() {
   gap: 16px;
 }
 
-.settings-btn,
+.user-menu {
+  position: relative;
+}
+
+.user-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px 4px 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.9);
+  font-family: "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease;
+
+  &:hover,
+  &--open {
+    border-color: rgba(73, 101, 201, 0.55);
+    background: rgba(3, 6, 10, 0.45);
+    color: #fff;
+  }
+}
+
+.user-menu-trigger__name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-menu-trigger__arrow {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.72);
+  transition: transform 0.2s ease;
+}
+
+.user-menu-trigger__arrow--open {
+  transform: rotate(180deg);
+}
+
+.user-menu__panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 10001;
+  min-width: 148px;
+  padding: 8px;
+  border: 1px solid #30363b;
+  border-radius: 6px;
+  background: rgba(3, 6, 10, 0.65);
+  backdrop-filter: blur(10px);
+  box-sizing: border-box;
+}
+
+.user-menu__divider {
+  height: 1px;
+  margin: 4px 0;
+  background: #30363b;
+}
+
+.user-menu__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
+  font-family: "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+  white-space: nowrap;
+  box-sizing: border-box;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease;
+
+  &:hover {
+    border-color: rgba(73, 101, 201, 0.55);
+    background: rgba(12, 18, 28, 0.82);
+    color: #fff;
+  }
+
+  &--danger:hover {
+    border-color: rgba(255, 77, 79, 0.45);
+    background: rgba(255, 77, 79, 0.12);
+    color: #ff7875;
+  }
+}
+
+.user-menu__item-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.user-menu-fade-enter-active,
+.user-menu-fade-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.user-menu-fade-enter-from,
+.user-menu-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
 .reload-btn {
   display: flex;
   align-items: center;
@@ -167,36 +343,6 @@ function handleReload() {
   }
 }
 
-.backend-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 12px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.85);
-  font-family: "Alibaba PuHuiTi", "PingFang SC", "Microsoft YaHei", sans-serif;
-  font-size: 14px;
-  cursor: pointer;
-  transition:
-    color 0.2s ease,
-    border-color 0.2s ease,
-    background 0.2s ease;
-
-  &:hover {
-    color: #fff;
-    border-color: rgba(255, 255, 255, 0.75);
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  i {
-    font-size: 16px;
-  }
-}
-
-/* 右侧用户图占位 56×56 */
 .user-avatar-slot {
   width: 56px;
   height: 56px;
@@ -215,5 +361,4 @@ function handleReload() {
   border-radius: 50%;
   display: block;
 }
-
 </style>

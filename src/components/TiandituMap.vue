@@ -328,7 +328,7 @@ import dtJyPng from "@/assets/images/dt_jy.png";
 import dbWrjPng from "@/assets/images/db_wrj.png";
 import dbJyPng from "@/assets/images/db_jy.png";
 import dbJcPng from "@/assets/images/db_jc.png";
-import dtJdPng from "@/assets/images/dt_jd.png";
+import dtJdPng from "@/assets/images/dt_jy.png";
 import boatPng from "@/assets/images/boat.png";
 import dtJqrPng from "@/assets/images/dt_jqr.png";
 import sosSvg from "@/assets/images/sos.svg";

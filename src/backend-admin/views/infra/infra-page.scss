@@ -82,3 +82,26 @@
   justify-content: flex-end;
   margin-top: 16px;
 }
+
+.infra-page__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.infra-page__filter-item {
+  :deep(.el-input__wrapper),
+  :deep(.el-select__wrapper) {
+    min-height: 36px;
+    height: 36px;
+    box-sizing: border-box;
+  }
+}
+
+.infra-page__filters :deep(.el-button) {
+  height: 36px;
+  padding-top: 0;
+  padding-bottom: 0;
+}

@@ -162,7 +162,7 @@
             :current-page="query.current"
             :page-size="query.pageSize"
             :total="total"
-            :page-sizes="[10, 20, 50]"
+            :page-sizes="[10, 20, 50, 100]"
             layout="total, sizes, prev, pager, next"
             background
             @current-change="onPageChange"

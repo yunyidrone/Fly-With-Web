@@ -62,7 +62,7 @@
         </div>
 
         <div class="admin-layout__header-right">
-          <el-dropdown trigger="click" @command="handleCommand">
+          <el-dropdown trigger="click" popper-class="backend-admin-header-dropdown" @command="handleCommand">
             <span class="admin-layout__user">
               <el-avatar :size="28">{{ avatarText }}</el-avatar>
               <span class="admin-layout__username">{{ authStore.displayName }}</span>
@@ -72,7 +72,9 @@
               <el-dropdown-menu>
                 <el-dropdown-item command="profile">个人中心</el-dropdown-item>
                 <el-dropdown-item command="frontend">伴飞调度</el-dropdown-item>
-                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
+                <el-dropdown-item divided command="logout" class="el-dropdown-menu__item--logout">
+                  退出登录
+                </el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -252,6 +254,8 @@ async function handleCommand(command) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: $primary-color;
+  font-weight: 500;
 }
 
 .admin-layout__content {

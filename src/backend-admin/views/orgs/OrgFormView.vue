@@ -70,9 +70,11 @@
         </el-form-item> -->
 
         <el-form-item label="辖区范围设置">
-          <div class="org-form__jurisdiction">
-            <span class="org-form__jurisdiction-tip">地图选区功能开发中，后续将接入天地图</span>
-          </div>
+          <TiandituAreaMap
+            v-model="form.jurisdictionArea"
+            mode="draw"
+            class="org-form__jurisdiction-map"
+          />
         </el-form-item>
       </el-form>
     </div>
@@ -85,6 +87,8 @@ import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { createOrg, fetchOrgDetail, updateOrg } from "@backend/api/org.js";
 import { BACKEND_BASE } from "@backend/router/routes.js";
+import { buildOrgJurisdictionPayload, parseJurisdictionArea } from "@backend/utils/jurisdiction.js";
+import TiandituAreaMap from "@/components/TiandituAreaMap.vue";
 import {
   DEFAULT_REGION,
   DEFAULT_REGION_LABEL,
@@ -109,6 +113,7 @@ const form = reactive({
   contactName: "",
   contactPhone: "",
   isGrassroots: true,
+  jurisdictionArea: null,
 });
 
 const rules = {
@@ -131,6 +136,7 @@ async function loadDetail() {
     contactName: data.contactName || "",
     contactPhone: data.contactPhone || "",
     isGrassroots: data.isGrassroots !== false,
+    jurisdictionArea: parseJurisdictionArea(data),
   });
 }
 
@@ -138,7 +144,11 @@ async function submit() {
   await formRef.value.validate();
   submitting.value = true;
   try {
-    const payload = { ...form };
+    const { jurisdictionArea: _ignored, ...formData } = form;
+    const payload = {
+      ...formData,
+      ...buildOrgJurisdictionPayload(form),
+    };
     if (isEdit.value) {
       await updateOrg({ id: route.params.id, ...payload });
       ElMessage.success("保存成功");
@@ -222,19 +232,11 @@ onMounted(loadDetail);
   color: var(--el-color-primary);
 }
 
-.org-form__jurisdiction {
+.org-form__jurisdiction-map {
   width: 100%;
-  min-height: 160px;
-  border: 1px dashed #dcdfe6;
+  height: 360px;
+  border: 1px solid #dcdfe6;
   border-radius: 4px;
-  background: #fafafa;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.org-form__jurisdiction-tip {
-  color: #909399;
-  font-size: 14px;
+  overflow: hidden;
 }
 </style>

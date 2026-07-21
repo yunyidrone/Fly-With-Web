@@ -2,7 +2,18 @@ import { requestData, unwrapApiList } from "@backend/utils/request.js";
 import { normalizeTargetList, normalizeTargetRecord } from "@backend/utils/target.js";
 
 export async function fetchTargetPage(params) {
-  const data = await requestData("/target/pageQuery", { params }, "GET");
+  const { name, sn, type, ...rest } = params || {};
+  const queryParams = { ...rest };
+  const nameTrim = String(name ?? "").trim();
+  const snTrim = String(sn ?? "").trim();
+  if (nameTrim) queryParams.name = nameTrim;
+  if (snTrim) {
+    queryParams.sn = snTrim;
+    queryParams.terminalPhone = snTrim;
+  }
+  if (type !== "" && type != null) queryParams.type = type;
+
+  const data = await requestData("/target/pageQuery", { params: queryParams }, "GET");
   if (data && Array.isArray(data.records)) {
     return { ...data, records: normalizeTargetList(data.records) };
   }

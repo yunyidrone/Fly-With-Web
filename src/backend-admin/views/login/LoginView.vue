@@ -114,19 +114,8 @@ const form = reactive({
 });
 
 const rules = {
-  username: [
-    { required: true, message: "请输入账号", trigger: "blur" },
-    { max: 32, message: "账号最长32个字符", trigger: "blur" },
-    {
-      pattern: /^[a-zA-Z0-9@._-]+$/,
-      message: "账号仅支持英文、数字及@._-字符",
-      trigger: "blur",
-    },
-  ],
-  password: [
-    { required: true, message: "请输入密码", trigger: "blur" },
-    { max: 32, message: "密码最长32个字符", trigger: "blur" },
-  ],
+  username: [{ required: true, message: "请输入账号", trigger: "blur" }],
+  password: [{ required: true, message: "请输入密码", trigger: "blur" }],
 };
 
 function loadRememberedAccount() {

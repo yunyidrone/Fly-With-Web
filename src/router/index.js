@@ -8,6 +8,7 @@
 import { createWebHashHistory, createRouter } from "vue-router";
 import { backendRoutes } from "@backend/router/routes.js";
 import { setupBackendRouterGuards } from "@backend/router/guards.js";
+import { setupFrontendRouterGuards } from "./guards.js";
 
 import HomeView from "../views/home-view/index.vue";
 import LoginView from "../views/login/index.vue";
@@ -23,6 +24,7 @@ const router = createRouter({
   routes,
 });
 
+setupFrontendRouterGuards(router);
 setupBackendRouterGuards(router);
 
 export default router;

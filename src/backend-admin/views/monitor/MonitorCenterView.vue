@@ -1,131 +1,159 @@
 <template>
   <div class="monitor-center">
-    <div class="monitor-center__section monitor-center__section--header">
-      <el-select
-        v-model="selectedOrgId"
-        class="monitor-center__org-select"
-        placeholder="请选择单位"
-        :disabled="!authStore.isSuperAdmin && orgOptions.length <= 1"
-        @change="handleOrgChange"
-      >
-        <el-option
-          v-for="org in orgOptions"
-          :key="org.id"
-          :label="org.name"
-          :value="org.id"
-        />
-      </el-select>
-
-      <el-tabs v-model="activeTab" class="monitor-center__tabs">
-        <el-tab-pane label="单位主页" name="home" />
-        <el-tab-pane label="任务监控" name="task" />
-      </el-tabs>
-    </div>
-
-    <div v-if="activeTab === 'home'" class="monitor-center__section monitor-center__section--content">
-      <div class="monitor-center__devices-title">无人设备</div>
-
-      <div class="monitor-center__device-cards">
-        <button
-          v-for="item in deviceCards"
-          :key="item.key"
-          type="button"
-          class="device-card"
-          :class="`device-card--${item.key}`"
-          @click="goDevicePage(item.path)"
+    <div class="monitor-center__shell">
+      <header class="monitor-hero">
+        <h1 class="monitor-hero__title">监控中心</h1>
+        <el-select
+          v-model="selectedOrgId"
+          class="monitor-hero__org-select"
+          placeholder="请选择单位"
+          :disabled="!authStore.isSuperAdmin && orgOptions.length <= 1"
+          @change="handleOrgChange"
         >
-          <div class="device-card__head">
-            <span class="device-card__label">{{ item.label }}</span>
-            <img :src="item.icon" :alt="item.label" class="device-card__icon" />
-          </div>
-          <div class="device-card__count">
-            {{ item.count }}<span class="device-card__unit">{{ item.unit }}</span>
-          </div>
-          <div v-if="item.details?.length" class="device-card__details">
-            <span v-for="detail in item.details" :key="detail.label">
-              {{ detail.label }}：{{ detail.value }}{{ item.unit }}
-            </span>
-          </div>
-        </button>
-      </div>
+          <el-option
+            v-for="org in orgOptions"
+            :key="org.id"
+            :label="org.name"
+            :value="org.id"
+          />
+        </el-select>
+      </header>
 
-      <div class="monitor-center__devices-title monitor-center__devices-title--targets">目标设备</div>
-
-      <div class="monitor-center__target-cards">
-        <button
-          v-for="item in targetCards"
-          :key="item.type"
-          type="button"
-          class="target-card"
-          :class="`target-card--type-${item.type}`"
-          @click="goCreateTarget(item.type)"
-        >
-          <div class="target-card__head">
-            <span class="target-card__label">{{ item.label }}</span>
-            <img :src="item.icon" :alt="item.label" class="target-card__icon" />
-          </div>
-          <div class="target-card__count">
-            {{ item.count }}<span class="target-card__unit">个</span>
-          </div>
-          <div class="target-card__hint">点击新建</div>
-        </button>
-      </div>
-
-      <div class="monitor-center__panels">
-        <section class="info-panel">
-          <div class="info-panel__title">当前单位辖区范围</div>
-          <div class="info-panel__map">
-            <div class="info-panel__map-placeholder">
-              <span>地图选区功能开发中，后续将接入天地图</span>
+      <el-tabs v-model="activeTab" class="monitor-tabs">
+        <el-tab-pane label="单位主页" name="home">
+          <section class="monitor-section">
+            <div class="section-head">
+              <span class="section-head__accent" aria-hidden="true" />
+              <div class="section-head__text">
+                <h2 class="section-head__title">无人设备</h2>
+                <p class="section-head__subtitle">点击卡片进入对应设备管理</p>
+              </div>
             </div>
-          </div>
-          <button type="button" class="info-panel__link" @click="handleConfigure('jurisdiction')">
-            配置&gt;&gt;
-          </button>
-        </section>
 
-        <section class="info-panel">
-          <div class="info-panel__title-row">
-            <span class="info-panel__title">重点地点一览</span>
-            <span class="info-panel__count">{{ keyLocations.length }}个</span>
-          </div>
-          <ul class="info-panel__list">
-            <li v-for="(item, index) in keyLocations" :key="item.id" class="info-panel__list-item">
-              <span class="info-panel__index">{{ index + 1 }}</span>
-              <span class="info-panel__tag">{{ item.category }}</span>
-              <span class="info-panel__name">{{ item.name }}</span>
-              <span class="info-panel__coord">({{ item.coord }})</span>
-            </li>
-          </ul>
-          <button type="button" class="info-panel__link" @click="handleConfigure('locations')">
-            配置&gt;&gt;
-          </button>
-        </section>
+            <div class="device-grid">
+              <button
+                v-for="item in deviceCards"
+                :key="item.key"
+                type="button"
+                class="asset-card device-card"
+                @click="goDevicePage(item.path)"
+              >
+                <div class="device-card__shine" aria-hidden="true" />
+                <span class="asset-card__label">{{ item.label }}</span>
+                <div class="asset-card__center">
+                  <img :src="item.icon" :alt="item.label" class="asset-card__icon" />
+                  <div class="asset-card__count">
+                    {{ item.count }}<span class="asset-card__unit">{{ item.unit }}</span>
+                  </div>
+                </div>
+                <div v-if="item.details?.length" class="asset-card__meta">
+                  <span v-for="detail in item.details" :key="detail.label" class="device-card__tag">
+                    {{ detail.label }} {{ detail.value }}{{ item.unit }}
+                  </span>
+                </div>
+              </button>
+            </div>
+          </section>
 
-        <section class="info-panel info-panel--checkpoints">
-          <div class="info-panel__title-row">
-            <span class="info-panel__title">区域卡点设置</span>
-            <span class="info-panel__count">{{ areaCheckpoints.length }}个</span>
-          </div>
-          <ul class="info-panel__list info-panel__list--checkpoints">
-            <li
-              v-for="item in areaCheckpoints"
-              :key="item.id"
-              class="info-panel__list-item info-panel__list-item--checkpoint"
-            >
-              <span class="info-panel__checkpoint-name">{{ item.name }}</span>
-              <span class="info-panel__coord">({{ item.coord }})</span>
-            </li>
-          </ul>
-          <button type="button" class="info-panel__link" @click="handleConfigure('checkpoints')">
-            配置&gt;&gt;
-          </button>
-        </section>
-      </div>
-    </div>
+          <section class="monitor-section">
+            <div class="section-head">
+              <span class="section-head__accent" aria-hidden="true" />
+              <div class="section-head__text">
+                <h2 class="section-head__title">目标设备</h2>
+                <p class="section-head__subtitle">点击卡片查看对应类型的目标设备列表</p>
+              </div>
+            </div>
 
-    <div v-else class="monitor-center__section monitor-center__section--content">
-      <TaskMonitorTab :task-stats="taskStats" :pending-tasks="pendingTasks" />
+            <div class="target-grid">
+              <button
+                v-for="item in targetCards"
+                :key="item.type"
+                type="button"
+                class="asset-card target-card"
+                @click="goTargetList(item.type)"
+              >
+                <span class="asset-card__label">{{ item.label }}</span>
+                <div class="asset-card__center">
+                  <img :src="item.icon" :alt="item.label" class="asset-card__icon" />
+                  <div class="asset-card__count">
+                    {{ item.count }}<span class="asset-card__unit">个</span>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </section>
+
+          <section class="monitor-section monitor-section--panels">
+            <div class="section-head section-head--compact">
+              <span class="section-head__accent" aria-hidden="true" />
+              <div class="section-head__text">
+                <h2 class="section-head__title">辖区与配置</h2>
+                <p class="section-head__subtitle">辖区范围、重点地点与区域卡点</p>
+              </div>
+            </div>
+
+            <div class="panel-grid">
+              <article class="data-panel data-panel--jurisdiction">
+                <div class="data-panel__head">
+                  <h3 class="data-panel__title">当前单位辖区范围</h3>
+                </div>
+                <div class="data-panel__map">
+                  <TiandituAreaMap
+                    mode="view"
+                    :area="jurisdictionArea"
+                    empty-text="暂未设置辖区范围"
+                  />
+                </div>
+                <button type="button" class="data-panel__link" @click="handleConfigure('jurisdiction')">
+                  前往配置<i class="ri-arrow-right-s-line" />
+                </button>
+              </article>
+
+              <article class="data-panel">
+                <div class="data-panel__head">
+                  <h3 class="data-panel__title">重点地点一览</h3>
+                  <span class="data-panel__badge">{{ keyLocations.length }} 个</span>
+                </div>
+                <ul class="data-panel__list">
+                  <li v-for="(item, index) in keyLocations" :key="item.id" class="data-panel__row">
+                    <span class="data-panel__index">{{ String(index + 1).padStart(2, "0") }}</span>
+                    <span class="data-panel__chip">{{ item.category }}</span>
+                    <span class="data-panel__name">{{ item.name }}</span>
+                    <span class="data-panel__coord">{{ item.coord }}</span>
+                  </li>
+                </ul>
+                <button type="button" class="data-panel__link" @click="handleConfigure('locations')">
+                  前往配置<i class="ri-arrow-right-s-line" />
+                </button>
+              </article>
+
+              <article class="data-panel">
+                <div class="data-panel__head">
+                  <h3 class="data-panel__title">区域卡点设置</h3>
+                  <span class="data-panel__badge">{{ areaCheckpoints.length }} 个</span>
+                </div>
+                <ul class="data-panel__list data-panel__list--stack">
+                  <li
+                    v-for="item in areaCheckpoints"
+                    :key="item.id"
+                    class="data-panel__row data-panel__row--checkpoint"
+                  >
+                    <span class="data-panel__checkpoint-name">{{ item.name }}</span>
+                    <span class="data-panel__coord">{{ item.coord }}</span>
+                  </li>
+                </ul>
+                <button type="button" class="data-panel__link" @click="goCheckpointList">
+                  前往配置<i class="ri-arrow-right-s-line" />
+                </button>
+              </article>
+            </div>
+          </section>
+        </el-tab-pane>
+
+        <el-tab-pane label="任务监控" name="task">
+          <TaskMonitorTab :task-stats="taskStats" :pending-tasks="pendingTasks" />
+        </el-tab-pane>
+      </el-tabs>
     </div>
   </div>
 </template>
@@ -136,29 +164,36 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { fetchDronePage } from "@backend/api/drone.js";
 import { fetchTargetPage } from "@backend/api/target.js";
-import { fetchOrgTree } from "@backend/api/org.js";
-import { TARGET_TYPE, TARGET_TYPE_LABELS } from "@backend/config/constants.js";
-import { MONITOR_BASE, INFRA_BASE } from "@backend/router/routes.js";
+import { fetchCheckpointPage } from "@backend/api/common.js";
+import { fetchOrgTree, fetchOrgDetail } from "@backend/api/org.js";
+import { parseJurisdictionArea } from "@backend/utils/jurisdiction.js";
+import { BACKEND_BASE, MONITOR_BASE, INFRA_BASE } from "@backend/router/routes.js";
+import TiandituAreaMap from "@/components/TiandituAreaMap.vue";
 import { useAuthStore } from "@backend/stores/auth.js";
 import { unwrapApiList } from "@backend/utils/request.js";
-import planeIcon from "@/assets/images/plane.png";
-import dogIcon from "@/assets/images/dog.png";
-import boatIcon from "@/assets/images/boat.png";
-import policeCarIcon from "@/assets/images/db_jc.png";
-import officerIcon from "@/assets/images/dt_jy.png";
-import robotIcon from "@/assets/images/dt_jqr.png";
-import vehicleIcon from "@/assets/images/device.png";
-import studentCardIcon from "@/assets/images/db_kd.png";
-import shoulderLightIcon from "@/assets/images/db_jd.png";
+import dbWrjPng from "@/assets/images/db_wrj.png";
+import dbWrgPng from "@/assets/images/db_wrg.png";
+import dbWrtPng from "@/assets/images/db_wrt.png";
+import dbJyPng from "@/assets/images/db_jy.png";
+import dbJqrPng from "@/assets/images/db_jqr.png";
+import dbJdPng from "@/assets/images/db_jd.png";
+import dbJcPng from "@/assets/images/db_jc.png";
 import TaskMonitorTab from "@backend/views/monitor/TaskMonitorTab.vue";
+import { TARGET_TYPE, TARGET_TYPE_LABELS } from "@backend/config/constants.js";
+
+const MAP_LEGEND_DEVICE_ICONS = {
+  drone: dbWrjPng,
+  dog: dbWrgPng,
+  boat: dbWrtPng,
+};
 
 const TARGET_TYPE_ICONS = {
-  [TARGET_TYPE.POLICE_CAR]: policeCarIcon,
-  [TARGET_TYPE.OFFICER]: officerIcon,
-  [TARGET_TYPE.ROBOT]: robotIcon,
-  [TARGET_TYPE.VEHICLE]: vehicleIcon,
-  [TARGET_TYPE.STUDENT_CARD]: studentCardIcon,
-  [TARGET_TYPE.SHOULDER_LIGHT]: shoulderLightIcon,
+  [TARGET_TYPE.POLICE_CAR]: dbJcPng,
+  [TARGET_TYPE.OFFICER]: dbJyPng,
+  [TARGET_TYPE.ROBOT]: dbJqrPng,
+  [TARGET_TYPE.VEHICLE]: dbJcPng,
+  [TARGET_TYPE.STUDENT_CARD]: dbJyPng,
+  [TARGET_TYPE.SHOULDER_LIGHT]: dbJdPng,
 };
 
 const DEFAULT_TARGET_STATS = {
@@ -198,8 +233,9 @@ const activeTab = ref("home");
 const orgOptions = ref([]);
 const selectedOrgId = ref(null);
 const keyLocations = ref([...DEMO_KEY_LOCATIONS]);
-const areaCheckpoints = ref([...DEMO_AREA_CHECKPOINTS]);
+const areaCheckpoints = ref([]);
 const pendingTasks = ref([...DEMO_PENDING_TASKS]);
+const jurisdictionArea = ref(null);
 
 const taskStats = ref({
   deviceOnMissionRate: 78,
@@ -222,19 +258,19 @@ const deviceCards = computed(() => [
   {
     key: "drone",
     label: "无人机",
-    icon: planeIcon,
+    icon: MAP_LEGEND_DEVICE_ICONS.drone,
     count: deviceStats.value.droneTotal,
     unit: "台",
     path: `${MONITOR_BASE}/drones`,
     details: [
-      { label: "机场设备", value: deviceStats.value.droneAirport },
-      { label: "单兵设备", value: deviceStats.value.droneSingle },
+      { label: "机场", value: deviceStats.value.droneAirport },
+      { label: "单兵", value: deviceStats.value.droneSingle },
     ],
   },
   {
     key: "dog",
     label: "无人犬",
-    icon: dogIcon,
+    icon: MAP_LEGEND_DEVICE_ICONS.dog,
     count: deviceStats.value.dogTotal,
     unit: "台",
     path: `${MONITOR_BASE}/dogs`,
@@ -243,7 +279,7 @@ const deviceCards = computed(() => [
   {
     key: "boat",
     label: "无人艇",
-    icon: boatIcon,
+    icon: MAP_LEGEND_DEVICE_ICONS.boat,
     count: deviceStats.value.boatTotal,
     unit: "艘",
     path: `${MONITOR_BASE}/boats`,
@@ -338,6 +374,33 @@ async function loadTargetStats() {
   }
 }
 
+async function loadJurisdictionArea() {
+  if (selectedOrgId.value == null) {
+    jurisdictionArea.value = null;
+    return;
+  }
+  try {
+    const data = await fetchOrgDetail({ id: selectedOrgId.value });
+    jurisdictionArea.value = parseJurisdictionArea(data);
+  } catch {
+    jurisdictionArea.value = null;
+  }
+}
+
+async function loadAreaCheckpoints() {
+  try {
+    const data = await fetchCheckpointPage({ current: 1, pageSize: 500 });
+    const records = unwrapApiList(data);
+    areaCheckpoints.value = records.map((item) => ({
+      id: item.id,
+      name: item.name,
+      coord: item.coord || "-",
+    }));
+  } catch {
+    areaCheckpoints.value = [...DEMO_AREA_CHECKPOINTS];
+  }
+}
+
 function handleOrgChange(orgId) {
   selectedOrgId.value = orgId;
   if (authStore.isSuperAdmin) {
@@ -345,23 +408,41 @@ function handleOrgChange(orgId) {
   }
   loadDeviceStats();
   loadTargetStats();
+  loadAreaCheckpoints();
+  loadJurisdictionArea();
 }
 
 function goDevicePage(path) {
   router.push(path);
 }
 
-function goCreateTarget(type) {
+function goTargetList(type) {
   router.push({
-    path: `${INFRA_BASE}/targets/new`,
+    path: `${INFRA_BASE}/targets`,
     query: {
-      type,
+      type: String(type),
       orgId: selectedOrgId.value ?? undefined,
     },
   });
 }
 
+function goCheckpointList() {
+  router.push(`${INFRA_BASE}/checkpoints`);
+}
+
 function handleConfigure(section) {
+  if (section === "jurisdiction") {
+    if (selectedOrgId.value == null) {
+      ElMessage.warning("请先选择单位");
+      return;
+    }
+    router.push(`${BACKEND_BASE}/orgs/${selectedOrgId.value}`);
+    return;
+  }
+  if (section === "locations") {
+    router.push(`${INFRA_BASE}/locations`);
+    return;
+  }
   ElMessage.info(`${section}配置功能开发中`);
 }
 
@@ -373,397 +454,541 @@ watch(
       selectedOrgId.value = value;
       loadDeviceStats();
       loadTargetStats();
+      loadAreaCheckpoints();
+      loadJurisdictionArea();
     }
   },
 );
 
 onMounted(async () => {
   await loadOrgOptions();
-  await Promise.all([loadDeviceStats(), loadTargetStats()]);
+  await Promise.all([
+    loadDeviceStats(),
+    loadTargetStats(),
+    loadAreaCheckpoints(),
+    loadJurisdictionArea(),
+  ]);
 });
 </script>
 
 <style scoped lang="scss">
+$primary: #29408a;
+$primary-light: #eaecf3;
+
 .monitor-center {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  min-height: 100%;
 }
 
-.monitor-center__section {
+.monitor-center__shell {
   background: #fff;
-  border: 1px solid #ebeef5;
-  border-radius: 4px;
+  border-radius: 12px;
+  border: 1px solid rgba(41, 64, 138, 0.08);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 12px 40px rgba(41, 64, 138, 0.06);
+  overflow: hidden;
 }
 
-.monitor-center__section--header {
-  padding: 16px 16px 0;
+.monitor-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 20px 28px;
+  background: #fff;
+  border-bottom: 1px solid rgba(41, 64, 138, 0.08);
 }
 
-.monitor-center__section--content {
-  padding: 20px 16px 24px;
+.monitor-hero__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #1a1f36;
 }
 
-.monitor-center__org-select {
-  width: 220px;
+.monitor-hero__org-select {
+  width: 260px;
+
+  :deep(.el-select__wrapper) {
+    min-height: 36px;
+    border-radius: 6px;
+  }
 }
 
-.monitor-center__tabs {
-  margin-top: 8px;
+.monitor-tabs {
+  padding: 0 28px 28px;
 
   :deep(.el-tabs__header) {
-    margin-bottom: 0;
+    margin: 0 0 8px;
   }
 
   :deep(.el-tabs__nav-wrap::after) {
     height: 1px;
-    background: #ebeef5;
+    background: rgba(41, 64, 138, 0.08);
   }
 
   :deep(.el-tabs__item) {
-    height: 44px;
-    font-size: 14px;
-    color: #606266;
+    height: 52px;
+    padding: 0 4px;
+    margin-right: 28px;
+    font-size: 15px;
+    color: #8b93a7;
+    transition: color 0.2s ease;
   }
 
   :deep(.el-tabs__item.is-active) {
-    color: var(--el-color-primary);
+    color: $primary;
     font-weight: 600;
   }
 
   :deep(.el-tabs__active-bar) {
-    background: var(--el-color-primary);
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    background: linear-gradient(90deg, $primary 0%, #5266a6 100%);
+  }
+
+  :deep(.el-tab-pane) {
+    padding-top: 24px;
   }
 }
 
-.monitor-center__devices-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #303133;
-  margin-bottom: 16px;
-}
+.monitor-section {
+  & + & {
+    margin-top: 32px;
+  }
 
-.monitor-center__devices-title--targets {
-  margin-top: 8px;
-}
-
-.monitor-center__device-cards {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.monitor-center__target-cards {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.target-card {
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
-  padding: 14px 16px 12px;
-  min-height: 120px;
-  text-align: left;
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-  color: #303133;
-  background: #fff;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
-    border-color: var(--el-color-primary-light-5);
+  &--panels {
+    margin-top: 36px;
+    padding-top: 28px;
+    border-top: 1px solid rgba(41, 64, 138, 0.08);
   }
 }
 
-.target-card__head {
+.section-head {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
+  margin-bottom: 18px;
+
+  &--compact {
+    margin-bottom: 16px;
+  }
 }
 
-.target-card__label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #303133;
-  line-height: 1.4;
-}
-
-.target-card__icon {
-  width: 36px;
+.section-head__accent {
+  width: 4px;
   height: 36px;
-  object-fit: contain;
+  margin-top: 2px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, $primary 0%, #5266a6 100%);
   flex-shrink: 0;
 }
 
-.target-card__count {
-  font-size: 32px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--el-color-primary);
-}
-
-.target-card__unit {
-  font-size: 14px;
-  font-weight: 600;
-  margin-left: 2px;
-}
-
-.target-card__hint {
-  font-size: 12px;
-  color: #909399;
-}
-
-.device-card {
-  border: none;
-  border-radius: 8px;
-  padding: 18px 20px 16px;
-  min-height: 148px;
-  text-align: left;
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  color: #fff;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
-  }
-}
-
-.device-card--drone {
-  background: linear-gradient(135deg, #9f9fe8 0%, #b6b6ef 100%);
-}
-
-.device-card--dog {
-  background: linear-gradient(135deg, #ffb45a 0%, #ffc57d 100%);
-}
-
-.device-card--boat {
-  background: linear-gradient(135deg, #9fd067 0%, #b7e08d 100%);
-}
-
-.device-card__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.device-card__label {
+.section-head__title {
+  margin: 0;
   font-size: 16px;
   font-weight: 600;
+  color: #1a1f36;
+  line-height: 1.3;
 }
 
-.device-card__icon {
-  width: 56px;
-  height: 56px;
-  object-fit: contain;
-  flex-shrink: 0;
-  opacity: 0.95;
+.section-head__subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #8b93a7;
+  line-height: 1.5;
 }
 
-.device-card__count {
-  font-size: 40px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.device-card__unit {
-  font-size: 18px;
-  font-weight: 600;
-  margin-left: 4px;
-}
-
-.device-card__details {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  font-size: 13px;
-  opacity: 0.95;
-}
-
-.monitor-center__panels {
+.device-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 
-.info-panel {
-  border: 1px solid #ebeef5;
-  border-radius: 4px;
-  padding: 16px;
-  min-height: 280px;
-  display: flex;
-  flex-direction: column;
+.asset-card {
   position: relative;
-}
-
-.info-panel__title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.info-panel__title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.info-panel__count {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--el-color-primary);
-}
-
-.info-panel__list--checkpoints {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  align-items: stretch;
+  min-height: 148px;
+  padding: 16px 18px 14px;
+  border: none;
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+  }
 }
 
-.info-panel__list-item--checkpoint {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: auto;
-  padding: 0;
-  border-bottom: none;
+.asset-card__label {
+  align-self: flex-start;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: left;
 }
 
-.info-panel__checkpoint-name {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: #eaecf3;
-  color: #909399;
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.info-panel--checkpoints .info-panel__coord {
-  color: #909399;
-  font-size: 13px;
-}
-
-.info-panel__map {
-  flex: 1;
-  min-height: 180px;
-}
-
-.info-panel__map-placeholder {
-  height: 100%;
-  min-height: 180px;
-  border: 1px dashed #dcdfe6;
-  border-radius: 4px;
-  background: #fafafa;
+.asset-card__center {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
-  color: #909399;
-  font-size: 13px;
-  text-align: center;
+  gap: 12px;
+  flex: 1;
+  margin-top: 14px;
+  min-height: 56px;
 }
 
-.info-panel__list {
+.asset-card__icon {
+  display: block;
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  object-position: center;
+  flex-shrink: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.asset-card__count {
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.asset-card__unit {
+  margin-left: 4px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.asset-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.device-card {
+  color: #fff;
+  text-align: left;
+  background: linear-gradient(135deg, #29408a 0%, #3d5499 52%, #5266a6 100%);
+  box-shadow: 0 8px 24px rgba(41, 64, 138, 0.28);
+
+  &:hover {
+    box-shadow: 0 16px 36px rgba(41, 64, 138, 0.32);
+  }
+
+  .asset-card__unit {
+    opacity: 0.88;
+  }
+
+  .asset-card__icon {
+    filter: brightness(0) invert(1);
+  }
+}
+
+.device-card__shine {
+  position: absolute;
+  top: -40%;
+  right: -10%;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.22) 0%, transparent 68%);
+  pointer-events: none;
+}
+
+.device-card__tag {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(4px);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.target-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.target-card {
+  border: 1px solid rgba(41, 64, 138, 0.1);
+  background: linear-gradient(180deg, #fafbfe 0%, #fff 100%);
+  text-align: left;
+
+  &:hover {
+    border-color: rgba(41, 64, 138, 0.22);
+    box-shadow: 0 10px 28px rgba(41, 64, 138, 0.1);
+  }
+
+  .asset-card__label {
+    color: #303133;
+  }
+
+  .asset-card__count {
+    color: $primary;
+  }
+
+  .asset-card__unit {
+    color: $primary;
+  }
+}
+
+.panel-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.data-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 300px;
+  padding: 18px 18px 16px;
+  border: 1px solid rgba(41, 64, 138, 0.08);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 16px rgba(41, 64, 138, 0.04);
+}
+
+.data-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.data-panel__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1f36;
+}
+
+.data-panel__badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: $primary-light;
+  color: $primary;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.data-panel__map {
+  flex: 1;
+  min-height: 180px;
+  overflow: hidden;
+  border-radius: 10px;
+
+  :deep(.tianditu-area-map) {
+    height: 100%;
+    min-height: 0;
+    border-radius: 10px;
+  }
+}
+
+.data-panel--jurisdiction {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+
+  .data-panel__map {
+    flex: unset;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .data-panel__map-placeholder {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+  }
+
+  .data-panel__link {
+    flex-shrink: 0;
+    margin-top: 14px;
+    justify-self: end;
+  }
+}
+
+.data-panel__map-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  min-height: 180px;
+  padding: 20px;
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, rgba(41, 64, 138, 0.04) 0%, rgba(41, 64, 138, 0.01) 100%),
+    #f8f9fc;
+  border: 1px dashed rgba(41, 64, 138, 0.14);
+  color: #8b93a7;
+  font-size: 13px;
+  text-align: center;
+  line-height: 1.6;
+
+  i {
+    font-size: 28px;
+    color: rgba(41, 64, 138, 0.35);
+  }
+}
+
+.data-panel__list {
   list-style: none;
   margin: 0;
   padding: 0;
   flex: 1;
 }
 
-.info-panel__list-item {
+.data-panel__list--stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.data-panel__row {
   display: grid;
-  grid-template-columns: 28px 56px 1fr auto;
+  grid-template-columns: 32px 52px 1fr auto;
   align-items: center;
   gap: 8px;
-  min-height: 40px;
+  min-height: 38px;
   padding: 8px 0;
-  border-bottom: 1px solid #f2f3f5;
+  border-bottom: 1px solid #f0f2f7;
   font-size: 13px;
   color: #606266;
+
+  &:last-child {
+    border-bottom: none;
+  }
 }
 
-.info-panel__list--tasks .info-panel__list-item {
-  grid-template-columns: 28px 72px 1fr auto;
-}
-
-.info-panel__index {
-  color: #909399;
-}
-
-.info-panel__tag {
-  color: #303133;
-}
-
-.info-panel__name {
-  color: #303133;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.info-panel__coord {
-  color: #909399;
-  white-space: nowrap;
-}
-
-.info-panel__location {
-  color: #909399;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.info-panel__action {
-  border: none;
-  background: none;
+.data-panel__row--checkpoint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: auto;
   padding: 0;
-  color: var(--el-color-primary);
-  cursor: pointer;
-  font-size: 13px;
+  border-bottom: none;
+}
+
+.data-panel__index {
+  font-size: 12px;
+  font-weight: 600;
+  color: #a0a7b8;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-panel__chip {
+  font-size: 12px;
+  color: #303133;
+}
+
+.data-panel__name {
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.info-panel__link {
+.data-panel__coord {
+  color: #a0a7b8;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.data-panel__checkpoint-name {
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: $primary-light;
+  color: #606266;
+  font-size: 13px;
+}
+
+.data-panel__link {
   align-self: flex-end;
-  margin-top: 12px;
+  justify-self: end;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 14px;
+  padding: 0;
   border: none;
   background: none;
-  padding: 0;
-  color: var(--el-color-primary);
-  cursor: pointer;
+  color: $primary;
   font-size: 13px;
-}
+  font-weight: 500;
+  cursor: pointer;
+  transition: gap 0.2s ease;
 
-@media (max-width: 1200px) {
-  .monitor-center__device-cards,
-  .monitor-center__panels {
-    grid-template-columns: 1fr;
+  &:hover {
+    gap: 6px;
   }
 
-  .monitor-center__target-cards {
+  i {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 1400px) {
+  .target-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 768px) {
-  .monitor-center__target-cards {
+@media (max-width: 1200px) {
+  .device-grid,
+  .panel-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .target-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .monitor-hero {
+    padding: 16px;
+  }
+
+  .monitor-hero__org-select {
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .monitor-tabs {
+    padding: 0 16px 20px;
+  }
+
+  .target-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-card__count {
+    font-size: 32px;
+  }
+
+  .asset-card__icon {
+    width: 30px;
+    height: 30px;
   }
 }
 </style>

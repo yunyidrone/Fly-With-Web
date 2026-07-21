@@ -125,7 +125,7 @@
           :current-page="query.current"
           :page-size="query.pageSize"
           :total="total"
-          :page-sizes="[5, 10, 20, 50]"
+          :page-sizes="[10, 20, 50, 100]"
           layout="total, sizes, prev, pager, next, jumper"
           background
           @current-change="onPageChange"
@@ -156,7 +156,7 @@ const selectedOrgId = ref(null);
 
 const { loading, records, total, query, load, onPageChange, onSizeChange } = useTableQuery(
   fetchDronePage,
-  { pageSize: 5, orgId: "" },
+  { pageSize: 10, orgId: "" },
 );
 
 function flattenOrgTree(nodes, result = []) {
