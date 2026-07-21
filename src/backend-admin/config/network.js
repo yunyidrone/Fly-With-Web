@@ -1,15 +1,14 @@
 /** @returns {string} */
 function resolveApiBaseURL() {
+  // 开发环境统一走 Vite 代理（/api/fly → proxyTarget），避免跨域
+  if (import.meta.env.DEV) return "/api/fly";
+
   const backendRaw = import.meta.env.VITE_BACKEND_API_BASE_URL?.trim?.();
   if (backendRaw) {
     if (/^https?:\/\//i.test(backendRaw)) return backendRaw;
     return `http://${backendRaw}`;
   }
 
-  if (import.meta.env.DEV && import.meta.env.VITE_BACKEND_USE_MOCK === "true") {
-    return "/api/fly";
-  }
-  if (import.meta.env.DEV) return "/api/fly";
   const raw = import.meta.env.VITE_API_BASE_URL?.trim?.();
   if (!raw) return "/api/fly";
   if (/^https?:\/\//i.test(raw)) return raw;

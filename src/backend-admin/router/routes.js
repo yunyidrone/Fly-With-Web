@@ -12,7 +12,7 @@ export const MENU_GROUPS = {
     icon: "Monitor",
   },
   infra: {
-    title: "系统基建设置",
+    title: "伴飞基建设置",
     icon: "Setting",
   },
 };
