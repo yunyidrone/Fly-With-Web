@@ -1,39 +1,42 @@
-<!--
- * @Author: ml
- * @Date: 2026-01-12 13:59:48
- * @LastEditTime: 2026-01-12 15:04:11
- * @FilePath: /accompanying-fly-project/src/App.vue
- * @Description: 
--->
-<script setup>
-import { useMqtt } from "@/composables/useMqtt.js";
-
-// 页面加载时自动连接 MQTT 并订阅 topic
-// useMqtt({
-//   // 车机消息回调（可选）
-//   onCarMessage: (data) => {
-//     // console.log('处理车机消息', data);
-//   },
-//   // 无人机消息回调（可选）
-//   onDroneMessage: (data) => {
-//     // console.log('处理无人机消息', data);
-//   },
-//   // 自定义订阅主题（可选）
-//   // customTopics: [
-//   //   { topic: '/your/custom/topic', callback: (data) => {} }
-//   // ],
-// });
-</script>
-
 <template>
-  <router-view v-slot="{ Component, route }">
-    <transition :name="route.meta.transition || 'fade'" mode="out-in" appear>
-      <component :is="Component" :key="route.matched?.[0]?.path || route.path" />
-    </transition>
-  </router-view>
+  <div class="app-route-shell">
+    <router-view v-slot="{ Component, route }">
+      <transition :name="resolveTransitionName(route)">
+        <component :is="Component" :key="route.matched?.[0]?.path || route.path" />
+      </transition>
+    </router-view>
+  </div>
 </template>
 
+<script setup>
+function resolveTransitionName(route) {
+  const transition = route?.meta?.transition;
+  return typeof transition === "string" && transition ? transition : "fade";
+}
+</script>
+
 <style lang="scss" scoped>
+.app-route-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #292E38;
+}
+
+.app-route-shell :deep(.fade-enter-active) {
+  position: relative;
+  z-index: 2;
+}
+
+.app-route-shell :deep(.fade-leave-active) {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
 // fade效果
 .fade-enter-active,
 .fade-leave-active {
