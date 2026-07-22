@@ -1,12 +1,19 @@
 <template>
   <div class="app-route-shell">
     <router-view v-slot="{ Component, route }">
-      <transition :name="route.meta.transition || 'fade'">
+      <transition :name="resolveTransitionName(route)">
         <component :is="Component" :key="route.matched?.[0]?.path || route.path" />
       </transition>
     </router-view>
   </div>
 </template>
+
+<script setup>
+function resolveTransitionName(route) {
+  const transition = route?.meta?.transition;
+  return typeof transition === "string" && transition ? transition : "fade";
+}
+</script>
 
 <style lang="scss" scoped>
 .app-route-shell {
