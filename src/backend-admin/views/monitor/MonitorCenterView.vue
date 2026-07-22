@@ -249,7 +249,7 @@ const deviceStats = ref({
   droneAirport: 6,
   droneSingle: 1,
   dogTotal: 0,
-  boatTotal: 1,
+  boatTotal: 0,
 });
 
 const targetStats = ref({ ...DEFAULT_TARGET_STATS });
