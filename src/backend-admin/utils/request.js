@@ -3,7 +3,7 @@ import axiosRetry from "axios-retry";
 import { ElMessage } from "element-plus";
 import appRouter from "@/router";
 import { networkConfig, appConfig } from "@backend/config/network.js";
-import { getToken, clearToken } from "@backend/utils/auth-token.js";
+import { getToken, clearToken } from "@/utils/auth-token.js";
 
 const { baseURL, contentType, requestTimeout, successCode, throttleTime } = networkConfig;
 

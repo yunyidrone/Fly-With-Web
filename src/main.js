@@ -14,6 +14,7 @@ import { createPinia } from "pinia";
 
 // 引入pinia插件
 import piniaPluginPersistedstate from "pinia-plugin-persistedstate";
+import { setupPermissionDirective } from "@/directives/permission.js";
 
 const app = createApp(App);
 
@@ -28,5 +29,7 @@ app.use(ElementPlus, {
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, component);
 }
+
+setupPermissionDirective(app);
 
 app.mount("#app");

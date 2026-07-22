@@ -8,7 +8,7 @@
       <aside class="user-list__aside">
         <el-input
           v-model="orgFilterText"
-          placeholder="请输入单位名称进行查询"
+          placeholder="请输入单位名称进行查�?
           clearable
           class="user-list__org-search"
           @input="filterOrgTree"
@@ -109,12 +109,12 @@
               {{ accountRoleLabels[row.role] || roleLabels[row.role] || row.role }}
             </template>
           </el-table-column>
-          <el-table-column label="最后上线时间" min-width="170">
+          <el-table-column label="最后上线时�? min-width="170">
             <template #default="{ row }">
               {{ row.lastOnlineAt || row.lastLoginAt || row.updatedAt || "-" }}
             </template>
           </el-table-column>
-          <el-table-column label="账号状态" width="110" align="center">
+          <el-table-column label="账号状�? width="110" align="center">
             <template #default="{ row }">
               <el-switch
                 :model-value="row.status === 1"
@@ -177,7 +177,7 @@
         <el-form-item label="账号">
           <el-input :model-value="passwordForm.username" disabled />
         </el-form-item>
-        <el-form-item label="新密码" prop="password">
+        <el-form-item label="新密�? prop="password">
           <el-input v-model="passwordForm.password" type="password" show-password />
         </el-form-item>
       </el-form>
@@ -192,16 +192,16 @@
     <el-drawer v-model="detailDrawerVisible" title="账户详情" direction="rtl" size="400px">
       <el-descriptions v-if="detailUser" :column="1" border>
         <el-descriptions-item label="账户ID">{{ detailUser.id }}</el-descriptions-item>
-        <el-descriptions-item label="用户名">{{ detailUser.username }}</el-descriptions-item>
+        <el-descriptions-item label="用户�?>{{ detailUser.username }}</el-descriptions-item>
         <el-descriptions-item label="账户昵称">{{ detailUser.displayName }}</el-descriptions-item>
         <el-descriptions-item label="角色">
           {{ accountRoleLabels[detailUser.role] || detailUser.role }}
         </el-descriptions-item>
-        <el-descriptions-item label="所属单位">{{ detailUser.orgName || "-" }}</el-descriptions-item>
-        <el-descriptions-item label="账号状态">
+        <el-descriptions-item label="所属单�?>{{ detailUser.orgName || "-" }}</el-descriptions-item>
+        <el-descriptions-item label="账号状�?>
           {{ detailUser.status === 1 ? "启用" : "停用" }}
         </el-descriptions-item>
-        <el-descriptions-item label="最后上线时间">
+        <el-descriptions-item label="最后上线时�?>
           {{ detailUser.lastOnlineAt || detailUser.lastLoginAt || "-" }}
         </el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ detailUser.createdAt || "-" }}</el-descriptions-item>
@@ -240,13 +240,13 @@ import {
   ROLES,
 } from "@backend/config/constants.js";
 import { BACKEND_BASE } from "@backend/router/routes.js";
-import { useAuthStore } from "@backend/stores/auth.js";
+import { useAuthStore } from "@/stores/auth.js";
 import { useTableQuery } from "@backend/composables/useTableQuery.js";
 
 const ACCOUNT_ROLE_LABELS = {
-  [ROLES.SUPER_ADMIN]: "平台管理员",
+  [ROLES.SUPER_ADMIN]: "平台管理�?,
   [ROLES.ORG_ADMIN]: "单位级管理员",
-  [ROLES.ORG_VIEWER]: "普通用户",
+  [ROLES.ORG_VIEWER]: "普通用�?,
 };
 
 const router = useRouter();
@@ -288,7 +288,7 @@ const passwordForm = reactive({
 const passwordRules = {
   password: [
     { required: true, message: "请输入新密码", trigger: "blur" },
-    { min: 6, message: "密码至少 6 位", trigger: "blur" },
+    { min: 6, message: "密码至少 6 �?, trigger: "blur" },
   ],
 };
 
@@ -382,8 +382,8 @@ async function submitResetPassword() {
 async function changeStatus(row, nextStatus) {
   const action = nextStatus === 1 ? "启用" : "停用";
   await ElMessageBox.confirm(
-    `确定${action}账户「${row.displayName || row.username}」吗？`,
-    "状态变更",
+    `确定${action}账户�?{row.displayName || row.username}」吗？`,
+    "状态变�?,
     { type: "warning" },
   );
   await updateUserStatus({ id: row.id, status: nextStatus });
@@ -397,13 +397,13 @@ async function handleStatusChange(row, enabled) {
   try {
     await changeStatus(row, nextStatus);
   } catch {
-    // 取消确认时保持原状态
+    // 取消确认时保持原状�?
   }
 }
 
 async function handleDelete(row) {
   await ElMessageBox.confirm(
-    `确定删除账户「${row.displayName || row.username}」吗？`,
+    `确定删除账户�?{row.displayName || row.username}」吗？`,
     "删除确认",
     { type: "warning", confirmButtonText: "删除" },
   );
@@ -418,7 +418,7 @@ async function handleBatchDelete() {
     return;
   }
   await ElMessageBox.confirm(
-    `确定删除选中的 ${selectedRows.value.length} 个账户吗？`,
+    `确定删除选中�?${selectedRows.value.length} 个账户吗？`,
     "批量删除",
     { type: "warning", confirmButtonText: "删除" },
   );
@@ -432,7 +432,7 @@ async function copyAccountLink(row) {
   const link = `${window.location.origin}/login?account=${encodeURIComponent(row.username || row.id)}`;
   try {
     await navigator.clipboard.writeText(link);
-    ElMessage.success("链接已复制");
+    ElMessage.success("链接已复�?);
   } catch {
     ElMessage.warning("复制失败，请手动复制");
   }

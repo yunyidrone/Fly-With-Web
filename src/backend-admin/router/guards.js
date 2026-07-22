@@ -1,5 +1,5 @@
-import { useAuthStore } from "@backend/stores/auth.js";
-import { hasRole, isGrassrootsOrgUser } from "@backend/utils/permission.js";
+import { useAuthStore } from "@/stores/auth.js";
+import { hasRole, isGrassrootsOrgUser } from "@/utils/permission.js";
 import { appConfig } from "@backend/config/network.js";
 import { BACKEND_BASE } from "@backend/router/routes.js";
 

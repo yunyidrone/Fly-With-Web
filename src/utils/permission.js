@@ -25,3 +25,18 @@ export function canManageOrg(role) {
 export function canManageUser(role) {
   return role === ROLES.SUPER_ADMIN || role === ROLES.ORG_ADMIN;
 }
+
+export function isGrassrootsOrgUser(user) {
+  return Boolean(user?.orgIsGrassroots);
+}
+
+/**
+ * @param {{ path?: string, meta?: object }} routeItem
+ * @param {string} userRole
+ * @param {object|null|undefined} user
+ */
+export function canAccessMenuRoute(routeItem, userRole, user) {
+  if (!hasRole(routeItem.meta?.roles, userRole)) return false;
+  if (routeItem.meta?.hideForGrassroots && isGrassrootsOrgUser(user)) return false;
+  return true;
+}

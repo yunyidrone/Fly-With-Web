@@ -37,7 +37,13 @@ export function setupFrontendRouterGuards(router) {
     }
 
     if (!authStore.user) {
-      await authStore.fetchProfile();
+      try {
+        await authStore.fetchProfile();
+      } catch {
+        authStore.resetAuth();
+        next({ path: LOGIN_PATH, query: { redirect: to.fullPath } });
+        return;
+      }
       if (!authStore.user) {
         authStore.resetAuth();
         next({ path: LOGIN_PATH, query: { redirect: to.fullPath } });

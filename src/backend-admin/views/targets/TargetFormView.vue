@@ -23,19 +23,19 @@
         class="target-form__body"
       >
         <el-form-item label="目标设备名称" prop="name">
-          <el-input v-model="form.name" placeholder="请输入目标设备名称" />
+          <el-input v-model="form.name" placeholder="请输入目标设备名�? />
         </el-form-item>
 
-        <el-form-item label="输入设备SN号" prop="sn">
+        <el-form-item label="输入设备SN�? prop="sn">
           <el-input
             v-model="form.sn"
-            placeholder="请输入设备 SN 号"
+            placeholder="请输入设�?SN �?
             :disabled="isEdit"
           />
         </el-form-item>
 
         <el-form-item label="选择类型" prop="type">
-          <el-select v-model="form.type" placeholder="警员/警车/机器人" style="width: 100%">
+          <el-select v-model="form.type" placeholder="警员/警车/机器�? style="width: 100%">
             <el-option
               v-for="item in targetTypeOptions"
               :key="item.value"
@@ -69,7 +69,7 @@ import { createTarget, fetchTargetDetail, updateTarget } from "@backend/api/targ
 import { fetchOrgTree } from "@backend/api/org.js";
 import { TARGET_TYPE, TARGET_TYPE_OPTIONS } from "@backend/config/constants.js";
 import { INFRA_BASE } from "@backend/router/routes.js";
-import { useAuthStore } from "@backend/stores/auth.js";
+import { useAuthStore } from "@/stores/auth.js";
 import { buildTargetPayload } from "@backend/utils/target.js";
 
 const route = useRoute();
@@ -91,8 +91,8 @@ const form = reactive({
 });
 
 const rules = {
-  name: [{ required: true, message: "请输入目标设备名称", trigger: "blur" }],
-  sn: [{ required: true, message: "请输入设备 SN 号", trigger: "blur" }],
+  name: [{ required: true, message: "请输入目标设备名�?, trigger: "blur" }],
+  sn: [{ required: true, message: "请输入设�?SN �?, trigger: "blur" }],
   type: [{ required: true, message: "请选择类型", trigger: "change" }],
   orgId: [{ required: true, message: "请选择优先关联单位", trigger: "change" }],
 };

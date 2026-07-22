@@ -20,7 +20,7 @@ const { baseURL, contentType, requestTimeout, successCode, invalidCode, throttle
 /** 与 network.js 中 successCode 一致，业务层勿再写死 2000 */
 export const API_SUCCESS_CODE = successCode;
 
-/** @typedef {{ silent?: boolean }} RequestOptions */
+/** @typedef {{ silent?: boolean, baseURL?: string }} RequestOptions */
 
 export class ApiBusinessError extends Error {
   /**
@@ -257,6 +257,9 @@ export async function request(url, data, method = "POST", ContentType, options =
   }
   if (options.silent) {
     config.meta = { ...(config.meta || {}), silent: true };
+  }
+  if (options.baseURL) {
+    config.baseURL = options.baseURL;
   }
   return await client.request(config);
 }

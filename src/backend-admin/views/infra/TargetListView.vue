@@ -63,7 +63,7 @@
         <el-input
           v-model="query.sn"
           class="infra-page__filter-item infra-page__filter-item--sn"
-          placeholder="SN号"
+          placeholder="SN�?
           clearable
           @keyup.enter="search"
           @clear="search"
@@ -79,7 +79,7 @@
             <span class="text-primary">{{ row.name }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="sn" label="SN号" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="sn" label="SN�? min-width="180" show-overflow-tooltip />
         <el-table-column label="类型" width="150">
           <template #default="{ row }">
             <el-tag size="small" effect="light">{{ row.typeLabel }}</el-tag>
@@ -138,7 +138,7 @@ import { fetchOrgTree } from "@backend/api/org.js";
 import { useTableQuery } from "@backend/composables/useTableQuery.js";
 import { TARGET_TYPE_OPTIONS } from "@backend/config/constants.js";
 import { INFRA_BASE } from "@backend/router/routes.js";
-import { useAuthStore } from "@backend/stores/auth.js";
+import { useAuthStore } from "@/stores/auth.js";
 
 const router = useRouter();
 const route = useRoute();
@@ -237,7 +237,7 @@ function goEdit(id) {
 }
 
 async function handleDelete(row) {
-  await ElMessageBox.confirm(`确定删除目标设备「${row.name}」吗？`, "删除确认", {
+  await ElMessageBox.confirm(`确定删除目标设备�?{row.name}」吗？`, "删除确认", {
     type: "warning",
     confirmButtonText: "删除",
     cancelButtonText: "取消",

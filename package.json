@@ -16,6 +16,7 @@
     "axios": "1.13.2",
     "axios-retry": "^4.5.0",
     "cesium": "^1.129.0",
+    "crypto-js": "^4.2.0",
     "element-plus": "^2.13.1",
     "lodash-es": "^4.17.23",
     "maplibre-gl": "^5.15.0",

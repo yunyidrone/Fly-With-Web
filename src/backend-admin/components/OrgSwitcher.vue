@@ -19,7 +19,7 @@
 <script setup>
 import { fetchOrgPage } from "@backend/api/org.js";
 import { unwrapApiList } from "@backend/utils/request.js";
-import { useAuthStore } from "@backend/stores/auth.js";
+import { useAuthStore } from "@/stores/auth.js";
 
 const authStore = useAuthStore();
 const orgOptions = ref([]);

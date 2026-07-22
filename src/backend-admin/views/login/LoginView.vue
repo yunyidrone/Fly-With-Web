@@ -26,7 +26,7 @@
               <el-form-item prop="username" class="login-v2__form-item">
                 <el-input
                   v-model="form.username"
-                  placeholder="请输入账号"
+                  placeholder="请输入账�?
                   clearable
                   maxlength="32"
                   class="login-v2__input"
@@ -44,7 +44,7 @@
                 <el-input
                   v-model="form.password"
                   type="password"
-                  placeholder="请输入密码"
+                  placeholder="请输入密�?
                   show-password
                   maxlength="32"
                   class="login-v2__input"
@@ -73,7 +73,7 @@
           </el-form>
 
           <div class="login-v2__hint">
-            忘记密码或需要找回密码请联系系统管理员
+            忘记密码或需要找回密码请联系系统管理�?
           </div>
 
           <div v-if="useMock" class="login-v2__hint">
@@ -92,7 +92,7 @@ import { onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { appConfig } from "@backend/config/network.js";
 import { MONITOR_BASE } from "@backend/router/routes.js";
-import { useAuthStore } from "@backend/stores/auth.js";
+import { useAuthStore } from "@/stores/auth.js";
 import loginBg from "@backend/assets/images/login.png";
 import loginUserIcon from "@backend/assets/images/login_user.png";
 import loginPasswordIcon from "@backend/assets/images/login_password.png";
@@ -114,8 +114,8 @@ const form = reactive({
 });
 
 const rules = {
-  username: [{ required: true, message: "请输入账号", trigger: "blur" }],
-  password: [{ required: true, message: "请输入密码", trigger: "blur" }],
+  username: [{ required: true, message: "请输入账�?, trigger: "blur" }],
+  password: [{ required: true, message: "请输入密�?, trigger: "blur" }],
 };
 
 function loadRememberedAccount() {
@@ -171,7 +171,7 @@ onUnmounted(() => {
 });
 </script>
 <style scoped lang="scss">
-// 设计稿基准 1920 x 1080，尺寸均按原稿比例换算
+// 设计稿基�?1920 x 1080，尺寸均按原稿比例换�?
 .login-v2 {
   --design-w: 1920;
   --design-h: 1080;

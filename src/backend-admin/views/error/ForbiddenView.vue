@@ -12,7 +12,7 @@
 <script setup>
 import { useRouter } from "vue-router";
 import { MONITOR_BASE } from "@backend/router/routes.js";
-import { useAuthStore } from "@backend/stores/auth.js";
+import { useAuthStore } from "@/stores/auth.js";
 
 const router = useRouter();
 const authStore = useAuthStore();
