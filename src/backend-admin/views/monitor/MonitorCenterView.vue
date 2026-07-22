@@ -60,7 +60,7 @@
               <span class="section-head__accent" aria-hidden="true" />
               <div class="section-head__text">
                 <h2 class="section-head__title">目标设备</h2>
-                <p class="section-head__subtitle">点击卡片查看对应类型的目标设备列�?/p>
+                <p class="section-head__subtitle">点击卡片查看对应类型的目标设备列表</p>
               </div>
             </div>
 
@@ -76,7 +76,7 @@
                 <div class="asset-card__center">
                   <img :src="item.icon" :alt="item.label" class="asset-card__icon" />
                   <div class="asset-card__count">
-                    {{ item.count }}<span class="asset-card__unit">�?/span>
+                    {{ item.count }}<span class="asset-card__unit">个</span>
                   </div>
                 </div>
               </button>
@@ -87,7 +87,7 @@
             <div class="section-head section-head--compact">
               <span class="section-head__accent" aria-hidden="true" />
               <div class="section-head__text">
-                <h2 class="section-head__title">辖区与配�?/h2>
+                <h2 class="section-head__title">辖区与配置</h2>
                 <p class="section-head__subtitle">辖区范围、重点地点与区域卡点</p>
               </div>
             </div>
@@ -111,8 +111,8 @@
 
               <article class="data-panel">
                 <div class="data-panel__head">
-                  <h3 class="data-panel__title">重点地点一�?/h3>
-                  <span class="data-panel__badge">{{ keyLocations.length }} �?/span>
+                  <h3 class="data-panel__title">重点地点一览</h3>
+                  <span class="data-panel__badge">{{ keyLocations.length }} 条</span>
                 </div>
                 <ul class="data-panel__list">
                   <li v-for="(item, index) in keyLocations" :key="item.id" class="data-panel__row">
@@ -130,7 +130,7 @@
               <article class="data-panel">
                 <div class="data-panel__head">
                   <h3 class="data-panel__title">区域卡点设置</h3>
-                  <span class="data-panel__badge">{{ areaCheckpoints.length }} �?/span>
+                  <span class="data-panel__badge">{{ areaCheckpoints.length }} 条</span>
                 </div>
                 <ul class="data-panel__list data-panel__list--stack">
                   <li
@@ -206,24 +206,24 @@ const DEFAULT_TARGET_STATS = {
 };
 
 const DEMO_KEY_LOCATIONS = [
-  { id: 1, category: "高校", name: "幸福街小�?", coord: "121, 53, 8" },
-  { id: 2, category: "中学", name: "幸福街小�?", coord: "121, 53, 8" },
-  { id: 3, category: "社区", name: "幸福街小�?", coord: "121, 53, 8" },
+  { id: 1, category: "高校", name: "幸福街小错", coord: "121, 53, 8" },
+  { id: 2, category: "中学", name: "幸福街小错", coord: "121, 53, 8" },
+  { id: 3, category: "社区", name: "幸福街小错", coord: "121, 53, 8" },
 ];
 
 const DEMO_AREA_CHECKPOINTS = [
-  { id: 1, name: "幸福街小�?", coord: "121, 53, 8" },
-  { id: 2, name: "幸福街小�?", coord: "121, 53, 8" },
-  { id: 3, name: "幸福街小�?", coord: "121, 53, 8" },
-  { id: 4, name: "幸福街小�?", coord: "121, 53, 8" },
-  { id: 5, name: "幸福街小�?", coord: "121, 53, 8" },
-  { id: 6, name: "幸福街小�?", coord: "121, 53, 8" },
+  { id: 1, name: "幸福街小错", coord: "121, 53, 8" },
+  { id: 2, name: "幸福街小错", coord: "121, 53, 8" },
+  { id: 3, name: "幸福街小错", coord: "121, 53, 8" },
+  { id: 4, name: "幸福街小错", coord: "121, 53, 8" },
+  { id: 5, name: "幸福街小错", coord: "121, 53, 8" },
+  { id: 6, name: "幸福街小错", coord: "121, 53, 8" },
 ];
 
 const DEMO_PENDING_TASKS = [
-  { id: 1, name: "山林救援", location: "幸福街小�?" },
-  { id: 2, name: "水上救援", location: "幸福街小�?" },
-  { id: 3, name: "重点安保", location: "幸福街小�?" },
+  { id: 1, name: "山林救援", location: "幸福街小错" },
+  { id: 2, name: "水上救援", location: "幸福街小错" },
+  { id: 3, name: "重点安保", location: "幸福街小错" },
 ];
 
 const router = useRouter();
@@ -257,10 +257,10 @@ const targetStats = ref({ ...DEFAULT_TARGET_STATS });
 const deviceCards = computed(() => [
   {
     key: "drone",
-    label: "无人�?,
+    label: "无人机",
     icon: MAP_LEGEND_DEVICE_ICONS.drone,
     count: deviceStats.value.droneTotal,
-    unit: "�?,
+    unit: "架",
     path: `${MONITOR_BASE}/drones`,
     details: [
       { label: "机场", value: deviceStats.value.droneAirport },
@@ -269,19 +269,19 @@ const deviceCards = computed(() => [
   },
   {
     key: "dog",
-    label: "无人�?,
+    label: "无人犬",
     icon: MAP_LEGEND_DEVICE_ICONS.dog,
     count: deviceStats.value.dogTotal,
-    unit: "�?,
+    unit: "只",
     path: `${MONITOR_BASE}/dogs`,
     details: [],
   },
   {
     key: "boat",
-    label: "无人�?,
+    label: "无人艇",
     icon: MAP_LEGEND_DEVICE_ICONS.boat,
     count: deviceStats.value.boatTotal,
-    unit: "�?,
+    unit: "艘",
     path: `${MONITOR_BASE}/boats`,
     details: [],
   },

@@ -19,14 +19,14 @@
 
     <div class="device-list__section device-list__section--title">
       <div class="device-list__header">
-        <div class="device-list__title">无人机管�?/div>
+        <div class="device-list__title">无人机管理</div>
         <div class="device-list__actions">
           <el-button
             v-permission="['super_admin', 'org_admin']"
             class="device-list__create-btn"
             @click="goCreate"
           >
-            创建无人�?
+            创建无人机
           </el-button>
           <el-button class="device-list__refresh-btn" :loading="loading" @click="load">
             <el-icon :size="16"><Refresh /></el-icon>
@@ -42,7 +42,7 @@
             <span class="device-list__id">{{ row.id || "-" }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="无人机名�? min-width="140" show-overflow-tooltip>
+        <el-table-column prop="name" label="无人机名称" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="text-primary">{{ row.name }}</span>
           </template>
@@ -65,7 +65,7 @@
             <span v-else class="device-list__placeholder">/</span>
           </template>
         </el-table-column>
-        <el-table-column label="在线状�? width="100">
+        <el-table-column label="在线状态" width="100">
           <template #default="{ row }">
             <span
               v-if="row.isOnline != null"
@@ -78,12 +78,12 @@
             <span v-else class="device-list__placeholder">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="作业状�? width="100">
+        <el-table-column label="作业状态" width="100">
           <template #default="{ row }">
             {{ row.workStatusText }}
           </template>
         </el-table-column>
-        <el-table-column label="设备状�? width="90">
+        <el-table-column label="设备状态" width="90">
           <template #default="{ row }">
             <span
               class="device-list__device-status"
@@ -93,7 +93,7 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="当前经纬�? min-width="140">
+        <el-table-column label="当前经纬度" min-width="140">
           <template #default="{ row }">
             <span class="device-list__coord">{{ row.coordText }}</span>
           </template>
@@ -101,7 +101,6 @@
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
             <el-button
-              v-permission="['super_admin', 'org_admin']"
               link
               type="primary"
               @click="goEdit(row.id)"
@@ -109,7 +108,6 @@
               编辑
             </el-button>
             <el-button
-              v-permission="['super_admin', 'org_admin']"
               link
               type="danger"
               @click="handleDelete(row)"
@@ -215,7 +213,7 @@ function goEdit(id) {
 }
 
 async function handleDelete(row) {
-  await ElMessageBox.confirm(`确定删除无人机�?{row.name}」吗？`, "删除确认", {
+  await ElMessageBox.confirm(`确定删除无人机「{row.name}」吗？`, "删除确认", {
     type: "warning",
     confirmButtonText: "删除",
     cancelButtonText: "取消",

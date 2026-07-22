@@ -28,16 +28,16 @@
         <div class="user-form__columns">
           <div class="user-form__column">
             <el-form-item label="账户昵称" prop="displayName" required>
-              <el-input v-model="form.displayName" placeholder="请输入账户昵�? />
+              <el-input v-model="form.displayName" placeholder="请输入账户昵称" />
             </el-form-item>
             <el-form-item label="联系电话" prop="phone">
-              <el-input v-model="form.phone" placeholder="请输入联系电�? maxlength="20" />
+              <el-input v-model="form.phone" placeholder="请输入联系电话" maxlength="20" />
             </el-form-item>
             <el-form-item label="邮箱" prop="email">
-              <el-input v-model="form.email" placeholder="请输入邮�? />
+              <el-input v-model="form.email" placeholder="请输入邮箱" />
             </el-form-item>
             <el-form-item label="角色类型" prop="role">
-              <el-select v-model="form.role" placeholder="单位管理�?普通用�? style="width: 100%">
+              <el-select v-model="form.role" placeholder="" style="width: 100%">
                 <el-option
                   v-for="item in roleOptions"
                   :key="item.value"
@@ -86,8 +86,8 @@ import {
 import { useAuthStore } from "@/stores/auth.js";
 
 const ACCOUNT_ROLE_LABELS = {
-  [ROLES.ORG_ADMIN]: "单位管理�?,
-  [ROLES.ORG_VIEWER]: "普通用�?,
+  [ROLES.ORG_ADMIN]: "单位管理",
+  [ROLES.ORG_VIEWER]: "普通用户",
 };
 
 const route = useRoute();
@@ -123,21 +123,21 @@ const roleOptions = [
 
 const contextText = computed(() => {
   if (isEdit.value) {
-    if (form.displayName) return `正在编辑�?{form.displayName}`;
+    if (form.displayName) return `正在编辑{form.displayName}`;
     if (orgName.value) {
-      return `正在编辑�?{DEFAULT_REGION_FULL_LABEL}-${orgName.value} 账户`;
+      return `正在编辑{DEFAULT_REGION_FULL_LABEL}-${orgName.value} 账户`;
     }
     return "正在编辑账户";
   }
 
   if (orgName.value) {
-    return `正在创建�?{DEFAULT_REGION_FULL_LABEL}-${orgName.value} 账户`;
+    return `正在创建{DEFAULT_REGION_FULL_LABEL}-${orgName.value} 账户`;
   }
   return "正在创建账户";
 });
 
 const rules = {
-  displayName: [{ required: true, message: "请输入账户昵�?, trigger: "blur" }],
+  displayName: [{ required: true, message: "请输入账户昵称", trigger: "blur" }],
   phone: [
     {
       validator: (_rule, value, callback) => {
@@ -146,7 +146,7 @@ const rules = {
           return;
         }
         if (!/^1\d{10}$|^[\d-]{7,20}$/.test(value)) {
-          callback(new Error("请输入有效联系电�?));
+          callback(new Error("请输入有效联系电话"));
           return;
         }
         callback();
@@ -154,7 +154,7 @@ const rules = {
       trigger: "blur",
     },
   ],
-  email: [{ type: "email", message: "请输入有效邮�?, trigger: "blur" }],
+  email: [{ type: "email", message: "请输入有效邮箱", trigger: "blur" }],
   role: [{ required: true, message: "请选择角色类型", trigger: "change" }],
 };
 

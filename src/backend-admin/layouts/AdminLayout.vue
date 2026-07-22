@@ -10,6 +10,7 @@
 
       <el-scrollbar class="admin-layout__menu-scroll">
         <el-menu
+          v-loading="menuStore.loading"
           :default-active="activeMenu"
           :default-openeds="defaultOpeneds"
           :collapse="appStore.sidebarCollapsed"
@@ -19,29 +20,7 @@
           active-text-color="#fff"
           router
         >
-          <template v-for="entry in visibleMenuTree" :key="entry.key || entry.route?.path">
-            <el-sub-menu v-if="entry.type === 'group'" :index="entry.key">
-              <template #title>
-                <el-icon><component :is="entry.icon" /></el-icon>
-                <span>{{ entry.title }}</span>
-              </template>
-              <el-menu-item
-                v-for="child in entry.children"
-                :key="child.route.path"
-                :index="resolveMenuIndex(child.route)"
-              >
-                {{ child.route.meta.title }}
-              </el-menu-item>
-            </el-sub-menu>
-
-            <el-menu-item
-              v-else
-              :index="resolveMenuIndex(entry.route)"
-            >
-              <el-icon v-if="entry.icon"><component :is="entry.icon" /></el-icon>
-              <template #title>{{ entry.title || entry.route.meta.title }}</template>
-            </el-menu-item>
-          </template>
+          <AdminMenuTree :nodes="visibleMenuTree" :title-route-path-map="titleRoutePathMap" />
         </el-menu>
       </el-scrollbar>
     </el-aside>
@@ -93,47 +72,38 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Fold, Expand, ArrowDown } from "@element-plus/icons-vue";
 import { useAppStore } from "@backend/stores/app.js";
 import { useAuthStore } from "@/stores/auth.js";
-import { BACKEND_BASE, getMenuTree, MONITOR_BASE, INFRA_BASE } from "@backend/router/routes.js";
-import { canAccessMenuRoute } from "@/utils/permission.js";
+import { useMenuStore } from "@backend/stores/menu.js";
+import AdminMenuTree from "@backend/components/AdminMenuTree.vue";
+import { buildMenuTitleRoutePathMap, collectOpenMenuIds } from "@backend/utils/menu.js";
 import { appConfig } from "@backend/config/network.js";
-import { ROLES } from "@backend/config/constants.js";
 import logoImage from "@/assets/images/logo.png";
 
 const route = useRoute();
 const router = useRouter();
 const appStore = useAppStore();
 const authStore = useAuthStore();
+const menuStore = useMenuStore();
 
 const appTitle = appConfig.title;
-const demoUser = { orgIsGrassroots: false };
 
 const asideWidth = computed(() =>
   appStore.sidebarCollapsed ? "64px" : "220px",
 );
 
-const visibleMenuTree = computed(() =>
-  getMenuTree(
-    appConfig.skipAuth ? ROLES.SUPER_ADMIN : authStore.role,
-    appConfig.skipAuth ? demoUser : authStore.user,
-    (item, role, user) =>
-      canAccessMenuRoute(
-        item,
-        role,
-        user,
-      ),
-  ),
+const visibleMenuTree = computed(() => menuStore.tree);
+
+const titleRoutePathMap = computed(() =>
+  buildMenuTitleRoutePathMap(router.getRoutes()),
 );
 
-const defaultOpeneds = computed(() => {
-  if (route.path.startsWith(MONITOR_BASE)) return ["monitor"];
-  if (route.path.startsWith(INFRA_BASE)) return ["infra"];
-  return [];
-});
+const defaultOpeneds = computed(() =>
+  collectOpenMenuIds(menuStore.tree, activeMenu.value, titleRoutePathMap.value),
+);
 
 const activeMenu = computed(
   () => route.meta?.activeMenu || route.path,
@@ -145,14 +115,39 @@ const avatarText = computed(() =>
   (authStore.displayName || "U").slice(0, 1).toUpperCase(),
 );
 
-function resolveMenuIndex(item) {
-  const p = String(item.path || "");
-  return p.startsWith("/") ? p : `${BACKEND_BASE}/${p}`;
+async function refreshMenu(force = false) {
+  if (!authStore.isLoggedIn && !appConfig.skipAuth) {
+    menuStore.resetMenu();
+    return;
+  }
+  await menuStore.loadMenu(force);
 }
+
+watch(
+  () => authStore.effectiveOrgId,
+  () => {
+    refreshMenu(true);
+  },
+);
+
+watch(
+  () => authStore.isLoggedIn,
+  (loggedIn) => {
+    if (loggedIn) {
+      refreshMenu(true);
+      return;
+    }
+    menuStore.resetMenu();
+  },
+);
+
+onMounted(() => {
+  refreshMenu();
+});
 
 async function handleCommand(command) {
   if (command === "profile") {
-    router.push(`${BACKEND_BASE}/account`);
+    router.push("/backend/account");
     return;
   }
   if (command === "frontend") {
