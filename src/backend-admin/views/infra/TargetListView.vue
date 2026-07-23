@@ -1,20 +1,13 @@
 <template>
   <div class="infra-page">
     <div class="infra-page__section infra-page__section--org">
-      <el-select
+      <OrgCascader
         v-model="selectedOrgId"
-        class="infra-page__org-select"
-        placeholder="请选择单位"
-        :disabled="!authStore.isSuperAdmin && orgOptions.length <= 1"
+        :options="orgTreeOptions"
+        :loading="orgCascaderLoading"
+        select-class="infra-page__org-select"
         @change="handleOrgChange"
-      >
-        <el-option
-          v-for="org in orgOptions"
-          :key="org.id"
-          :label="org.name"
-          :value="org.id"
-        />
-      </el-select>
+      />
     </div>
 
     <div class="infra-page__section infra-page__section--title">
@@ -28,8 +21,10 @@
           >
             新建目标设备
           </el-button>
-          <el-button class="infra-page__refresh-btn" :loading="loading" @click="load">
-            <el-icon :size="16"><Refresh /></el-icon>
+          <el-button class="infra-page__refresh-btn" :disabled="loading" @click="load">
+            <el-icon :size="16" :class="{ 'infra-page__refresh-icon--spinning': loading }">
+              <Refresh />
+            </el-icon>
           </el-button>
         </div>
       </div>
@@ -129,12 +124,13 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from "vue";
+import { onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { deleteTarget, fetchTargetPage } from "@backend/api/target.js";
-import { fetchOrgTree } from "@backend/api/org.js";
+import OrgCascader from "@backend/components/OrgCascader.vue";
+import { useOrgCascader } from "@backend/composables/useOrgCascader.js";
 import { useTableQuery } from "@backend/composables/useTableQuery.js";
 import { TARGET_TYPE_OPTIONS } from "@backend/config/constants.js";
 import { INFRA_BASE } from "@backend/router/routes.js";
@@ -143,45 +139,21 @@ import { useAuthStore } from "@/stores/auth.js";
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
+const {
+  orgTreeOptions,
+  selectedOrgId,
+  loading: orgCascaderLoading,
+  cascaderDisabled,
+  initOrgCascader,
+  syncSelectedOrgId,
+} = useOrgCascader();
 const targetTypeOptions = TARGET_TYPE_OPTIONS;
-
-const orgOptions = ref([]);
-const selectedOrgId = ref(null);
 
 const { loading, records, total, query, load, search, reset, onPageChange, onSizeChange } =
   useTableQuery(fetchTargetPage, { pageSize: 10, orgId: "", name: "", sn: "", type: "" });
 
-function flattenOrgTree(nodes, result = []) {
-  for (const node of nodes || []) {
-    if (node.id != null) result.push({ id: node.id, name: node.name });
-    if (node.children?.length) flattenOrgTree(node.children, result);
-  }
-  return result;
-}
-
 async function loadOrgOptions() {
-  try {
-    const tree = (await fetchOrgTree()) || [];
-    const flat = flattenOrgTree(tree);
-    orgOptions.value = flat.length ? flat : [{ id: 1, name: "派出所1" }];
-  } catch {
-    orgOptions.value = [{ id: 1, name: "派出所1" }];
-  }
-
-  if (!authStore.isSuperAdmin && authStore.orgId != null) {
-    selectedOrgId.value = authStore.orgId;
-    if (!orgOptions.value.some((item) => String(item.id) === String(authStore.orgId))) {
-      orgOptions.value.unshift({
-        id: authStore.orgId,
-        name: authStore.user?.orgName || "当前单位",
-      });
-    }
-    return;
-  }
-
-  if (selectedOrgId.value == null) {
-    selectedOrgId.value = orgOptions.value[0]?.id ?? null;
-  }
+  await initOrgCascader(authStore);
 }
 
 function syncOrgQuery() {
@@ -197,7 +169,7 @@ function applyRouteQuery() {
 
   const orgIdRaw = route.query.orgId;
   if (orgIdRaw != null && orgIdRaw !== "") {
-    selectedOrgId.value = orgIdRaw;
+    syncSelectedOrgId(orgIdRaw);
     if (authStore.isSuperAdmin) {
       authStore.setCurrentOrgId(orgIdRaw);
     }
@@ -253,7 +225,7 @@ watch(
   (value) => {
     if (!authStore.isSuperAdmin || value === "all") return;
     if (String(selectedOrgId.value) !== String(value)) {
-      selectedOrgId.value = value;
+      syncSelectedOrgId(value);
       syncOrgQuery();
       search();
     }
@@ -276,9 +248,9 @@ onMounted(async () => {
 }
 
 .infra-page__org-select {
-  width: 220px;
+  width: 280px;
 
-  :deep(.el-select__wrapper) {
+  :deep(.el-input__wrapper) {
     min-height: 36px;
     height: 36px;
     box-sizing: border-box;

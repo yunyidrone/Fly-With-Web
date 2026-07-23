@@ -1,20 +1,14 @@
 <template>
   <div class="device-list">
     <div class="device-list__section device-list__section--org">
-      <el-select
+      <OrgCascader
         v-model="selectedOrgId"
-        class="device-list__org-select"
-        placeholder="请选择单位"
-        :disabled="!authStore.isSuperAdmin && orgOptions.length <= 1"
+        :options="orgTreeOptions"
+        :loading="orgCascaderLoading"
+        :disabled="!authStore.isSuperAdmin && cascaderDisabled"
+        select-class="device-list__org-select"
         @change="handleOrgChange"
-      >
-        <el-option
-          v-for="org in orgOptions"
-          :key="org.id"
-          :label="org.name"
-          :value="org.id"
-        />
-      </el-select>
+      />
     </div>
 
     <div class="device-list__section device-list__section--title">
@@ -22,14 +16,17 @@
         <div class="device-list__title">无人机管理</div>
         <div class="device-list__actions">
           <el-button
-            v-permission="['super_admin', 'org_admin']"
+            type="primary"
+            plain
             class="device-list__create-btn"
             @click="goCreate"
           >
             创建无人机
           </el-button>
-          <el-button class="device-list__refresh-btn" :loading="loading" @click="load">
-            <el-icon :size="16"><Refresh /></el-icon>
+          <el-button class="device-list__refresh-btn" :disabled="loading" @click="load">
+            <el-icon :size="16" :class="{ 'device-list__refresh-icon--spinning': loading }">
+              <Refresh />
+            </el-icon>
           </el-button>
         </div>
       </div>
@@ -37,12 +34,12 @@
 
     <div class="device-list__section device-list__section--content">
       <el-table v-loading="loading" :data="records" class="device-list__table" stripe>
-        <el-table-column prop="id" label="无人机ID" min-width="120" show-overflow-tooltip>
+        <el-table-column prop="id" label="无人机ID" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="device-list__id">{{ row.id || "-" }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="无人机名称" min-width="140" show-overflow-tooltip>
+        <el-table-column prop="name" label="无人机名称" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="text-primary">{{ row.name }}</span>
           </template>
@@ -93,7 +90,7 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="当前经纬度" min-width="140">
+        <el-table-column label="机场经纬度" min-width="140">
           <template #default="{ row }">
             <span class="device-list__coord">{{ row.coordText }}</span>
           </template>
@@ -135,12 +132,13 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from "vue";
+import { onMounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { deleteDrone, fetchDronePage } from "@backend/api/drone.js";
-import { fetchOrgTree } from "@backend/api/org.js";
+import OrgCascader from "@backend/components/OrgCascader.vue";
+import { useOrgCascader } from "@backend/composables/useOrgCascader.js";
 import { useTableQuery } from "@backend/composables/useTableQuery.js";
 import { LOW_BATTERY_THRESHOLD } from "@backend/config/constants.js";
 import { MONITOR_BASE } from "@backend/router/routes.js";
@@ -148,46 +146,22 @@ import { useAuthStore } from "@/stores/auth.js";
 
 const router = useRouter();
 const authStore = useAuthStore();
-
-const orgOptions = ref([]);
-const selectedOrgId = ref(null);
+const {
+  orgTreeOptions,
+  selectedOrgId,
+  loading: orgCascaderLoading,
+  cascaderDisabled,
+  initOrgCascader,
+  syncSelectedOrgId,
+} = useOrgCascader();
 
 const { loading, records, total, query, load, onPageChange, onSizeChange } = useTableQuery(
   fetchDronePage,
   { pageSize: 10, orgId: "" },
 );
 
-function flattenOrgTree(nodes, result = []) {
-  for (const node of nodes || []) {
-    if (node.id != null) result.push({ id: node.id, name: node.name });
-    if (node.children?.length) flattenOrgTree(node.children, result);
-  }
-  return result;
-}
-
 async function loadOrgOptions() {
-  try {
-    const tree = (await fetchOrgTree()) || [];
-    const flat = flattenOrgTree(tree);
-    orgOptions.value = flat.length ? flat : [{ id: 1, name: "幸福路派出所" }];
-  } catch {
-    orgOptions.value = [{ id: 1, name: "幸福路派出所" }];
-  }
-
-  if (!authStore.isSuperAdmin && authStore.orgId != null) {
-    selectedOrgId.value = authStore.orgId;
-    if (!orgOptions.value.some((item) => String(item.id) === String(authStore.orgId))) {
-      orgOptions.value.unshift({
-        id: authStore.orgId,
-        name: authStore.user?.orgName || "当前单位",
-      });
-    }
-    return;
-  }
-
-  if (selectedOrgId.value == null) {
-    selectedOrgId.value = orgOptions.value[0]?.id ?? null;
-  }
+  await initOrgCascader(authStore);
 }
 
 function syncOrgQuery() {
@@ -229,7 +203,7 @@ watch(
   (value) => {
     if (!authStore.isSuperAdmin || value === "all") return;
     if (String(selectedOrgId.value) !== String(value)) {
-      selectedOrgId.value = value;
+      syncSelectedOrgId(value);
       syncOrgQuery();
       load();
     }
@@ -269,7 +243,7 @@ onMounted(async () => {
 }
 
 .device-list__org-select {
-  width: 220px;
+  width: 280px;
 }
 
 .device-list__header {
@@ -295,17 +269,17 @@ onMounted(async () => {
 .device-list__create-btn {
   min-width: 120px;
   height: 36px;
-  border-style: solid;
-  color: var(--el-color-primary);
-  border-color: var(--el-color-primary);
-  background: #fff;
+  // border-style: solid;
+  // color: var(--el-color-primary);
+  // border-color: var(--el-color-primary);
+  // background: #fff;
 
-  &:hover,
-  &:focus {
-    color: var(--el-color-primary);
-    border-color: var(--el-color-primary);
-    background: var(--el-color-primary-light-9);
-  }
+  // &:hover,
+  // &:focus {
+  //   color: var(--el-color-primary);
+  //   border-color: var(--el-color-primary);
+  //   background: var(--el-color-primary-light-9);
+  // }
 }
 
 .device-list__refresh-btn {
@@ -314,6 +288,24 @@ onMounted(async () => {
   padding: 0;
   color: #606266;
   border-color: #dcdfe6;
+
+  .el-icon {
+    margin: 0;
+  }
+}
+
+.device-list__refresh-icon--spinning {
+  animation: device-list-refresh-spin 0.8s linear infinite;
+}
+
+@keyframes device-list-refresh-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .device-list__table {

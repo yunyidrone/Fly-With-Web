@@ -190,6 +190,52 @@ export function collectOpenMenuIds(tree, activePath, titleRoutePathMap) {
 }
 
 /**
+ * 根据当前激活路径解析面包屑：一级菜单 / 二级菜单
+ * @param {BackendMenuNode[]} tree
+ * @param {string} activePath
+ * @param {Map<string, string>} [titleRoutePathMap]
+ * @returns {string[]}
+ */
+export function resolveMenuBreadcrumb(tree, activePath, titleRoutePathMap) {
+  const target = resolveStaticRoutePath(activePath);
+  /** @type {{ node: BackendMenuNode, parent: BackendMenuNode | null, pathLen: number } | null} */
+  let best = null;
+
+  /** @param {BackendMenuNode[]} nodes @param {BackendMenuNode | null} parent */
+  function walk(nodes, parent) {
+    for (const node of nodes) {
+      const nodePath = resolveMenuPath(node, titleRoutePathMap);
+      const matched = target === nodePath || target.startsWith(`${nodePath}/`);
+      if (!matched) {
+        if (node.children?.length) walk(node.children, node);
+        continue;
+      }
+
+      const pathLen = nodePath.length;
+      const preferCurrent =
+        !best ||
+        pathLen > best.pathLen ||
+        (pathLen === best.pathLen && parent && !best.parent);
+
+      if (preferCurrent) {
+        best = { node, parent, pathLen };
+      }
+
+      if (node.children?.length) walk(node.children, node);
+    }
+  }
+
+  walk(tree, null);
+  if (!best) return [];
+
+  if (best.parent) {
+    return [best.parent.menuName, best.node.menuName].filter(Boolean);
+  }
+
+  return [best.node.menuName].filter(Boolean);
+}
+
+/**
  * @param {BackendMenuNode|null|undefined} node
  */
 export function hasMenuChildren(node) {

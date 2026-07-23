@@ -32,18 +32,7 @@
             @node-click="handleOrgSelect"
           >
             <template #default="{ data }">
-              <span class="user-list__tree-node">
-                <el-tag
-                  v-if="data.nature && orgNatureLabels[data.nature]"
-                  size="small"
-                  type="primary"
-                  effect="plain"
-                  class="user-list__tree-tag"
-                >
-                  {{ orgNatureLabels[data.nature] }}
-                </el-tag>
-                <span class="user-list__tree-name">{{ data.name }}</span>
-              </span>
+              <OrgTreeNodeLabel :data="data" />
             </template>
           </el-tree>
         </el-scrollbar>
@@ -233,9 +222,10 @@ import {
   updateUserStatus,
 } from "@backend/api/user.js";
 import { fetchOrgTree } from "@backend/api/org.js";
+import { useCurrentOrgSet } from "@backend/composables/useCurrentOrgSet.js";
+import OrgTreeNodeLabel from "@backend/components/OrgTreeNodeLabel.vue";
 import {
   DEFAULT_REGION_LABEL,
-  ORG_NATURE_LABELS,
   ROLE_LABELS,
   ROLES,
 } from "@backend/config/constants.js";
@@ -251,9 +241,9 @@ const ACCOUNT_ROLE_LABELS = {
 
 const router = useRouter();
 const authStore = useAuthStore();
+const { id, initOrgSet } = useCurrentOrgSet();
 const roleLabels = ROLE_LABELS;
 const accountRoleLabels = ACCOUNT_ROLE_LABELS;
-const orgNatureLabels = ORG_NATURE_LABELS;
 
 const orgTreeRef = ref();
 const orgTreeData = ref([]);
@@ -305,7 +295,7 @@ function filterOrgTree() {
 }
 
 function normalizeTreeNodes(nodes, parentName = DEFAULT_REGION_LABEL) {
-  return (nodes || []).map((node) => ({
+  return (Array.isArray(nodes) ? nodes : []).map((node) => ({
     ...node,
     parentName,
     children: normalizeTreeNodes(node.children, node.name),
@@ -327,7 +317,7 @@ function findFirstSelectableOrg(nodes) {
 async function loadOrgTree() {
   treeLoading.value = true;
   try {
-    const data = (await fetchOrgTree()) || [];
+    const data = (await fetchOrgTree(id.value)) || [];
     orgTreeData.value = normalizeTreeNodes(data);
   } finally {
     treeLoading.value = false;
@@ -465,19 +455,20 @@ watch(
 );
 
 onMounted(async () => {
-  // await loadOrgTree();
+  await initOrgSet();
+  await loadOrgTree();
 
-  // let initialOrg = null;
-  // if (!authStore.isSuperAdmin && authStore.orgId != null) {
-  //   initialOrg = findOrgById(orgTreeData.value, authStore.orgId);
-  // }
-  // if (!initialOrg) {
-  //   initialOrg = findFirstSelectableOrg(orgTreeData.value);
-  // }
-  // if (initialOrg) {
-  //   selectOrgNode(initialOrg);
-  // }
-  // await load();
+  let initialOrg = null;
+  if (!authStore.isSuperAdmin && authStore.orgId != null) {
+    initialOrg = findOrgById(orgTreeData.value, authStore.orgId);
+  }
+  if (!initialOrg) {
+    initialOrg = findFirstSelectableOrg(orgTreeData.value);
+  }
+  if (initialOrg) {
+    selectOrgNode(initialOrg);
+  }
+  await load();
 });
 
 function findOrgById(nodes, id) {
@@ -532,6 +523,12 @@ function findOrgById(nodes, id) {
 
 .user-list__org-search {
   width: 100%;
+
+  :deep(.el-input__wrapper) {
+    min-height: 36px;
+    height: 36px;
+    box-sizing: border-box;
+  }
 }
 
 .user-list__tree-scroll {
@@ -609,10 +606,17 @@ function findOrgById(nodes, id) {
 
 .user-list__keyword {
   width: 240px;
+
+  :deep(.el-input__wrapper) {
+    min-height: 36px;
+    height: 36px;
+    box-sizing: border-box;
+  }
 }
 
 .user-list__batch-delete {
   min-width: 108px;
+  height: 36px;
 }
 
 .user-list__table {
@@ -650,7 +654,7 @@ function findOrgById(nodes, id) {
   color: var(--el-color-primary);
 }
 
-:deep(.el-tree--highlight-current .el-tree-node.is-current > .el-tree-node__content .user-list__tree-name) {
+:deep(.el-tree--highlight-current .el-tree-node.is-current > .el-tree-node__content .org-tree-node__name) {
   color: var(--el-color-primary);
 }
 

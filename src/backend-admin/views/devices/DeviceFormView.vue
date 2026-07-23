@@ -34,7 +34,6 @@
           <el-input
             v-model="form.sn"
             placeholder="请输入无人机 SN 号"
-            :disabled="isEdit"
           />
         </el-form-item>
 

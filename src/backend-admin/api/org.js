@@ -1,25 +1,40 @@
-import { requestData } from "@backend/utils/request.js";
+import {
+  createOrg as createAuthOrg,  deleteOrg as deleteAuthOrg,
+  fetchOrgDetail as fetchAuthOrgDetail,
+  fetchOrgPage as fetchAuthOrgPage,
+  fetchOrgTree as fetchAuthOrgTree,
+  updateOrg as updateAuthOrg,
+} from "@/api/auth.js";
+import { normalizeOrgTree } from "@backend/utils/org-set.js";
 
+/**
+ * 单位管理分页列表（需传单位集合 id）
+ * @param {{ id?: string|number, current?: number, pageSize?: number, isAsc?: boolean }} params
+ */
 export function fetchOrgPage(params) {
-  return requestData("/org/pageQuery", { params }, "GET");
+  return fetchAuthOrgPage(params);
 }
 
 export function fetchOrgDetail(params) {
-  return requestData("/org/detail", { params }, "GET");
+  return fetchAuthOrgDetail(params);
 }
 
 export function createOrg(data) {
-  return requestData("/org/add", data, "POST");
+  return createAuthOrg(data);
 }
 
 export function updateOrg(data) {
-  return requestData("/org/update", data, "POST");
+  return updateAuthOrg(data);
 }
-
 export function deleteOrg(data) {
-  return requestData("/org/delete", data, "POST");
+  return deleteAuthOrg(data);
 }
-
-export function fetchOrgTree() {
-  return requestData("/org/tree", {}, "GET");
+/**
+ * 单位树（需传当前选择的单位集合 id）
+ * @param {string|number} id
+ * @param {import('@/utils/request.js').RequestOptions} [options]
+ */
+export async function fetchOrgTree(id, options = {}) {
+  const data = await fetchAuthOrgTree({ id }, options);
+  return normalizeOrgTree(data);
 }

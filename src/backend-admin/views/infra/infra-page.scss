@@ -60,6 +60,24 @@
   padding: 0;
   color: #606266;
   border-color: #dcdfe6;
+
+  .el-icon {
+    margin: 0;
+  }
+}
+
+.infra-page__refresh-icon--spinning {
+  animation: infra-page-refresh-spin 0.8s linear infinite;
+}
+
+@keyframes infra-page-refresh-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .infra-page__name-tag {

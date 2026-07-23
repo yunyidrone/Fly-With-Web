@@ -23,14 +23,13 @@
         class="org-form__body"
       >
         <el-form-item label="选择单位集" prop="region">
-          <el-select v-model="form.region" placeholder="请选择单位集" style="width: 100%">
-            <el-option
-              v-for="item in parentUnitOptions"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
+          <OrgSetCascader
+            v-model="form.region"
+            :options="orgSetCascaderOptions"
+            :loading="orgSetLoading"
+            placeholder="请选择单位集"
+            select-class="org-form__region-cascader"
+          />
         </el-form-item>
 
         <el-form-item label="单位名称" prop="name">
@@ -42,16 +41,27 @@
           />
         </el-form-item>
 
-        <el-form-item label="单位性质" prop="nature">
-          <el-radio-group v-model="form.nature" class="org-form__radio-group">
+        <el-form-item label="单位性质" prop="orgLabel">
+          <el-radio-group v-model="form.orgLabel" class="org-form__radio-group">
             <el-radio
-              v-for="(text, key) in orgNatureLabels"
-              :key="key"
-              :value="key"
+              v-for="item in orgLabelOptions"
+              :key="item.value"
+              :value="item.value"
             >
-              {{ text }}
+              {{ item.label }}
             </el-radio>
           </el-radio-group>
+        </el-form-item>
+
+        <el-form-item label="描述" prop="description">
+          <el-input
+            v-model="form.description"
+            type="textarea"
+            :rows="3"
+            maxlength="200"
+            show-word-limit
+            placeholder="请输入描述"
+          />
         </el-form-item>
 
         <!-- <el-form-item label="单位联系人" prop="contactName">
@@ -69,7 +79,7 @@
           </el-radio-group>
         </el-form-item> -->
 
-        <el-form-item label="辖区范围设置">
+        <el-form-item label="辖区范围设置" style="width: 80vw">
           <TiandituAreaMap
             v-model="form.jurisdictionArea"
             mode="draw"
@@ -86,21 +96,25 @@ import { ArrowLeft } from "@element-plus/icons-vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { createOrg, fetchOrgDetail, updateOrg } from "@backend/api/org.js";
+import { useOrgSetOptions } from "@backend/composables/useOrgSetOptions.js";
+import OrgSetCascader from "@backend/components/OrgSetCascader.vue";
 import { BACKEND_BASE } from "@backend/router/routes.js";
-import { buildOrgJurisdictionPayload, parseJurisdictionArea } from "@backend/utils/jurisdiction.js";
+import { buildOrgFormPayload, parseOrgFormDetail } from "@backend/utils/org-form.js";
 import TiandituAreaMap from "@/components/TiandituAreaMap.vue";
 import {
   DEFAULT_REGION,
-  DEFAULT_REGION_LABEL,
-  ORG_NATURE,
-  ORG_NATURE_LABELS,
+  ORG_LABEL,
+  ORG_LABEL_TEXT,
 } from "@backend/config/constants.js";
 
 const route = useRoute();
 const router = useRouter();
 
-const orgNatureLabels = ORG_NATURE_LABELS;
-const parentUnitOptions = [{ label: DEFAULT_REGION_LABEL, value: DEFAULT_REGION }];
+const orgLabelOptions = Object.entries(ORG_LABEL_TEXT)
+  .filter(([value]) => Number(value) !== ORG_LABEL.SET)
+  .map(([value, label]) => ({ value: Number(value), label }));
+const { loading: orgSetLoading, orgSetCascaderOptions, loadOrgSetOptions, syncRegionValue } =
+  useOrgSetOptions();
 
 const formRef = ref();
 const submitting = ref(false);
@@ -108,11 +122,12 @@ const isEdit = computed(() => Boolean(route.params.id));
 
 const form = reactive({
   region: DEFAULT_REGION,
+  parentId: null,
+  rootId: DEFAULT_REGION,
   name: "",
-  nature: ORG_NATURE.POLICE_STATION,
-  contactName: "",
-  contactPhone: "",
-  isGrassroots: true,
+  orgLabel: ORG_LABEL.POLICE_STATION,
+  status: 0,
+  description: "",
   jurisdictionArea: null,
 });
 
@@ -122,35 +137,24 @@ const rules = {
     { required: true, message: "请输入单位名称", trigger: "blur" },
     { max: 64, message: "单位名称最多 64 个字符", trigger: "blur" },
   ],
-  nature: [{ required: true, message: "请选择单位性质", trigger: "change" }],
-  isGrassroots: [{ required: true, message: "请选择是否为基层单位", trigger: "change" }],
+  orgLabel: [{ required: true, message: "请选择单位性质", trigger: "change" }],
 };
 
 async function loadDetail() {
   if (!isEdit.value) return;
   const data = await fetchOrgDetail({ id: route.params.id });
-  Object.assign(form, {
-    region: data.region || DEFAULT_REGION,
-    name: data.name,
-    nature: data.nature || ORG_NATURE.POLICE_STATION,
-    contactName: data.contactName || "",
-    contactPhone: data.contactPhone || "",
-    isGrassroots: data.isGrassroots !== false,
-    jurisdictionArea: parseJurisdictionArea(data),
-  });
+  Object.assign(form, parseOrgFormDetail(data));
+  syncRegionValue(toRef(form, "region"));
 }
 
 async function submit() {
   await formRef.value.validate();
   submitting.value = true;
   try {
-    const { jurisdictionArea: _ignored, ...formData } = form;
-    const payload = {
-      ...formData,
-      ...buildOrgJurisdictionPayload(form),
-    };
+    form.rootId = form.region;
+    const payload = buildOrgFormPayload(form, isEdit.value ? { id: route.params.id } : {});
     if (isEdit.value) {
-      await updateOrg({ id: route.params.id, ...payload });
+      await updateOrg(payload);
       ElMessage.success("保存成功");
     } else {
       await createOrg(payload);
@@ -166,7 +170,13 @@ function goBack() {
   router.push(`${BACKEND_BASE}/orgs`);
 }
 
-onMounted(loadDetail);
+onMounted(async () => {
+  await loadOrgSetOptions();
+  if (!isEdit.value) {
+    syncRegionValue(toRef(form, "region"));
+  }
+  await loadDetail();
+});
 </script>
 
 <style scoped lang="scss">
@@ -218,6 +228,10 @@ onMounted(loadDetail);
   max-width: 720px;
 }
 
+.org-form__region-cascader {
+  width: 100%;
+}
+
 .org-form__radio-group :deep(.el-radio) {
   margin-right: 24px;
 }
@@ -233,8 +247,9 @@ onMounted(loadDetail);
 }
 
 .org-form__jurisdiction-map {
-  width: 100%;
-  height: 360px;
+  width: 50vw;
+  height: calc(100vh - 510px);
+  min-height: 300px;
   border: 1px solid #dcdfe6;
   border-radius: 4px;
   overflow: hidden;

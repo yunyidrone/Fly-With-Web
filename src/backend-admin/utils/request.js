@@ -4,6 +4,7 @@ import { ElMessage } from "element-plus";
 import appRouter from "@/router";
 import { networkConfig, appConfig } from "@backend/config/network.js";
 import { getToken, clearToken } from "@/utils/auth-token.js";
+import { useAuthStore } from "@/stores/auth.js";
 
 const { baseURL, contentType, requestTimeout, successCode, throttleTime } = networkConfig;
 
@@ -88,15 +89,15 @@ client.interceptors.request.use(
     const now = Date.now();
     const lastTime = lastRequestTime.get(requestKey);
 
-    if (lastTime && now - lastTime < throttleTime) {
-      const controller = new AbortController();
-      controller.abort();
-      config.signal = controller.signal;
-      return config;
-    }
+    // 仅对写操作做短节流；GET 列表查询/刷新不受限
+    if (method !== "get") {
+      if (lastTime && now - lastTime < throttleTime) {
+        return Promise.reject(new Axios.CanceledError("REQUEST_THROTTLED"));
+      }
 
-    lastRequestTime.set(requestKey, now);
-    setTimeout(() => lastRequestTime.delete(requestKey), throttleTime);
+      lastRequestTime.set(requestKey, now);
+      setTimeout(() => lastRequestTime.delete(requestKey), throttleTime);
+    }
 
     return config;
   },
@@ -122,6 +123,11 @@ client.interceptors.response.use(
         return payload;
       }
       clearToken();
+      try {
+        useAuthStore().resetAuth();
+      } catch {
+        // pinia 未初始化时忽略
+      }
       const loginPath = "/login";
       if (appRouter.currentRoute.value.path !== loginPath) {
         appRouter.push({ path: loginPath, query: { redirect: appRouter.currentRoute.value.fullPath } });
@@ -138,7 +144,7 @@ client.interceptors.response.use(
   },
   (error) => {
     if (Axios.isCancel(error) || error.name === "CanceledError") {
-      return new Promise(() => {});
+      return Promise.reject(error);
     }
     const bodyMsg = error.response?.data?.msg || error.response?.data?.message;
     const errorMessage = bodyMsg || error.message || "网络请求错误";

@@ -8,8 +8,7 @@
     "prod": "vite --mode production",
     "build:dev": "vite build --mode development",
     "build:prod": "vite build --mode production",
-    "preview": "vite preview",
-    "migrate:backend-admin": "node scripts/migrate-backend-admin.mjs"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@remixicon/vue": "^4.8.0",

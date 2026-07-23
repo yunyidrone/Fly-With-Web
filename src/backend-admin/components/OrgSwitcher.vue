@@ -17,8 +17,9 @@
 </template>
 
 <script setup>
-import { fetchOrgPage } from "@backend/api/org.js";
-import { unwrapApiList } from "@backend/utils/request.js";
+import { fetchOrgTree } from "@backend/api/org.js";
+import { flattenOrgTree } from "@backend/utils/org-set.js";
+import { DEFAULT_REGION } from "@backend/config/constants.js";
 import { useAuthStore } from "@/stores/auth.js";
 
 const authStore = useAuthStore();
@@ -26,8 +27,8 @@ const orgOptions = ref([]);
 
 async function loadOrgs() {
   if (!authStore.isSuperAdmin) return;
-  const data = await fetchOrgPage({ current: 1, pageSize: 100 });
-  orgOptions.value = unwrapApiList(data);
+  const tree = (await fetchOrgTree(DEFAULT_REGION)) || [];
+  orgOptions.value = flattenOrgTree(tree);
 }
 
 function onChange(value) {

@@ -7,7 +7,16 @@ export { normalizeAreaData, serializeAreaData };
  * @param {Record<string, any> | null | undefined} raw
  */
 export function parseJurisdictionArea(raw) {
-  return normalizeAreaData(raw);
+  if (!raw) return null;
+
+  const fromRoiArea = normalizeAreaData(raw.roiArea);
+  if (fromRoiArea) return fromRoiArea;
+
+  return normalizeAreaData({
+    ...raw,
+    jurisdictionArea: raw.roiArea ?? raw.jurisdictionArea,
+    jurisdictionRing: raw.roiRing ?? raw.jurisdictionRing,
+  });
 }
 
 /**
@@ -15,9 +24,9 @@ export function parseJurisdictionArea(raw) {
  * @param {Record<string, any>} form
  */
 export function buildOrgJurisdictionPayload(form) {
-  const jurisdictionArea = serializeAreaData(form.jurisdictionArea);
+  const roiArea = serializeAreaData(form.jurisdictionArea);
   return {
-    jurisdictionArea,
-    jurisdictionRing: jurisdictionArea?.ring ?? null,
+    roiArea,
+    roiRing: roiArea?.ring ?? null,
   };
 }

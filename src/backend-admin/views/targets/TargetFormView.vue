@@ -23,19 +23,19 @@
         class="target-form__body"
       >
         <el-form-item label="目标设备名称" prop="name">
-          <el-input v-model="form.name" placeholder="请输入目标设备名�? />
+          <el-input v-model="form.name" placeholder="请输入目标设备名称" />
         </el-form-item>
 
-        <el-form-item label="输入设备SN�? prop="sn">
+        <el-form-item label="输入设备SN号" prop="sn">
           <el-input
             v-model="form.sn"
-            placeholder="请输入设�?SN �?
+            placeholder="请输入设备SN号"
             :disabled="isEdit"
           />
         </el-form-item>
 
         <el-form-item label="选择类型" prop="type">
-          <el-select v-model="form.type" placeholder="警员/警车/机器�? style="width: 100%">
+          <el-select v-model="form.type" placeholder="警员/警车/机器人" style="width: 100%">
             <el-option
               v-for="item in targetTypeOptions"
               :key="item.value"
@@ -46,14 +46,13 @@
         </el-form-item>
 
         <el-form-item label="选择优先关联单位" prop="orgId">
-          <el-select v-model="form.orgId" placeholder="请选择单位" style="width: 100%">
-            <el-option
-              v-for="org in orgOptions"
-              :key="org.id"
-              :label="org.name"
-              :value="org.id"
-            />
-          </el-select>
+          <OrgCascader
+            v-model="form.orgId"
+            :options="orgTreeOptions"
+            :loading="orgCascaderLoading"
+            :disabled="!authStore.isSuperAdmin && cascaderDisabled"
+            select-class="target-form__org-cascader"
+          />
         </el-form-item>
       </el-form>
     </div>
@@ -66,7 +65,8 @@ import { useRoute, useRouter } from "vue-router";
 import { ArrowLeft } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { createTarget, fetchTargetDetail, updateTarget } from "@backend/api/target.js";
-import { fetchOrgTree } from "@backend/api/org.js";
+import OrgCascader from "@backend/components/OrgCascader.vue";
+import { useOrgCascader } from "@backend/composables/useOrgCascader.js";
 import { TARGET_TYPE, TARGET_TYPE_OPTIONS } from "@backend/config/constants.js";
 import { INFRA_BASE } from "@backend/router/routes.js";
 import { useAuthStore } from "@/stores/auth.js";
@@ -75,11 +75,16 @@ import { buildTargetPayload } from "@backend/utils/target.js";
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const {
+  orgTreeOptions,
+  loading: orgCascaderLoading,
+  cascaderDisabled,
+  initOrgCascader,
+} = useOrgCascader({ autoSelectFirst: false });
 
 const targetTypeOptions = TARGET_TYPE_OPTIONS;
 const formRef = ref();
 const submitting = ref(false);
-const orgOptions = ref([]);
 const isEdit = computed(() => Boolean(route.params.id) && route.params.id !== "new");
 
 const initialType = Number(route.query.type);
@@ -91,45 +96,23 @@ const form = reactive({
 });
 
 const rules = {
-  name: [{ required: true, message: "请输入目标设备名�?, trigger: "blur" }],
-  sn: [{ required: true, message: "请输入设�?SN �?, trigger: "blur" }],
+  name: [{ required: true, message: "请输入目标设备名称", trigger: "blur" }],
+  sn: [{ required: true, message: "请输入设备SN号", trigger: "blur" }],
   type: [{ required: true, message: "请选择类型", trigger: "change" }],
   orgId: [{ required: true, message: "请选择优先关联单位", trigger: "change" }],
 };
 
-function flattenOrgTree(nodes, result = []) {
-  for (const node of nodes || []) {
-    if (node.id != null) result.push({ id: node.id, name: node.name });
-    if (node.children?.length) flattenOrgTree(node.children, result);
-  }
-  return result;
-}
-
 async function loadOrgOptions() {
-  try {
-    const tree = (await fetchOrgTree()) || [];
-    const flat = flattenOrgTree(tree);
-    orgOptions.value = flat.length ? flat : [{ id: 1, name: "派出所1" }];
-  } catch {
-    orgOptions.value = [{ id: 1, name: "派出所1" }];
-  }
+  const queryOrgId = route.query.orgId;
+  await initOrgCascader(authStore, queryOrgId);
 
   if (!authStore.isSuperAdmin && authStore.orgId != null) {
-    if (!orgOptions.value.some((item) => String(item.id) === String(authStore.orgId))) {
-      orgOptions.value.unshift({
-        id: authStore.orgId,
-        name: authStore.user?.orgName || "当前单位",
-      });
-    }
     if (form.orgId == null) form.orgId = authStore.orgId;
     return;
   }
 
-  const queryOrgId = route.query.orgId;
   if (queryOrgId != null && queryOrgId !== "") {
     form.orgId = Number(queryOrgId) || queryOrgId;
-  } else if (form.orgId == null) {
-    form.orgId = orgOptions.value[0]?.id ?? null;
   }
 }
 
@@ -220,6 +203,10 @@ onMounted(async () => {
 
 .target-form__body {
   max-width: 720px;
+}
+
+.target-form__org-cascader {
+  width: 100%;
 }
 
 .target-form__body :deep(.el-input__wrapper),

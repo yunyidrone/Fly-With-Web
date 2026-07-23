@@ -61,6 +61,14 @@
   font-size: var(--el-font-size-base);
 }
 
+.el-tag.el-tag--small {
+  font-size: var(--el-font-size-extra-small);
+}
+
+.el-tag.el-tag--large {
+  font-size: var(--el-font-size-small);
+}
+
 .el-table th.el-table__cell .cell {
   font-size: var(--el-font-size-small);
 }

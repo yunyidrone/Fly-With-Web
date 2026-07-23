@@ -156,25 +156,17 @@ client.interceptors.request.use(
     const requestKey = `${config.method}_${config.url}_${JSON.stringify(config.params || {})}_${JSON.stringify(config.data || {})}`;
     const now = Date.now();
     const lastTime = lastRequestTime.get(requestKey);
+    const skipThrottle = method === "get" || UNLIMIT_THROTTLE_API.includes(config.url);
 
-    // 请求节流
-    if (!UNLIMIT_THROTTLE_API.includes(config.url)) {
-      // 如果在1秒内，取消当前请求
+    // 仅对写操作做短节流，避免误触重复提交；GET 查询/刷新不受限
+    if (!skipThrottle) {
       if (lastTime && now - lastTime < throttleTime) {
-        const source = Axios.CancelToken.source();
-        source.cancel(`请求${config.url}过于频繁，请${throttleTime}ms后再试`);
-        config.cancelToken = source.token;
-        return config;
+        return Promise.reject(new Axios.CanceledError("REQUEST_THROTTLED"));
       }
+
+      lastRequestTime.set(requestKey, now);
+      setTimeout(() => lastRequestTime.delete(requestKey), throttleTime);
     }
-
-    // 更新时间戳
-    lastRequestTime.set(requestKey, now);
-
-    // 设置清理定时器
-    setTimeout(() => {
-      lastRequestTime.delete(requestKey);
-    }, throttleTime);
 
     return config;
   },
@@ -225,8 +217,8 @@ client.interceptors.response.use(
     return response.data;
   },
   (error) => {
-    if (Axios.isCancel(error)) {
-      return new Promise(() => {});
+    if (Axios.isCancel(error) || error.name === "CanceledError") {
+      return Promise.reject(error);
     }
     // 统一处理 HTTP 错误
     const bodyMsg = error.response?.data?.msg || error.response?.data?.message;

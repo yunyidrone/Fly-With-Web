@@ -16,10 +16,10 @@
           <el-form-item label="请输入原本的密码" prop="oldPassword">
             <el-input v-model="form.oldPassword" type="password" show-password />
           </el-form-item>
-          <el-form-item label="请输入新的密�? prop="newPassword">
+          <el-form-item label="请输入新的密码" prop="newPassword">
             <el-input v-model="form.newPassword" type="password" show-password />
           </el-form-item>
-          <el-form-item label="确认新密�? prop="confirmPassword">
+          <el-form-item label="确认新密码" prop="confirmPassword">
             <el-input v-model="form.confirmPassword" type="password" show-password />
           </el-form-item>
           <el-form-item>
@@ -52,7 +52,7 @@ const form = reactive({
 
 const validateConfirm = (_rule, value, callback) => {
   if (value !== form.newPassword) {
-    callback(new Error("两次输入的新密码不一�?));
+    callback(new Error("两次输入的新密码不一致"));
     return;
   }
   callback();
@@ -62,7 +62,7 @@ const rules = {
   oldPassword: [{ required: true, message: "请输入原密码", trigger: "blur" }],
   newPassword: [
     { required: true, message: "请输入新密码", trigger: "blur" },
-    { min: 6, message: "密码至少 6 �?, trigger: "blur" },
+    { min: 6, message: "密码至少 6 位", trigger: "blur" },
   ],
   confirmPassword: [
     { required: true, message: "请再次输入新密码", trigger: "blur" },

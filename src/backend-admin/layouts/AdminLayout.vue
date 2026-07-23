@@ -35,8 +35,9 @@
             </el-icon>
           </el-button>
           <el-breadcrumb separator="/">
-            <el-breadcrumb-item>{{ appTitle }}</el-breadcrumb-item>
-            <el-breadcrumb-item v-if="currentTitle">{{ currentTitle }}</el-breadcrumb-item>
+            <el-breadcrumb-item v-for="item in breadcrumbItems" :key="item">
+              {{ item }}
+            </el-breadcrumb-item>
           </el-breadcrumb>
         </div>
 
@@ -79,7 +80,7 @@ import { useAppStore } from "@backend/stores/app.js";
 import { useAuthStore } from "@/stores/auth.js";
 import { useMenuStore } from "@backend/stores/menu.js";
 import AdminMenuTree from "@backend/components/AdminMenuTree.vue";
-import { buildMenuTitleRoutePathMap, collectOpenMenuIds } from "@backend/utils/menu.js";
+import { buildMenuTitleRoutePathMap, collectOpenMenuIds, resolveMenuBreadcrumb } from "@backend/utils/menu.js";
 import { appConfig } from "@backend/config/network.js";
 import logoImage from "@/assets/images/logo.png";
 
@@ -109,7 +110,16 @@ const activeMenu = computed(
   () => route.meta?.activeMenu || route.path,
 );
 
-const currentTitle = computed(() => route.meta?.title || "");
+const breadcrumbItems = computed(() => {
+  const items = resolveMenuBreadcrumb(
+    menuStore.tree,
+    activeMenu.value,
+    titleRoutePathMap.value,
+  );
+  if (items.length) return items;
+  const title = String(route.meta?.title || "").trim();
+  return title ? [title] : [];
+});
 
 const avatarText = computed(() =>
   (authStore.displayName || "U").slice(0, 1).toUpperCase(),

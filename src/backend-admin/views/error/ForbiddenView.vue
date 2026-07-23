@@ -1,9 +1,9 @@
 <template>
-  <div class="forbidden-page">
+  <div class="forbidden-page backend-admin-root">
     <el-result icon="warning" title="403" sub-title="您没有权限访问该页面">
       <template #extra>
         <el-button type="primary" @click="goHome">返回首页</el-button>
-        <el-button @click="goLogin">重新登录</el-button>
+        <el-button plain @click="goLogin">重新登录</el-button>
       </template>
     </el-result>
   </div>
@@ -29,11 +29,10 @@ async function goLogin() {
 
 <style scoped lang="scss">
 .forbidden-page {
-  min-height: calc(100vh - #{$header-height} - #{$content-padding * 2});
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   background: #fff;
-  border-radius: 4px;
 }
 </style>

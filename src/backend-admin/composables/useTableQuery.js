@@ -17,17 +17,22 @@ export function useTableQuery(fetcher, defaultQuery = {}) {
   });
 
   let loadSeq = 0;
+  let pendingLoads = 0;
 
   async function load() {
     const seq = ++loadSeq;
+    pendingLoads += 1;
     loading.value = true;
     try {
       const data = await fetcher({ ...query });
       if (seq !== loadSeq) return;
       records.value = unwrapApiList(data);
       total.value = Number(data?.total ?? records.value.length) || 0;
+    } catch {
+      // 忽略被节流、取消或已过期的请求错误
     } finally {
-      if (seq === loadSeq) {
+      pendingLoads = Math.max(0, pendingLoads - 1);
+      if (pendingLoads === 0) {
         loading.value = false;
       }
     }

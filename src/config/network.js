@@ -6,15 +6,7 @@
  * @Description: 网络配置（axios baseURL：优先环境变量直连后端；未配置时为 /api）
  */
 
-/** @returns {string} */
-function resolveApiBaseURL() {
-  // 本地 dev server 走 Vite 代理，避免跨域
-  if (import.meta.env.DEV) return "/api/fly";
-  const raw = import.meta.env.VITE_API_BASE_URL?.trim?.();
-  if (!raw) return "/api";
-  if (/^https?:\/\//i.test(raw)) return raw;
-  return `http://${raw}`;
-}
+import { resolveApiBaseURL } from "@/config/resolve-api-base-url.js";
 
 /** 账号权限服务前缀：/api/auth（与业务 /api/fly 分离） */
 function resolveAuthBaseURL() {
@@ -24,14 +16,14 @@ function resolveAuthBaseURL() {
     return `http://${raw.replace(/\/$/, "")}`;
   }
   if (import.meta.env.DEV) return "/api/auth";
-  const apiBase = resolveApiBaseURL();
+  const apiBase = resolveApiBaseURL({ prodDefault: "/api" });
   if (/\/api\/fly\/?$/i.test(apiBase)) return apiBase.replace(/\/api\/fly\/?$/i, "/api/auth");
   if (/\/api\/?$/i.test(apiBase)) return `${apiBase.replace(/\/$/, "")}/auth`;
   return "/api/auth";
 }
 
 export const networkConfig = {
-  baseURL: resolveApiBaseURL(),
+  baseURL: resolveApiBaseURL({ prodDefault: "/api" }),
   authBaseURL: resolveAuthBaseURL(),
   loginAesSecret: import.meta.env.VITE_LOGIN_AES_SECRET || "hyG/mAukdHOEBWPH3SFNfg==",
   loginAesKeyFormat: import.meta.env.VITE_LOGIN_AES_KEY_FORMAT || "base64",
@@ -44,9 +36,9 @@ export const networkConfig = {
   contentType: "application/json;charset=utf-8",
   requestTimeout: 300000, // 最长请求时间
   successCode: 2000, // 正常code
-  unauthorizedCode: 4010,
+  unauthorizedCode: 5001,
   noPermissionCode: -1, // 无权限code
-  throttleTime: 1000, // 节流时长
+  throttleTime: 300, // 写操作防重复提交（GET 查询不节流）
   useMock:
     import.meta.env.VITE_USE_MOCK === "true" || import.meta.env.VITE_BACKEND_USE_MOCK === "true",
 };

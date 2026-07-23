@@ -76,7 +76,8 @@ function tryParseRingList(raw) {
     ?? raw?.fence
     ?? raw?.geoFence
     ?? raw?.ring
-    ?? raw?.jurisdictionRing;
+    ?? raw?.jurisdictionRing
+    ?? raw?.roiRing;
 
   if (typeof value === "string") {
     try {
@@ -136,7 +137,7 @@ export function normalizeAreaData(raw) {
     };
   }
 
-  const nested = raw.jurisdictionArea ?? raw.areaData ?? raw.area;
+  const nested = raw.jurisdictionArea ?? raw.roiArea ?? raw.areaData ?? raw.area;
   if (nested && nested !== raw) {
     return normalizeAreaData(nested);
   }

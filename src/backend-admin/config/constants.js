@@ -84,6 +84,25 @@ export const ORG_NATURE_LABELS = {
   [ORG_NATURE.OTHER]: "其他",
 };
 
+/** 单位性质 orgLabel：1单位集 2公安局 3派出所 4事业单位 5临时单位 6其他 */
+export const ORG_LABEL = {
+  SET: 1,
+  PUBLIC_SECURITY_BUREAU: 2,
+  POLICE_STATION: 3,
+  INSTITUTION: 4,
+  TEMPORARY: 5,
+  OTHER: 6,
+};
+
+export const ORG_LABEL_TEXT = {
+  [ORG_LABEL.SET]: "单位集",
+  [ORG_LABEL.PUBLIC_SECURITY_BUREAU]: "公安局",
+  [ORG_LABEL.POLICE_STATION]: "派出所",
+  [ORG_LABEL.INSTITUTION]: "事业单位",
+  [ORG_LABEL.TEMPORARY]: "临时单位",
+  [ORG_LABEL.OTHER]: "其他",
+};
+
 /** 本期固定区域 */
 export const DEFAULT_REGION = "huangyan";
 export const DEFAULT_REGION_LABEL = "黄岩区管理";

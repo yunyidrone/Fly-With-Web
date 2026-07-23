@@ -11,7 +11,7 @@ import { setupBackendRouterGuards } from "@backend/router/guards.js";
 import { setupFrontendRouterGuards } from "./guards.js";
 
 import HomeView from "../views/home-view/index.vue";
-import LoginView from "../views/login/index.vue";
+const LoginView = () => import("../views/login/index.vue");
 
 const routes = [
   { path: "/", component: HomeView },

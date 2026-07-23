@@ -63,13 +63,21 @@ export function useTiandituAreaMap() {
   const loading = ref(true);
   const currentTool = ref("rectangle");
   const drawnResult = ref(null);
+  const polygonPointCount = ref(0);
+  const isPolygonDrawing = ref(false);
   const map = shallowRef(null);
 
   let mapContainerId = "";
   let currentDrawTool = null;
   let editPolygon = null;
   let editHandles = [];
+  let drawPointMarkers = [];
+  let drawPolyline = null;
+  let drawPolygon = null;
   let displayPolygon = null;
+  let polygonClickHandler = null;
+  let draftMarkerDragging = false;
+  let draftMarkerDragSuppressUntil = 0;
   let _ignoreHandleDrag = false;
 
   function clearEditOverlays() {
@@ -88,6 +96,30 @@ export function useTiandituAreaMap() {
       try { map.value?.removeOverLay?.(displayPolygon); } catch (_) { /* ignore */ }
       displayPolygon = null;
     }
+  }
+
+  function clearDrawDraftOverlays() {
+    drawPointMarkers.forEach((marker) => {
+      try { map.value?.removeOverLay?.(marker); } catch (_) { /* ignore */ }
+    });
+    drawPointMarkers = [];
+
+    if (drawPolyline) {
+      try { map.value?.removeOverLay?.(drawPolyline); } catch (_) { /* ignore */ }
+      drawPolyline = null;
+    }
+    if (drawPolygon) {
+      try { map.value?.removeOverLay?.(drawPolygon); } catch (_) { /* ignore */ }
+      drawPolygon = null;
+    }
+  }
+
+  function removePolygonClickListener() {
+    if (map.value && polygonClickHandler) {
+      try { map.value.removeEventListener("click", polygonClickHandler); } catch (_) { /* ignore */ }
+    }
+    polygonClickHandler = null;
+    isPolygonDrawing.value = false;
   }
 
   function fitMapToArea(area) {
@@ -155,6 +187,28 @@ export function useTiandituAreaMap() {
       center: { lng: center.lng, lat: center.lat },
       radius,
       ring,
+    };
+  }
+
+  function updatePolygonFromPoints(points) {
+    if (!editPolygon || !Array.isArray(points) || points.length < 3) return;
+    const lngLats = points.map((p) => new T.LngLat(p.lng, p.lat));
+    editPolygon.setLngLats(lngLats);
+
+    const ring = [];
+    points.forEach((p) => {
+      ring.push(p.lng, p.lat);
+    });
+    ring.push(points[0].lng, points[0].lat);
+
+    drawnResult.value = {
+      type: "polygon",
+      points: points.map((p) => ({ ...p })),
+      ring,
+      center: {
+        lng: points.reduce((sum, p) => sum + p.lng, 0) / points.length,
+        lat: points.reduce((sum, p) => sum + p.lat, 0) / points.length,
+      },
     };
   }
 
@@ -231,6 +285,39 @@ export function useTiandituAreaMap() {
     updateCircleFromCenterRadius(center, radius);
   }
 
+  function enterPolygonEdit(points) {
+    clearEditOverlays();
+    clearDisplayOverlay();
+
+    if (!Array.isArray(points) || points.length < 3) return;
+
+    editPolygon = new T.Polygon(
+      points.map((p) => new T.LngLat(p.lng, p.lat)),
+      AREA_STYLE,
+    );
+    map.value.addOverLay(editPolygon);
+
+    const handleIcon = makeHandleIcon("#4965c9");
+    points.forEach((pt, idx) => {
+      const marker = new T.Marker(new T.LngLat(pt.lng, pt.lat), {
+        icon: handleIcon,
+        draggable: true,
+      });
+      marker.addEventListener("drag", (e) => {
+        if (_ignoreHandleDrag) return;
+        points[idx] = { lng: e.lnglat.lng, lat: e.lnglat.lat };
+        updatePolygonFromPoints(points);
+      });
+      marker.addEventListener("dragend", () => {
+        updatePolygonFromPoints(points);
+      });
+      map.value.addOverLay(marker);
+      editHandles.push(marker);
+    });
+
+    updatePolygonFromPoints(points);
+  }
+
   function startEditingExistingArea(area) {
     if (!map.value || !area) return;
     const normalized = normalizeAreaData(area);
@@ -252,15 +339,121 @@ export function useTiandituAreaMap() {
     }
 
     if (isValidRing(normalized.ring)) {
-      showArea(normalized);
+      const points = [];
+      for (let i = 0; i < normalized.ring.length - 2; i += 2) {
+        points.push({ lng: normalized.ring[i], lat: normalized.ring[i + 1] });
+      }
+      if (points.length >= 3) {
+        currentTool.value = "polygon";
+        enterPolygonEdit(points);
+      } else {
+        showArea(normalized);
+      }
     }
   }
 
   function closeDrawTool() {
+    removePolygonClickListener();
+    clearDrawDraftOverlays();
+    polygonPointCount.value = 0;
+    draftMarkerDragging = false;
+    draftMarkerDragSuppressUntil = 0;
     if (currentDrawTool) {
       try { currentDrawTool.close(); } catch (_) { /* ignore */ }
       currentDrawTool = null;
     }
+  }
+
+  function updatePolygonDraftGeometry(points) {
+    if (!Array.isArray(points) || !points.length) {
+      if (drawPolyline) {
+        try { map.value?.removeOverLay?.(drawPolyline); } catch (_) { /* ignore */ }
+        drawPolyline = null;
+      }
+      if (drawPolygon) {
+        try { map.value?.removeOverLay?.(drawPolygon); } catch (_) { /* ignore */ }
+        drawPolygon = null;
+      }
+      drawnResult.value = null;
+      return;
+    }
+
+    const lngLats = points.map((pt) => new T.LngLat(pt.lng, pt.lat));
+
+    if (points.length >= 2) {
+      if (!drawPolyline) {
+        drawPolyline = new T.Polyline(lngLats, {
+          color: DRAW_STYLE.color,
+          weight: 2,
+          opacity: 0.85,
+        });
+        map.value.addOverLay(drawPolyline);
+      } else {
+        drawPolyline.setLngLats(lngLats);
+      }
+    } else if (drawPolyline) {
+      try { map.value?.removeOverLay?.(drawPolyline); } catch (_) { /* ignore */ }
+      drawPolyline = null;
+    }
+
+    if (points.length >= 3) {
+      if (!drawPolygon) {
+        drawPolygon = new T.Polygon(lngLats, AREA_STYLE);
+        map.value.addOverLay(drawPolygon);
+      } else {
+        drawPolygon.setLngLats(lngLats);
+      }
+
+      const ring = [];
+      points.forEach((p) => ring.push(p.lng, p.lat));
+      ring.push(points[0].lng, points[0].lat);
+      drawnResult.value = {
+        type: "polygon",
+        points: points.map((p) => ({ ...p })),
+        ring,
+        center: {
+          lng: points.reduce((sum, p) => sum + p.lng, 0) / points.length,
+          lat: points.reduce((sum, p) => sum + p.lat, 0) / points.length,
+        },
+      };
+    } else {
+      if (drawPolygon) {
+        try { map.value?.removeOverLay?.(drawPolygon); } catch (_) { /* ignore */ }
+        drawPolygon = null;
+      }
+      drawnResult.value = null;
+    }
+  }
+
+  function renderPolygonDraft(points) {
+    clearDrawDraftOverlays();
+    if (!Array.isArray(points) || !points.length) return;
+
+    const handleIcon = makeHandleIcon("#4965c9");
+    points.forEach((pt, idx) => {
+      const marker = new T.Marker(new T.LngLat(pt.lng, pt.lat), {
+        icon: handleIcon,
+        draggable: true,
+      });
+      marker.addEventListener("dragstart", () => {
+        draftMarkerDragging = true;
+      });
+      marker.addEventListener("drag", (e) => {
+        points[idx] = { lng: e.lnglat.lng, lat: e.lnglat.lat };
+        updatePolygonDraftGeometry(points);
+      });
+      marker.addEventListener("dragend", (e) => {
+        points[idx] = { lng: e.lnglat.lng, lat: e.lnglat.lat };
+        updatePolygonDraftGeometry(points);
+        draftMarkerDragging = false;
+        // 抑制拖拽结束后紧跟的地图 click，避免误新增点
+        draftMarkerDragSuppressUntil = Date.now() + 250;
+      });
+      map.value.addOverLay(marker);
+      drawPointMarkers.push(marker);
+    });
+
+    updatePolygonDraftGeometry(points);
   }
 
   function startDrawing(mode) {
@@ -311,6 +504,27 @@ export function useTiandituAreaMap() {
         enterCircleEdit(center, radius);
       });
       currentDrawTool = tool;
+      return;
+    }
+
+    if (mode === "polygon") {
+      const points = [];
+      isPolygonDrawing.value = true;
+      polygonPointCount.value = 0;
+      drawnResult.value = null;
+
+      polygonClickHandler = (e) => {
+        if (draftMarkerDragging || Date.now() < draftMarkerDragSuppressUntil) return;
+        const lng = Number(e?.lnglat?.lng);
+        const lat = Number(e?.lnglat?.lat);
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+
+        points.push({ lng, lat });
+        polygonPointCount.value = points.length;
+        renderPolygonDraft(points);
+      };
+
+      map.value.addEventListener("click", polygonClickHandler);
     }
   }
 
@@ -321,6 +535,19 @@ export function useTiandituAreaMap() {
     }
     currentTool.value = mode;
     startDrawing(mode);
+  }
+
+  function clearArea() {
+    closeDrawTool();
+    clearEditOverlays();
+    clearDisplayOverlay();
+    try { map.value?.clearOverLays?.(); } catch (_) { /* ignore */ }
+    drawnResult.value = null;
+    polygonPointCount.value = 0;
+
+    if (currentTool.value) {
+      startDrawing(currentTool.value);
+    }
   }
 
   async function initMap(containerId, { center, zoom = 14 } = {}) {
@@ -379,6 +606,8 @@ export function useTiandituAreaMap() {
       if (el) el.innerHTML = "";
     }
     drawnResult.value = null;
+    polygonPointCount.value = 0;
+    isPolygonDrawing.value = false;
     loading.value = true;
   }
 
@@ -397,6 +626,9 @@ export function useTiandituAreaMap() {
     showArea,
     fitMapToArea,
     startEditingExistingArea,
+    clearArea,
+    polygonPointCount,
+    isPolygonDrawing,
     cleanup,
     createContainerId,
     getArea: () => (drawnResult.value ? { ...drawnResult.value } : null),

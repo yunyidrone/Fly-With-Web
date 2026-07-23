@@ -1,28 +1,13 @@
-/** @returns {string} */
-function resolveApiBaseURL() {
-  // 开发环境统一走 Vite 代理（/api/fly → proxyTarget），避免跨域
-  if (import.meta.env.DEV) return "/api/fly";
-
-  const backendRaw = import.meta.env.VITE_BACKEND_API_BASE_URL?.trim?.();
-  if (backendRaw) {
-    if (/^https?:\/\//i.test(backendRaw)) return backendRaw;
-    return `http://${backendRaw}`;
-  }
-
-  const raw = import.meta.env.VITE_API_BASE_URL?.trim?.();
-  if (!raw) return "/api/fly";
-  if (/^https?:\/\//i.test(raw)) return raw;
-  return `http://${raw}`;
-}
+import { resolveApiBaseURL } from "@/config/resolve-api-base-url.js";
 
 export const networkConfig = {
-  baseURL: resolveApiBaseURL(),
+  baseURL: resolveApiBaseURL({ preferBackendEnv: true }),
   contentType: "application/json;charset=utf-8",
   requestTimeout: 60000,
   successCode: 2000,
-  unauthorizedCode: 4010,
+  unauthorizedCode: 5001,
   noPermissionCode: 4030,
-  throttleTime: 1000,
+  throttleTime: 300,
 };
 
 export const appConfig = {

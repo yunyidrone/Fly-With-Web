@@ -60,6 +60,19 @@ export default defineConfig(({ mode, command }) => {
     optimizeDeps: {
       exclude: ["@zip.js/zip.js"],
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            "vue-vendor": ["vue", "vue-router", "pinia", "pinia-plugin-persistedstate"],
+            "element-plus": ["element-plus", "@element-plus/icons-vue"],
+            "map-maplibre": ["maplibre-gl"],
+            "mqtt": ["mqtt"],
+            "utils": ["axios", "axios-retry", "lodash-es", "crypto-js"],
+          },
+        },
+      },
+    },
     server: {
       host: "0.0.0.0",
       port: 5177,

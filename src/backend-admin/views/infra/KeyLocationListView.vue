@@ -11,8 +11,10 @@
           >
             新建地点
           </el-button>
-          <el-button class="infra-page__refresh-btn" @click="load">
-            <el-icon :size="16"><Refresh /></el-icon>
+          <el-button class="infra-page__refresh-btn" :disabled="loading" @click="load">
+            <el-icon :size="16" :class="{ 'infra-page__refresh-icon--spinning': loading }">
+              <Refresh />
+            </el-icon>
           </el-button>
         </div>
       </div>

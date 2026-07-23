@@ -3,7 +3,14 @@
  * mode=view 只读展示；mode=draw 矩形/圆形绘制与编辑
 -->
 <template>
-  <div class="tianditu-area-map" :class="{ 'tianditu-area-map--draw': mode === 'draw' }">
+  <div
+    ref="rootRef"
+    class="tianditu-area-map"
+    :class="{
+      'tianditu-area-map--draw': mode === 'draw',
+      'tianditu-area-map--fullscreen': isFullscreen,
+    }"
+  >
     <div v-if="mode === 'draw' && showToolbar" class="tianditu-area-map__toolbar">
       <button
         type="button"
@@ -23,7 +30,46 @@
         <i class="ri-checkbox-blank-circle-line" />
         <span>圆形</span>
       </button>
-      <span v-if="!drawnResult" class="tianditu-area-map__hint">在地图上拖拽绘制区域</span>
+      <button
+        type="button"
+        class="tianditu-area-map__tool"
+        :class="{ 'tianditu-area-map__tool--active': currentTool === 'polygon' }"
+        @click="setTool('polygon')"
+      >
+        <i class="ri-pentagon-line" />
+        <span>点选</span>
+      </button>
+      <button
+        v-if="showClearButton"
+        type="button"
+        class="tianditu-area-map__tool"
+        @click="clearCurrentArea"
+      >
+        <i class="ri-delete-bin-6-line" />
+        <span>清除</span>
+      </button>
+      <button
+        v-if="showFullscreen"
+        type="button"
+        class="tianditu-area-map__tool tianditu-area-map__tool--ghost"
+        @click="toggleFullscreen"
+      >
+        <i :class="isFullscreen ? 'ri-fullscreen-exit-line' : 'ri-fullscreen-line'" />
+        <span>{{ isFullscreen ? "退出全屏" : "全屏" }}</span>
+      </button>
+      <span class="tianditu-area-map__spacer" />
+      <span
+        v-if="currentTool === 'polygon' && isPolygonDrawing"
+        class="tianditu-area-map__hint"
+      >
+        点击地图添加点位，可拖拽已选点实时调整
+      </span>
+      <span
+        v-else-if="!drawnResult"
+        class="tianditu-area-map__hint"
+      >
+        在地图上拖拽绘制区域
+      </span>
       <span v-else class="tianditu-area-map__hint tianditu-area-map__hint--ok">拖拽蓝色方块可调整形状</span>
     </div>
 
@@ -62,14 +108,20 @@ const props = defineProps({
   showToolbar: { type: Boolean, default: true },
   emptyText: { type: String, default: "暂未设置辖区范围" },
   autoResize: { type: Boolean, default: true },
+  showFullscreen: { type: Boolean, default: true },
 });
 
 const emit = defineEmits(["update:modelValue", "change"]);
 
 const mapContainerRef = ref(null);
+const rootRef = ref(null);
 const mapContainerId = ref("");
+const isFullscreen = ref(false);
 const areaValue = computed(() => props.modelValue ?? props.area ?? null);
 const hasArea = computed(() => Boolean(normalizeAreaData(areaValue.value)));
+const showClearButton = computed(() =>
+  props.mode === "draw" && (Boolean(drawnResult.value) || polygonPointCount.value > 0),
+);
 
 const {
   loading,
@@ -82,10 +134,34 @@ const {
   createContainerId,
   getArea,
   fitMapToArea,
+  clearArea,
+  polygonPointCount,
+  isPolygonDrawing,
 } = useTiandituAreaMap();
 
 let resizeObserver = null;
 let initialized = false;
+
+function handleFullscreenChange() {
+  isFullscreen.value = document.fullscreenElement === rootRef.value;
+}
+
+async function toggleFullscreen() {
+  if (!rootRef.value) return;
+  try {
+    if (document.fullscreenElement === rootRef.value) {
+      await document.exitFullscreen();
+    } else if (!document.fullscreenElement) {
+      await rootRef.value.requestFullscreen();
+    }
+  } catch (_) {
+    // ignore
+  }
+}
+
+function clearCurrentArea() {
+  clearArea();
+}
 
 function emitAreaChange() {
   const value = getArea();
@@ -151,10 +227,12 @@ watch(
 );
 
 onMounted(async () => {
+  document.addEventListener("fullscreenchange", handleFullscreenChange);
   await mountMap();
 });
 
 onBeforeUnmount(() => {
+  document.removeEventListener("fullscreenchange", handleFullscreenChange);
   resizeObserver?.disconnect();
   resizeObserver = null;
   cleanup();
@@ -225,6 +303,31 @@ defineExpose({
   }
 }
 
+.tianditu-area-map__spacer {
+  flex: 1;
+}
+
+.tianditu-area-map__tool--primary {
+  border-color: #29408a;
+  color: #29408a;
+}
+
+.tianditu-area-map__tool--ghost {
+  margin-left: auto;
+}
+
+.tianditu-area-map__tool:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tianditu-area-map--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  border-radius: 0;
+}
+
 .tianditu-area-map__body {
   position: relative;
   flex: 1;
@@ -234,6 +337,11 @@ defineExpose({
 .tianditu-area-map__viewer {
   width: 100%;
   height: 100%;
+
+  /* 隐藏天地图默认左下角 logo/版权标识 */
+  :deep(.tdt-control-copyright.tdt-control > div:not(.tdt-control-copyright)) {
+    display: none !important;
+  }
 }
 
 .tianditu-area-map__loading,

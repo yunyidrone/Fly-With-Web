@@ -3,20 +3,14 @@
     <div class="monitor-center__shell">
       <header class="monitor-hero">
         <h1 class="monitor-hero__title">监控中心</h1>
-        <el-select
+        <OrgCascader
           v-model="selectedOrgId"
-          class="monitor-hero__org-select"
-          placeholder="请选择单位"
-          :disabled="!authStore.isSuperAdmin && orgOptions.length <= 1"
+          :options="orgTreeOptions"
+          :loading="orgCascaderLoading"
+          :disabled="!authStore.isSuperAdmin && cascaderDisabled"
+          select-class="monitor-hero__org-select"
           @change="handleOrgChange"
-        >
-          <el-option
-            v-for="org in orgOptions"
-            :key="org.id"
-            :label="org.name"
-            :value="org.id"
-          />
-        </el-select>
+        />
       </header>
 
       <el-tabs v-model="activeTab" class="monitor-tabs">
@@ -165,7 +159,9 @@ import { ElMessage } from "element-plus";
 import { fetchDronePage } from "@backend/api/drone.js";
 import { fetchTargetPage } from "@backend/api/target.js";
 import { fetchCheckpointPage } from "@backend/api/common.js";
-import { fetchOrgTree, fetchOrgDetail } from "@backend/api/org.js";
+import { fetchOrgDetail } from "@backend/api/org.js";
+import OrgCascader from "@backend/components/OrgCascader.vue";
+import { useOrgCascader } from "@backend/composables/useOrgCascader.js";
 import { parseJurisdictionArea } from "@backend/utils/jurisdiction.js";
 import { BACKEND_BASE, MONITOR_BASE, INFRA_BASE } from "@backend/router/routes.js";
 import TiandituAreaMap from "@/components/TiandituAreaMap.vue";
@@ -228,10 +224,16 @@ const DEMO_PENDING_TASKS = [
 
 const router = useRouter();
 const authStore = useAuthStore();
+const {
+  orgTreeOptions,
+  selectedOrgId,
+  loading: orgCascaderLoading,
+  cascaderDisabled,
+  initOrgCascader,
+  syncSelectedOrgId,
+} = useOrgCascader();
 
 const activeTab = ref("home");
-const orgOptions = ref([]);
-const selectedOrgId = ref(null);
 const keyLocations = ref([...DEMO_KEY_LOCATIONS]);
 const areaCheckpoints = ref([]);
 const pendingTasks = ref([...DEMO_PENDING_TASKS]);
@@ -296,37 +298,8 @@ const targetCards = computed(() =>
   })),
 );
 
-function flattenOrgTree(nodes, result = []) {
-  for (const node of nodes || []) {
-    if (node.id != null) result.push({ id: node.id, name: node.name });
-    if (node.children?.length) flattenOrgTree(node.children, result);
-  }
-  return result;
-}
-
 async function loadOrgOptions() {
-  try {
-    const tree = (await fetchOrgTree()) || [];
-    const flat = flattenOrgTree(tree);
-    orgOptions.value = flat.length ? flat : [{ id: 1, name: "幸福路派出所" }];
-  } catch {
-    orgOptions.value = [{ id: 1, name: "幸福路派出所" }];
-  }
-
-  if (!authStore.isSuperAdmin && authStore.orgId != null) {
-    selectedOrgId.value = authStore.orgId;
-    if (!orgOptions.value.some((item) => String(item.id) === String(authStore.orgId))) {
-      orgOptions.value.unshift({
-        id: authStore.orgId,
-        name: authStore.user?.orgName || "当前单位",
-      });
-    }
-    return;
-  }
-
-  if (selectedOrgId.value == null) {
-    selectedOrgId.value = orgOptions.value[0]?.id ?? null;
-  }
+  await initOrgCascader(authStore);
 }
 
 async function loadDeviceStats() {
@@ -451,7 +424,7 @@ watch(
   (value) => {
     if (!authStore.isSuperAdmin || value === "all") return;
     if (String(selectedOrgId.value) !== String(value)) {
-      selectedOrgId.value = value;
+      syncSelectedOrgId(value);
       loadDeviceStats();
       loadTargetStats();
       loadAreaCheckpoints();
@@ -509,9 +482,9 @@ $primary-light: #eaecf3;
 }
 
 .monitor-hero__org-select {
-  width: 260px;
+  width: 280px;
 
-  :deep(.el-select__wrapper) {
+  :deep(.el-input__wrapper) {
     min-height: 36px;
     border-radius: 6px;
   }
