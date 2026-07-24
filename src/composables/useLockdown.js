@@ -49,11 +49,6 @@ const MAX_LOCKDOWN_FOCUS_HEIGHT = 55000; // 相机最大高度 55000 米。如�
 
 export function useLockdown({
   getViewer,
-  getDronePositionProp,
-  defaultCenter,
-  droneHeight,
-  dispatchDroneToPoint,
-  getDroneCandidates,
   lockdownPoints = DEFAULT_LOCKDOWN_POINTS,
 }) {
   const lockdownEntities = [];
@@ -180,83 +175,6 @@ export function useLockdown({
     });
   };
 
-  const getNearestPoint = (startPos, points) => {
-    return points
-      .map((point) => {
-        const pointPos = Cesium.Cartesian3.fromDegrees(point.lng, point.lat, droneHeight);
-        const distance = Cesium.Cartesian3.distance(startPos, pointPos);
-        return { ...point, distance };
-      })
-      .sort((a, b) => a.distance - b.distance)[0];
-  };
-
-  const getFallbackDroneCandidate = (viewer) => {
-    const dronePositionProp = getDronePositionProp?.();
-    if (!dronePositionProp) return null;
-
-    const dronePos = dronePositionProp.getValue(viewer.clock.currentTime);
-    if (!dronePos) {
-      return {
-        id: null,
-        position: Cesium.Cartesian3.fromDegrees(defaultCenter.lng, defaultCenter.lat, droneHeight),
-      };
-    }
-
-    return {
-      id: null,
-      position: dronePos,
-    };
-  };
-
-  const getAvailableDroneCandidates = (viewer) => {
-    const candidates = getDroneCandidates?.() || [];
-    if (candidates.length > 0) {
-      return candidates
-        .filter((drone) => drone?.lastPosition)
-        .map((drone) => ({
-          id: drone.id,
-          position: Cesium.Cartesian3.fromDegrees(
-            drone.lastPosition.lng,
-            drone.lastPosition.lat,
-            drone.lastPosition.height || droneHeight,
-          ),
-        }));
-    }
-
-    const fallback = getFallbackDroneCandidate(viewer);
-    return fallback ? [fallback] : [];
-  };
-
-  const dispatchDronesToNearestLockdownPoints = () => {
-    const viewer = getViewer?.();
-    if (!viewer) return;
-
-    const droneCandidates = getAvailableDroneCandidates(viewer);
-    if (droneCandidates.length === 0) return;
-
-    const availablePoints = [...lockdownPoints];
-    const assignments = [];
-
-    droneCandidates.forEach((drone) => {
-      if (availablePoints.length === 0) return;
-
-      const nearestPoint = getNearestPoint(drone.position, availablePoints);
-      const pointIndex = availablePoints.findIndex(
-        (point) => point.lng === nearestPoint.lng && point.lat === nearestPoint.lat,
-      );
-
-      if (pointIndex >= 0) availablePoints.splice(pointIndex, 1);
-
-      dispatchDroneToPoint(nearestPoint.lng, nearestPoint.lat, 30, droneHeight, drone.id);
-      assignments.push({ droneId: drone.id || "default", point: nearestPoint });
-    });
-
-    console.log(
-      "一键封城：无人机已调度，飞行序列",
-      assignments.map(({ droneId, point }) => `${droneId} -> (${point.lng}, ${point.lat})`),
-    );
-  };
-
   const setCheckpointVisibility = (show) => {
     lockdownEntities.forEach((entity) => {
       if (entity) entity.show = show;
@@ -289,7 +207,6 @@ export function useLockdown({
 
     setCheckpointVisibility(true);
     focusLockdownArea(viewer);
-    // dispatchDronesToNearestLockdownPoints();
     return result;
   };
 
