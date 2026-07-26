@@ -45,7 +45,12 @@
           <el-dropdown trigger="click" popper-class="backend-admin-header-dropdown" @command="handleCommand">
             <span class="admin-layout__user">
               <el-avatar :size="28">{{ avatarText }}</el-avatar>
-              <span class="admin-layout__username">{{ authStore.displayName }}</span>
+              <span class="admin-layout__user-meta">
+                <span v-if="authStore.orgName" class="admin-layout__org-name">
+                  {{ authStore.orgName }}
+                </span>
+                <span class="admin-layout__username">{{ authStore.displayName }}</span>
+              </span>
               <el-icon><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
@@ -254,13 +259,33 @@ async function handleCommand(command) {
   color: #606266;
 }
 
+.admin-layout__user-meta {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: 160px;
+  line-height: 1.2;
+}
+
+.admin-layout__org-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #909399;
+  font-size: 12px;
+  font-weight: 400;
+}
+
 .admin-layout__username {
-  max-width: 120px;
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: $primary-color;
   font-weight: 500;
+  font-size: 14px;
 }
 
 .admin-layout__content {

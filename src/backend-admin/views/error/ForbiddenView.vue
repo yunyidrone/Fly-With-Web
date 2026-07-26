@@ -11,14 +11,14 @@
 
 <script setup>
 import { useRouter } from "vue-router";
-import { MONITOR_BASE } from "@backend/router/routes.js";
 import { useAuthStore } from "@/stores/auth.js";
 
 const router = useRouter();
 const authStore = useAuthStore();
 
 function goHome() {
-  router.push(MONITOR_BASE);
+  // 无权限时回到前台，避免再次落到默认监控页循环 403
+  router.push("/");
 }
 
 async function goLogin() {

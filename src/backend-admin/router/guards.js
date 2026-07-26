@@ -3,14 +3,32 @@ import { useMenuStore } from "@backend/stores/menu.js";
 import { hasRole, isGrassrootsOrgUser } from "@/utils/permission.js";
 import { appConfig } from "@backend/config/network.js";
 import { BACKEND_BASE } from "@backend/router/routes.js";
-import { buildMenuTitleRoutePathMap, resolveMenuPath } from "@backend/utils/menu.js";
+import {
+  buildMenuTitleRoutePathMap,
+  findFirstAccessibleMenuPath,
+  resolveMenuPath,
+} from "@backend/utils/menu.js";
+import { redirectIfMustChangePassword } from "@/utils/force-change-password-guard.js";
 
 const BACKEND_LOGIN_PATH = `${BACKEND_BASE}/login`;
 const BACKEND_FORBIDDEN_PATH = `${BACKEND_BASE}/403`;
 const BACKEND_MONITOR_PATH = `${BACKEND_BASE}/monitor`;
+const BACKEND_ACCOUNT_PATH = `${BACKEND_BASE}/account`;
 const SHARED_LOGIN_PATH = "/login";
 
+/** 无需登录即可访问 */
 const whiteList = [BACKEND_LOGIN_PATH, BACKEND_FORBIDDEN_PATH];
+
+/** 登录即可访问，跳过菜单 / 角色校验 */
+const authPassList = [BACKEND_ACCOUNT_PATH];
+
+function isBackendLandingPath(path) {
+  return (
+    path === BACKEND_BASE ||
+    path === `${BACKEND_BASE}/` ||
+    path === BACKEND_MONITOR_PATH
+  );
+}
 
 export function setupBackendRouterGuards(router) {
   function canAccessByBackendMenu(menuTree, fullPath) {
@@ -59,6 +77,9 @@ export function setupBackendRouterGuards(router) {
 
     if (!requiresAuth) {
       if ((to.path === BACKEND_LOGIN_PATH || to.path === "/login2") && authStore.isLoggedIn) {
+        if (redirectIfMustChangePassword(authStore, to, next)) {
+          return;
+        }
         next({ path: BACKEND_MONITOR_PATH });
         return;
       }
@@ -71,9 +92,9 @@ export function setupBackendRouterGuards(router) {
       return;
     }
 
-    if (!authStore.user) {
+    if (!authStore.user || authStore.user.firstLogin == null) {
       try {
-        await authStore.fetchProfile();
+        await authStore.fetchProfile({ force: true });
       } catch {
         authStore.resetAuth();
         next({ path: SHARED_LOGIN_PATH, query: { redirect: to.fullPath } });
@@ -81,21 +102,53 @@ export function setupBackendRouterGuards(router) {
       }
     }
 
-    // 联调阶段：优先以后端菜单树作为访问授权依据
-    if (!menuStore.loaded) {
-      try {
-        await menuStore.loadMenu();
-      } catch {
-        // 忽略菜单拉取失败，继续走静态角色守卫
+    // 未改初始密码时，手动改地址栏进后台也会被拦回
+    if (redirectIfMustChangePassword(authStore, to, next)) {
+      return;
+    }
+
+    // 个人中心等：登录即可进，不校验菜单 / 角色
+    if (authPassList.includes(to.path)) {
+      next();
+      return;
+    }
+
+    try {
+      await menuStore.loadMenu();
+    } catch {
+      // 菜单拉取失败时继续走静态角色守卫
+    }
+
+    const titleRoutePathMap = buildMenuTitleRoutePathMap(router.getRoutes());
+    const hasMenuTree = Array.isArray(menuStore.tree) && menuStore.tree.length > 0;
+    const menuGranted = hasMenuTree && canAccessByBackendMenu(menuStore.tree, to.path);
+
+    // 联调约定：有后端菜单时优先按菜单授权，不再死磕前端 meta.roles
+    if (hasMenuTree) {
+      if (menuGranted) {
+        if (to.meta?.hideForGrassroots && isGrassrootsOrgUser(authStore.user)) {
+          next({ path: BACKEND_FORBIDDEN_PATH });
+          return;
+        }
+        next();
+        return;
       }
+
+      // 默认进监控中心但菜单里没有该项 → 落到第一个有权限的菜单
+      if (isBackendLandingPath(to.path)) {
+        const firstPath = findFirstAccessibleMenuPath(menuStore.tree, titleRoutePathMap);
+        if (firstPath && firstPath !== to.path) {
+          next({ path: firstPath, replace: true });
+          return;
+        }
+      }
+
+      next({ path: BACKEND_FORBIDDEN_PATH });
+      return;
     }
 
     const roles = to.meta?.roles;
     if (roles && !hasRole(roles, authStore.role)) {
-      if (canAccessByBackendMenu(menuStore.tree, to.path)) {
-        next();
-        return;
-      }
       next({ path: BACKEND_FORBIDDEN_PATH });
       return;
     }

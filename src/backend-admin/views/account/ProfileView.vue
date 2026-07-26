@@ -11,7 +11,7 @@
           :model="form"
           :rules="rules"
           label-width="150px"
-          style="max-width: 480px"
+          class="profile-view__password-form"
         >
           <el-form-item label="请输入原本的密码" prop="oldPassword">
             <el-input v-model="form.oldPassword" type="password" show-password />
@@ -36,11 +36,15 @@
 </template>
 
 <script setup>
+import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { changePassword } from "@/api/auth.js";
+import { useAuthStore } from "@/stores/auth.js";
+import { validateComplexPassword } from "@backend/utils/password.js";
 
+const router = useRouter();
+const authStore = useAuthStore();
 const activeTab = ref("password");
-
 const formRef = ref();
 const submitting = ref(false);
 
@@ -62,7 +66,7 @@ const rules = {
   oldPassword: [{ required: true, message: "请输入原密码", trigger: "blur" }],
   newPassword: [
     { required: true, message: "请输入新密码", trigger: "blur" },
-    { min: 6, message: "密码至少 6 位", trigger: "blur" },
+    { validator: validateComplexPassword, trigger: "blur" },
   ],
   confirmPassword: [
     { required: true, message: "请再次输入新密码", trigger: "blur" },
@@ -76,14 +80,32 @@ async function submit() {
   try {
     await changePassword({
       oldPassword: form.oldPassword,
-      newPassword: form.newPassword,
+      password: form.newPassword,
     });
-    ElMessage.success("密码修改成功");
+    ElMessage.success("密码修改成功，请重新登录");
     form.oldPassword = "";
     form.newPassword = "";
     form.confirmPassword = "";
+    await authStore.logout();
+    router.replace("/login");
   } finally {
     submitting.value = false;
   }
 }
 </script>
+
+<style scoped lang="scss">
+.profile-view__password-form {
+  max-width: 480px;
+  margin-top: 8px;
+
+  :deep(.el-form-item) {
+    margin-bottom: 36px;
+  }
+
+  :deep(.el-form-item:last-child) {
+    margin-bottom: 0;
+    margin-top: 8px;
+  }
+}
+</style>

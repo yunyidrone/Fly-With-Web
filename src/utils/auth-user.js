@@ -1,3 +1,49 @@
+import { ROLES } from "@/config/constants.js";
+
+/**
+ * 将后端角色字段映射为前端 ROLES 枚举
+ * @param {Record<string, unknown>} source
+ * @returns {string}
+ */
+function normalizeRole(source) {
+  if (Number(source.superFlag) === 1) {
+    return ROLES.SUPER_ADMIN;
+  }
+
+  const raw =
+    source.role ??
+    source.roleCode ??
+    source.roleKey ??
+    source.userRole ??
+    source.roleType ??
+    source.roleName ??
+    "";
+  const text = String(raw).trim();
+  if (!text) return "";
+
+  const lower = text.toLowerCase().replace(/-/g, "_");
+  const aliasMap = {
+    [ROLES.SUPER_ADMIN]: ROLES.SUPER_ADMIN,
+    [ROLES.ORG_ADMIN]: ROLES.ORG_ADMIN,
+    [ROLES.ORG_VIEWER]: ROLES.ORG_VIEWER,
+    admin: ROLES.SUPER_ADMIN,
+    superadmin: ROLES.SUPER_ADMIN,
+    orgadmin: ROLES.ORG_ADMIN,
+    orgviewer: ROLES.ORG_VIEWER,
+    viewer: ROLES.ORG_VIEWER,
+    中心超管: ROLES.SUPER_ADMIN,
+    平台管理员: ROLES.SUPER_ADMIN,
+    超管: ROLES.SUPER_ADMIN,
+    所级管理员: ROLES.ORG_ADMIN,
+    单位级管理员: ROLES.ORG_ADMIN,
+    单位管理员: ROLES.ORG_ADMIN,
+    普通用户: ROLES.ORG_VIEWER,
+    所级只读: ROLES.ORG_VIEWER,
+  };
+
+  return aliasMap[lower] || aliasMap[text] || text;
+}
+
 /**
  * 将后端 auth 接口返回的用户字段映射为前端统一结构
  * @param {unknown} raw
@@ -6,24 +52,28 @@ export function normalizeAuthUser(raw) {
   if (!raw || typeof raw !== "object") return null;
 
   const source = /** @type {Record<string, unknown>} */ (raw);
-  const role = source.role ?? source.userRole ?? source.roleType ?? "";
+  const userName = String(source.userName ?? source.username ?? source.account ?? "");
+  const firstLoginRaw = source.firstLogin;
 
   return {
     id: source.id ?? source.userId ?? null,
-    username: String(source.username ?? source.userName ?? source.account ?? ""),
+    username: userName,
+    userName,
     displayName: String(
       source.displayName ??
         source.nickname ??
         source.name ??
-        source.username ??
-        source.userName ??
-        source.account ??
+        userName ??
         "",
     ),
-    role: String(role),
+    role: normalizeRole(source),
     orgId: source.orgId ?? source.organizationId ?? null,
-    orgName: String(source.orgName ?? source.organizationName ?? ""),
+    orgName: String(
+      source.orgName ?? source.organizationName ?? source.unitName ?? source.deptName ?? "",
+    ),
     orgIsGrassroots: Boolean(source.orgIsGrassroots ?? source.isGrassroots ?? false),
+    /** 0 首次登录需强制改密；1 非首次登录 */
+    firstLogin: firstLoginRaw == null || firstLoginRaw === "" ? null : Number(firstLoginRaw),
     platforms: Array.isArray(source.platforms)
       ? source.platforms
       : Array.isArray(source.platformList)

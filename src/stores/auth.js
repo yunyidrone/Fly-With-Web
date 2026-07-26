@@ -4,8 +4,11 @@ import { networkConfig } from "@/config/network.js";
 import { ROLES } from "@/config/constants.js";
 import { isSuperAdmin } from "@/utils/permission.js";
 import { setToken, clearToken, getToken } from "@/utils/auth-token.js";
-import { extractLoginPayload } from "@/utils/auth-user.js";
+import { extractLoginPayload, normalizeAuthUser } from "@/utils/auth-user.js";
 import { encryptLoginPassword } from "@/utils/login-crypto.js";
+
+/** 强制改密独立页（不进入业务界面） */
+export const FORCE_CHANGE_PASSWORD_PATH = "/force-change-password";
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
@@ -13,13 +16,25 @@ export const useAuthStore = defineStore("auth", {
     user: null,
     /** 超管视角切换：'all' 表示全所 */
     currentOrgId: "all",
+    /**
+     * 登录后若需强制改密，临时保存明文原密码（仅内存，不持久化）
+     * 用于改密接口 oldPassword，避免用户再次输入
+     */
+    pendingOldPassword: "",
   }),
 
   getters: {
     isLoggedIn: (state) => Boolean(state.token),
     role: (state) => state.user?.role || "",
     orgId: (state) => state.user?.orgId ?? null,
-    displayName: (state) => state.user?.displayName || state.user?.username || "",
+    orgName: (state) => state.user?.orgName || "",
+    displayName: (state) =>
+      state.user?.userName ||
+      state.user?.username ||
+      state.user?.displayName ||
+      "",
+    /** firstLogin：0 首次登录需强制改密；1 非首次登录 */
+    mustChangePassword: (state) => Number(state.user?.firstLogin) === 0,
     isSuperAdmin: (state) => isSuperAdmin(state.user?.role),
     effectiveOrgId: (state) => {
       if (isSuperAdmin(state.user?.role)) {
@@ -57,22 +72,36 @@ export const useAuthStore = defineStore("auth", {
 
       this.token = token;
       setToken(token);
+      this.pendingOldPassword = "";
+
+      // 登录换人后强制失效旧菜单，确保进后台会重新拉 /menu/list
+      try {
+        const { useMenuStore } = await import("@backend/stores/menu.js");
+        useMenuStore().resetMenu();
+      } catch {
+        // ignore
+      }
 
       const fallbackUser = {
         username: userName,
+        userName,
         displayName: userName || "用户",
         role: ROLES.ORG_VIEWER,
+        orgName: "",
+        firstLogin: null,
       };
 
-      if (user?.username || user?.role) {
-        this.user = user;
-      } else {
-        this.user = fallbackUser;
-        try {
-          await this.fetchProfile({ force: true });
-        } catch {
-          // /auth/me 失败时保留兜底用户，避免登录后路由守卫阻塞跳转
-        }
+      this.user = user || fallbackUser;
+
+      try {
+        await this.fetchProfile({ force: true });
+      } catch {
+        // /auth/info 失败时保留登录兜底用户，避免登录后无法跳转
+        if (!this.user) this.user = fallbackUser;
+      }
+
+      if (this.mustChangePassword) {
+        this.pendingOldPassword = password;
       }
 
       if (this.isSuperAdmin) {
@@ -84,40 +113,74 @@ export const useAuthStore = defineStore("auth", {
 
     async loginWithMock(form) {
       const username = String(form?.username ?? "").trim();
+      const password = String(form?.password ?? "");
       const token = `local-${username || "user"}-${Date.now()}`;
       const user = {
         username,
+        userName: username,
         displayName: username,
         role: ROLES.SUPER_ADMIN,
+        orgName: "演示单位",
+        firstLogin: 1,
       };
       this.token = token;
       this.user = user;
+      this.pendingOldPassword = "";
       setToken(token);
       this.currentOrgId = "all";
+      if (this.mustChangePassword) {
+        this.pendingOldPassword = password;
+      }
     },
 
     async fetchProfile(options = {}) {
       if (!this.token) return;
-      if (!options.force && this.user) return this.user;
+      if (!options.force && this.user?.userName && this.user?.firstLogin != null) {
+        return this.user;
+      }
 
       if (networkConfig.useMock) {
         this.user = {
           username: "用户",
+          userName: "用户",
           displayName: "用户",
           role: ROLES.SUPER_ADMIN,
+          orgName: "演示单位",
+          firstLogin: 1,
         };
         return this.user;
       }
 
-      // 当前后端未提供 /auth/me，先使用本地兜底用户以保证登录态与路由可用。
-      if (!this.user) {
+      const data = await authApi.fetchUserInfo(options);
+      const normalized = normalizeAuthUser(data);
+      if (normalized) {
+        this.user = {
+          ...(this.user || {}),
+          ...normalized,
+        };
+      } else if (!this.user) {
         this.user = {
           username: "用户",
+          userName: "用户",
           displayName: "用户",
           role: ROLES.ORG_VIEWER,
+          orgName: "",
+          firstLogin: null,
         };
       }
       return this.user;
+    },
+
+    markPasswordReset() {
+      if (!this.user) return;
+      this.user = {
+        ...this.user,
+        firstLogin: 1,
+      };
+    },
+
+    clearPendingOldPassword() {
+      this.pendingOldPassword = "";
     },
 
     async logout() {
@@ -135,7 +198,14 @@ export const useAuthStore = defineStore("auth", {
       this.token = "";
       this.user = null;
       this.currentOrgId = "all";
+      this.pendingOldPassword = "";
       clearToken();
+      // 清会话时同步清菜单缓存，避免换账号沿用上一用户 loaded 状态而不再请求 /menu/list
+      import("@backend/stores/menu.js")
+        .then(({ useMenuStore }) => {
+          useMenuStore().resetMenu();
+        })
+        .catch(() => {});
     },
 
     setCurrentOrgId(orgId) {

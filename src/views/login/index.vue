@@ -84,6 +84,7 @@
 <script setup>
 import { onMounted, onUnmounted, ref, reactive } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
 import { networkConfig } from "@/config/network.js";
 import { useAuthStore } from "@/stores/auth.js";
 import loginBg from "@/assets/images/login.png";
@@ -141,6 +142,11 @@ async function submit() {
   try {
     await authStore.login(form);
     persistRememberAccount();
+    if (authStore.mustChangePassword) {
+      ElMessage.warning("首次登录请先修改初始密码");
+      router.replace({ path: "/force-change-password" });
+      return;
+    }
     const redirect = route.query.redirect || "/";
     router.replace(String(redirect));
   } finally {

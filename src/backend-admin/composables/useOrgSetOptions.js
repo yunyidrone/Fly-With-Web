@@ -1,5 +1,5 @@
 import { ref } from "vue";
-import { fetchOrgSetList } from "@/api/auth.js";
+import { fetchOrgSetList } from "@backend/api/org.js";
 import {
   findFirstLeafOrgId,
   findOrgInTree,

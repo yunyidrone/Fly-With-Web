@@ -16,6 +16,12 @@ const LoginView = () => import("../views/login/index.vue");
 const routes = [
   { path: "/", component: HomeView },
   { path: "/login", component: LoginView },
+  {
+    path: "/force-change-password",
+    name: "ForceChangePassword",
+    component: () => import("../views/force-change-password/index.vue"),
+    meta: { title: "修改初始密码", requiresAuth: true },
+  },
   ...backendRoutes,
 ];
 

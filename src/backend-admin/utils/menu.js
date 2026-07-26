@@ -1,6 +1,6 @@
 import * as ElementPlusIconsVue from "@element-plus/icons-vue";
 
-/** @typedef {import('@/api/auth.js').BackendMenuNode} BackendMenuNode */
+/** @typedef {import('@backend/api/menu.js').BackendMenuNode} BackendMenuNode */
 
 export const BACKEND_BASE = "/backend";
 
@@ -240,4 +240,27 @@ export function resolveMenuBreadcrumb(tree, activePath, titleRoutePathMap) {
  */
 export function hasMenuChildren(node) {
   return Array.isArray(node?.children) && node.children.length > 0;
+}
+
+/**
+ * 取菜单树中第一个可导航叶子路径（用于默认落地）
+ * @param {BackendMenuNode[]} tree
+ * @param {Map<string, string>} [titleRoutePathMap]
+ * @returns {string|null}
+ */
+export function findFirstAccessibleMenuPath(tree, titleRoutePathMap) {
+  /** @param {BackendMenuNode[]} nodes */
+  function walk(nodes) {
+    for (const node of nodes || []) {
+      if (Array.isArray(node?.children) && node.children.length) {
+        const childPath = walk(node.children);
+        if (childPath) return childPath;
+      }
+      const path = resolveMenuPath(node, titleRoutePathMap);
+      if (path && path !== BACKEND_BASE) return path;
+    }
+    return null;
+  }
+
+  return walk(tree);
 }

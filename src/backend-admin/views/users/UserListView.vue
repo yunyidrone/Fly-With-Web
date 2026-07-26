@@ -52,8 +52,8 @@
 
           <div class="user-list__toolbar-right">
             <el-input
-              v-model="query.keyword"
-              placeholder="根据账户昵称搜索账户"
+              v-model="query.userName"
+              placeholder="根据用户账号搜索账户"
               clearable
               class="user-list__keyword"
               @keyup.enter="search"
@@ -82,38 +82,52 @@
           class="user-list__table"
           @selection-change="handleSelectionChange"
         >
-          <el-table-column type="selection" width="48" />
+          <el-table-column type="selection" width="48" :selectable="canOperateUser" />
           <el-table-column prop="id" label="账户ID" width="160">
             <template #default="{ row }">
               <span class="user-list__id">{{ row.id }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="displayName" label="账户昵称" min-width="160">
+          <el-table-column prop="userName" label="用户账号" min-width="160">
             <template #default="{ row }">
-              <span class="text-primary">{{ row.displayName || row.username }}</span>
+              <span class="text-primary">{{ row.userName || "-" }}</span>
+              <el-tag
+                v-if="isSuperUser(row)"
+                type="danger"
+                size="small"
+                class="user-list__super-tag"
+              >
+                超管
+              </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="角色" width="140">
+          <el-table-column prop="roleName" label="角色" width="140">
             <template #default="{ row }">
-              {{ accountRoleLabels[row.role] || roleLabels[row.role] || row.role }}
+              {{ row.roleName || "-" }}
             </template>
           </el-table-column>
           <el-table-column label="最后上线时间" min-width="170">
             <template #default="{ row }">
-              {{ row.lastOnlineAt || row.lastLoginAt || row.updatedAt || "-" }}
+              {{ row.loginTime || "-" }}
             </template>
           </el-table-column>
           <el-table-column label="账号状态" width="110" align="center">
             <template #default="{ row }">
               <el-switch
-                :model-value="row.status === 1"
+                :model-value="isUserEnabled(row)"
+                :disabled="isSuperUser(row)"
                 @change="(enabled) => handleStatusChange(row, enabled)"
               />
             </template>
           </el-table-column>
           <el-table-column label="操作" width="80" fixed="right" align="center">
             <template #default="{ row }">
-              <el-dropdown trigger="click" @command="(cmd) => handleRowCommand(cmd, row)">
+              <el-dropdown
+                v-if="canOperateUser(row)"
+                trigger="click"
+                popper-class="user-list__ops-popper"
+                @command="(cmd) => handleRowCommand(cmd, row)"
+              >
                 <el-button class="user-list__ops-btn" circle>
                   <el-icon :size="16"><MoreFilled /></el-icon>
                 </el-button>
@@ -142,6 +156,7 @@
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
+              <span v-else class="user-list__ops-empty">-</span>
             </template>
           </el-table-column>
         </el-table>
@@ -161,40 +176,96 @@
       </main>
     </div>
 
-    <el-dialog v-model="passwordDialogVisible" title="重置密码" width="480px" destroy-on-close>
-      <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-width="90px">
-        <el-form-item label="账号">
-          <el-input :model-value="passwordForm.username" disabled />
-        </el-form-item>
-        <el-form-item label="新密码" prop="password">
-          <el-input v-model="passwordForm.password" type="password" show-password />
-        </el-form-item>
-      </el-form>
+    <el-dialog
+      v-model="linkDialogVisible"
+      title="复制链接"
+      width="560px"
+      destroy-on-close
+      class="user-list__link-dialog"
+    >
+      <div class="user-list__link-tip">
+        <p>
+          您好，点击该链接
+          <a
+            class="user-list__link-anchor"
+            :href="linkTipInfo.link"
+            target="_blank"
+            rel="noopener noreferrer"
+          >{{ linkTipInfo.link }}</a>
+          即可登录伴飞后台管理系统。
+        </p>
+        <p class="user-list__link-tip-row">
+          <span>
+            账户ID 为：{{ linkTipInfo.userId }} ，账户昵称为：{{ linkTipInfo.userName }}
+            初始密码为：{{ linkTipInfo.password }}
+          </span>
+          <el-button
+            link
+            type="primary"
+            class="user-list__copy-account-btn"
+            :loading="accountCopying"
+            @click="copyAccountAndPassword"
+          >
+            一键复制
+          </el-button>
+        </p>
+        <p>为保护您的账户安全请登录后尽快修改你的账户密码.</p>
+      </div>
       <template #footer>
-        <el-button @click="passwordDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="passwordSubmitting" @click="submitResetPassword">
-          确认
+        <el-button @click="linkDialogVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="linkCopying" @click="copyLinkTip">
+          复制全部
         </el-button>
       </template>
     </el-dialog>
 
-    <el-drawer v-model="detailDrawerVisible" title="账户详情" direction="rtl" size="400px">
-      <el-descriptions v-if="detailUser" :column="1" border>
-        <el-descriptions-item label="账户ID">{{ detailUser.id }}</el-descriptions-item>
-        <el-descriptions-item label="用户">{{ detailUser.username }}</el-descriptions-item>
-        <el-descriptions-item label="账户昵称">{{ detailUser.displayName }}</el-descriptions-item>
-        <el-descriptions-item label="角色">
-          {{ accountRoleLabels[detailUser.role] || detailUser.role }}
-        </el-descriptions-item>
-        <el-descriptions-item label="所属单位">{{ detailUser.orgName || "-" }}</el-descriptions-item>
-        <el-descriptions-item label="账号状态">
-          {{ detailUser.status === 1 ? "启用" : "停用" }}
-        </el-descriptions-item>
-        <el-descriptions-item label="最后上线时间">
-          {{ detailUser.lastOnlineAt || detailUser.lastLoginAt || "-" }}
-        </el-descriptions-item>
-        <el-descriptions-item label="创建时间">{{ detailUser.createdAt || "-" }}</el-descriptions-item>
-      </el-descriptions>
+    <el-drawer v-model="detailDrawerVisible" title="更多信息" direction="rtl" size="420px">
+      <div v-loading="detailLoading" class="user-list__detail">
+        <el-descriptions v-if="detailUser" :column="1" border>
+          <el-descriptions-item label="创建时间">
+            {{ detailCreateTime }}
+          </el-descriptions-item>
+          <el-descriptions-item label="最后一次登录时间">
+            {{ detailLoginTime }}
+          </el-descriptions-item>
+          <el-descriptions-item label="联系方式">
+            {{ detailContact }}
+          </el-descriptions-item>
+          <el-descriptions-item label="所属单位名称">
+            {{ detailOrgName }}
+          </el-descriptions-item>
+          <el-descriptions-item label="创建人">
+            {{ detailCreator }}
+          </el-descriptions-item>
+          <el-descriptions-item label="修改密码">
+            <span
+              class="user-list__pwd-flag"
+              :class="
+                detailPasswordChanged
+                  ? 'user-list__pwd-flag--yes'
+                  : 'user-list__pwd-flag--no'
+              "
+            >
+              {{ detailPasswordChanged ? "是" : "否" }}
+            </span>
+          </el-descriptions-item>
+          <el-descriptions-item label="平台权限">
+            <el-checkbox-group
+              :model-value="detailAuthPlatforms"
+              class="user-list__detail-platforms"
+            >
+              <el-checkbox
+                v-for="item in USER_PLATFORM_OPTIONS"
+                :key="item.value"
+                :value="item.value"
+                disabled
+              >
+                {{ item.label }}
+              </el-checkbox>
+            </el-checkbox-group>
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
     </el-drawer>
   </div>
 </template>
@@ -218,6 +289,7 @@ import {
   deleteUser,
   fetchUserDetail,
   fetchUserPage,
+  fetchUserPassword,
   resetUserPassword,
   updateUserStatus,
 } from "@backend/api/user.js";
@@ -225,25 +297,17 @@ import { fetchOrgTree } from "@backend/api/org.js";
 import { useCurrentOrgSet } from "@backend/composables/useCurrentOrgSet.js";
 import OrgTreeNodeLabel from "@backend/components/OrgTreeNodeLabel.vue";
 import {
-  DEFAULT_REGION_LABEL,
-  ROLE_LABELS,
-  ROLES,
+  ORG_LABEL,
+  USER_PLATFORM,
+  USER_PLATFORM_OPTIONS,
 } from "@backend/config/constants.js";
 import { BACKEND_BASE } from "@backend/router/routes.js";
 import { useAuthStore } from "@/stores/auth.js";
 import { useTableQuery } from "@backend/composables/useTableQuery.js";
 
-const ACCOUNT_ROLE_LABELS = {
-  [ROLES.SUPER_ADMIN]: "平台管理员",
-  [ROLES.ORG_ADMIN]: "单位级管理员",
-  [ROLES.ORG_VIEWER]: "普通用户",
-};
-
 const router = useRouter();
 const authStore = useAuthStore();
-const { id, initOrgSet } = useCurrentOrgSet();
-const roleLabels = ROLE_LABELS;
-const accountRoleLabels = ACCOUNT_ROLE_LABELS;
+const { id, orgSetOptions, initOrgSet } = useCurrentOrgSet();
 
 const orgTreeRef = ref();
 const orgTreeData = ref([]);
@@ -255,35 +319,99 @@ const selectedRows = ref([]);
 const treeProps = { label: "name", children: "children" };
 
 const { loading, records, total, query, load, search, onPageChange, onSizeChange } =
-  useTableQuery(fetchUserPage, { keyword: "", orgId: "" });
+  useTableQuery(fetchUserPage, { userName: "", orgId: "" });
+
+function resolveUserName(row) {
+  return row?.userName || row?.username || "";
+}
+
+/** superFlag：0否 1是 */
+function isSuperUser(row) {
+  return Number(row?.superFlag) === 1;
+}
+
+/** 非超管才可操作 */
+function canOperateUser(row) {
+  return !isSuperUser(row);
+}
+
+/** status：0启用 1禁用；开关打开表示启用 */
+function isUserEnabled(row) {
+  return Number(row?.status) === 0;
+}
+
+function normalizeDetailAuthPlatforms(data) {
+  if (typeof data?.authPlatform === "string" && data.authPlatform.trim()) {
+    return data.authPlatform
+      .split(",")
+      .map((item) => Number(item.trim()))
+      .filter((item) => item === USER_PLATFORM.WEB || item === USER_PLATFORM.CLIENT);
+  }
+  if (Array.isArray(data?.authPlatforms)) {
+    return data.authPlatforms
+      .map((item) => Number(item))
+      .filter((item) => item === USER_PLATFORM.WEB || item === USER_PLATFORM.CLIENT);
+  }
+  return [];
+}
+
+function resolvePasswordChanged(data) {
+  const flag = data?.resetFlag;
+  if (flag === true || flag === 1 || flag === "1" || flag === "是") return true;
+  if (flag === false || flag === 0 || flag === "0" || flag === "否") return false;
+  return false;
+}
+
+const orgSetName = computed(() => {
+  const match = orgSetOptions.value.find((item) => String(item.value) === String(id.value));
+  return match?.label || "";
+});
 
 const selectedOrgPath = computed(() => {
-  if (!selectedOrg.value) return DEFAULT_REGION_LABEL;
+  if (!selectedOrg.value) return orgSetName.value || "请选择单位";
   const { name, parentName } = selectedOrg.value;
-  if (!parentName || parentName === name || parentName === DEFAULT_REGION_LABEL) {
-    return name || DEFAULT_REGION_LABEL;
+  if (!parentName || parentName === name) {
+    return name || orgSetName.value || "请选择单位";
   }
   return `${parentName}-${name}`;
 });
 
-const passwordDialogVisible = ref(false);
-const passwordSubmitting = ref(false);
-const passwordFormRef = ref();
-const passwordForm = reactive({
-  id: null,
-  username: "",
+const linkDialogVisible = ref(false);
+const linkCopying = ref(false);
+const accountCopying = ref(false);
+const linkTipInfo = reactive({
+  link: "",
+  userId: "",
+  userName: "",
   password: "",
 });
 
-const passwordRules = {
-  password: [
-    { required: true, message: "请输入新密码", trigger: "blur" },
-    { min: 6, message: "密码至少 6 位", trigger: "blur" },
-  ],
-};
-
 const detailDrawerVisible = ref(false);
+const detailLoading = ref(false);
 const detailUser = ref(null);
+
+const detailCreateTime = computed(() => {
+  const data = detailUser.value;
+  return data?.createTime || data?.createdAt || data?.createDate || "-";
+});
+
+const detailLoginTime = computed(() => {
+  const data = detailUser.value;
+  return data?.loginTime || data?.lastLoginTime || data?.lastOnlineAt || "-";
+});
+
+const detailContact = computed(() => {
+  const data = detailUser.value;
+  return data?.phone || data?.contact || data?.mobile || data?.tel || "-";
+});
+
+const detailOrgName = computed(() => detailUser.value?.orgName || "-");
+
+const detailCreator = computed(() => detailUser.value?.createByName || "-");
+
+const detailPasswordChanged = computed(() => resolvePasswordChanged(detailUser.value || {}));
+
+const detailAuthPlatforms = computed(() => normalizeDetailAuthPlatforms(detailUser.value || {}));
 
 function filterOrgNode(value, data) {
   if (!value) return true;
@@ -294,22 +422,25 @@ function filterOrgTree() {
   orgTreeRef.value?.filter(orgFilterText.value);
 }
 
-function normalizeTreeNodes(nodes, parentName = DEFAULT_REGION_LABEL) {
+function normalizeTreeNodes(nodes, parentName = "") {
   return (Array.isArray(nodes) ? nodes : []).map((node) => ({
     ...node,
     parentName,
+    rootOrgId: node.rootOrgId ?? node.rootId ?? id.value,
     children: normalizeTreeNodes(node.children, node.name),
   }));
 }
 
 function findFirstSelectableOrg(nodes) {
   for (const node of nodes || []) {
-    if (node.id != null && !node.children?.length) return node;
+    if (node.id != null && Number(node.orgLabel) !== ORG_LABEL.SET && !node.children?.length) {
+      return node;
+    }
     const child = findFirstSelectableOrg(node.children);
     if (child) return child;
   }
   for (const node of nodes || []) {
-    if (node.id != null) return node;
+    if (node.id != null && Number(node.orgLabel) !== ORG_LABEL.SET) return node;
   }
   return null;
 }
@@ -318,7 +449,7 @@ async function loadOrgTree() {
   treeLoading.value = true;
   try {
     const data = (await fetchOrgTree(id.value)) || [];
-    orgTreeData.value = normalizeTreeNodes(data);
+    orgTreeData.value = normalizeTreeNodes(data, orgSetName.value);
   } finally {
     treeLoading.value = false;
   }
@@ -342,7 +473,24 @@ function handleSelectionChange(rows) {
 }
 
 function goCreate() {
-  const queryParams = selectedOrg.value?.id != null ? { orgId: selectedOrg.value.id } : {};
+  const org = selectedOrg.value;
+  if (org?.id == null) {
+    ElMessage.warning("请先选择所属单位");
+    return;
+  }
+  const rootId = org.rootOrgId ?? org.rootId ?? id.value;
+  const queryParams = {
+    orgId: org.id,
+    orgName: org.name || "",
+  };
+  if (rootId != null && rootId !== "") {
+    queryParams.rootOrgId = rootId;
+  }
+  if (orgSetName.value) {
+    queryParams.rootOrgName = orgSetName.value;
+  } else if (org.parentName) {
+    queryParams.rootOrgName = org.parentName;
+  }
   router.push({ path: `${BACKEND_BASE}/users/new`, query: queryParams });
 }
 
@@ -350,54 +498,58 @@ function goEdit(row) {
   router.push(`${BACKEND_BASE}/users/${row.id}`);
 }
 
-function openResetPassword(row) {
-  passwordForm.id = row.id;
-  passwordForm.username = row.username;
-  passwordForm.password = "";
-  passwordDialogVisible.value = true;
-}
-
-async function submitResetPassword() {
-  await passwordFormRef.value.validate();
-  passwordSubmitting.value = true;
+async function openResetPassword(row) {
+  const name = resolveUserName(row) || row.id;
   try {
-    await resetUserPassword({ id: passwordForm.id, password: passwordForm.password });
-    ElMessage.success("密码重置成功");
-    passwordDialogVisible.value = false;
-  } finally {
-    passwordSubmitting.value = false;
+    await ElMessageBox.confirm(`确定重置账户「${name}」的密码吗？`, "重置密码", {
+      type: "warning",
+      confirmButtonText: "确认重置",
+    });
+  } catch {
+    return;
   }
+
+  const data = await resetUserPassword({ userId: row.id });
+  const userName = data?.userName || data?.username || name;
+  const password = data?.password || "";
+  ElMessage.success(`${userName}账号密码已重置为${password}`);
 }
 
 async function changeStatus(row, nextStatus) {
-  const action = nextStatus === 1 ? "启用" : "停用";
-  await ElMessageBox.confirm(
-    `确定${action}账户{row.displayName || row.username}」吗？`,
-    "状态变化",
-    { type: "warning" },
-  );
-  await updateUserStatus({ id: row.id, status: nextStatus });
+  if (isSuperUser(row)) {
+    ElMessage.warning("不可对超管进行操作");
+    return;
+  }
+  const action = nextStatus === 0 ? "启用" : "停用";
+  const name = resolveUserName(row) || row.id;
+  await ElMessageBox.confirm(`确定${action}账户「${name}」吗？`, `${action}确认`, {
+    type: "warning",
+    confirmButtonText: `确认${action}`,
+    cancelButtonText: "取消",
+  });
+  await updateUserStatus({ userId: row.id, status: nextStatus });
   ElMessage.success(`${action}成功`);
   await load();
 }
 
 async function handleStatusChange(row, enabled) {
-  const nextStatus = enabled ? 1 : 0;
-  if (nextStatus === row.status) return;
+  // enabled=true 对应 status=0（启用），enabled=false 对应 status=1（禁用）
+  const nextStatus = enabled ? 0 : 1;
+  if (nextStatus === Number(row.status)) return;
   try {
     await changeStatus(row, nextStatus);
   } catch {
-    
+    // 取消确认或接口失败时，开关仍绑定原 status，无需回写
   }
 }
 
 async function handleDelete(row) {
-  await ElMessageBox.confirm(
-    `确定删除账户{row.displayName || row.username}」吗？`,
-    "删除确认",
-    { type: "warning", confirmButtonText: "删除" },
-  );
-  await deleteUser({ id: row.id });
+  const name = resolveUserName(row) || row.id;
+  await ElMessageBox.confirm(`确定删除账户「${name}」吗？`, "删除确认", {
+    type: "warning",
+    confirmButtonText: "删除",
+  });
+  await deleteUser({ userId: row.id });
   ElMessage.success("删除成功");
   await load();
 }
@@ -408,34 +560,87 @@ async function handleBatchDelete() {
     return;
   }
   await ElMessageBox.confirm(
-    `确定删除选中${selectedRows.value.length} 个账户吗？`,
+    `确定删除选中的 ${selectedRows.value.length} 个账户吗？`,
     "批量删除",
     { type: "warning", confirmButtonText: "删除" },
   );
-  await Promise.all(selectedRows.value.map((row) => deleteUser({ id: row.id })));
+  await Promise.all(selectedRows.value.map((row) => deleteUser({ userId: row.id })));
   ElMessage.success("删除成功");
   selectedRows.value = [];
   await load();
 }
 
+function buildAccountLink() {
+  return `${window.location.origin}/#/login`;
+}
+
+function buildAccountLinkTipText({ link, userId, userName, password }) {
+  return [
+    `您好，点击该链接${link}即可登录伴飞后台管理系统。`,
+    `账户ID 为：${userId} ，账户昵称为：${userName}  初始密码为：${password}`,
+    "为保护您的账户安全请登录后尽快修改你的账户密码.",
+  ].join("\n");
+}
+
 async function copyAccountLink(row) {
-  const link = `${window.location.origin}/login?account=${encodeURIComponent(row.username || row.id)}`;
+  const data = await fetchUserPassword({ userId: row.id });
+  const userName = data?.userName || data?.username || resolveUserName(row) || "-";
+  const password = data?.password || "";
+  const userId = data?.userId ?? data?.id ?? row.id;
+  const link = buildAccountLink();
+
+  Object.assign(linkTipInfo, {
+    link,
+    userId,
+    userName,
+    password,
+  });
+  linkDialogVisible.value = true;
+}
+
+async function copyLinkTip() {
+  const text = buildAccountLinkTipText(linkTipInfo);
+  if (!text) return;
+  linkCopying.value = true;
   try {
-    await navigator.clipboard.writeText(link);
-    ElMessage.success("链接已复制");
+    await navigator.clipboard.writeText(text);
+    ElMessage.success("已复制到剪贴板");
   } catch {
     ElMessage.warning("复制失败，请手动复制");
+  } finally {
+    linkCopying.value = false;
+  }
+}
+
+async function copyAccountAndPassword() {
+  const userName = linkTipInfo.userName || "";
+  const password = linkTipInfo.password || "";
+  if (!userName && !password) {
+    ElMessage.warning("暂无账号或密码可复制");
+    return;
+  }
+  accountCopying.value = true;
+  try {
+    await navigator.clipboard.writeText(`账号：${userName}\n密码：${password}`);
+    ElMessage.success("账号和密码已复制");
+  } catch {
+    ElMessage.warning("复制失败，请手动复制");
+  } finally {
+    accountCopying.value = false;
   }
 }
 
 async function openDetail(row) {
   detailDrawerVisible.value = true;
   detailUser.value = { ...row };
+  detailLoading.value = true;
   try {
-    const data = await fetchUserDetail({ id: row.id });
+    const data = await fetchUserDetail({ userId: row.id });
     if (data) detailUser.value = { ...detailUser.value, ...data };
   } catch {
     // 详情接口不可用时展示列表数据
+  } finally {
+    detailLoading.value = false;
   }
 }
 
@@ -448,7 +653,7 @@ function handleRowCommand(command, row) {
 }
 
 watch(
-  () => query.keyword,
+  () => query.userName,
   (value, oldValue) => {
     if (value === "" && oldValue !== "") search();
   },
@@ -628,12 +833,107 @@ function findOrgById(nodes, id) {
   font-variant-numeric: tabular-nums;
 }
 
+.user-list__super-tag {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.user-list__detail {
+  min-height: 200px;
+}
+
+.user-list__pwd-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  padding: 2px 10px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.user-list__pwd-flag--yes {
+  color: #67c23a;
+  background: #f0f9eb;
+  border-color: #c2e7b0;
+}
+
+.user-list__pwd-flag--no {
+  color: #f56c6c;
+  background: #fef0f0;
+  border-color: #fbc4c4;
+}
+
+.user-list__detail-platforms {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.user-list__detail-platforms :deep(.el-checkbox) {
+  height: auto;
+  margin-right: 0;
+}
+
 .user-list__ops-btn {
   width: 32px;
   height: 32px;
   padding: 0;
-  color: #606266;
-  border-color: #dcdfe6;
+  color: var(--el-color-primary);
+  border-color: var(--el-color-primary);
+  background: #fff;
+
+  &:hover,
+  &:focus {
+    color: var(--el-color-primary);
+    border-color: var(--el-color-primary);
+    background: var(--el-color-primary-light-9);
+  }
+}
+
+.user-list__ops-empty {
+  color: #c0c4cc;
+}
+
+.user-list__link-tip {
+  line-height: 1.8;
+  color: #303133;
+  font-size: 14px;
+  word-break: break-all;
+
+  p {
+    margin: 0 0 12px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+}
+
+.user-list__link-tip-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.user-list__copy-account-btn {
+  flex-shrink: 0;
+  height: auto;
+  padding: 0;
+  margin-top: 2px;
+}
+
+.user-list__link-anchor {
+  color: var(--el-color-primary);
+  text-decoration: underline;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--el-color-primary-light-3);
+  }
 }
 
 .text-primary {
@@ -656,20 +956,5 @@ function findOrgById(nodes, id) {
 
 :deep(.el-tree--highlight-current .el-tree-node.is-current > .el-tree-node__content .org-tree-node__name) {
   color: var(--el-color-primary);
-}
-
-:deep(.user-list__ops-menu .el-dropdown-menu__item) {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 140px;
-}
-
-:deep(.user-list__ops-item--danger) {
-  color: #f56c6c;
-}
-
-:deep(.user-list__ops-item--danger .el-icon) {
-  color: #f56c6c;
 }
 </style>

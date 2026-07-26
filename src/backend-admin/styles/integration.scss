@@ -94,6 +94,33 @@ body:has(.backend-admin-root) .el-select-dropdown__item.selected .el-icon {
   color: $primary-color !important;
 }
 
+/* 账户列表操作下拉（popper 挂到 body） */
+body:has(.backend-admin-root) .user-list__ops-popper {
+  --el-color-primary: #{$primary-color};
+  --el-color-primary-light-9: #eaecf3;
+}
+
+body:has(.backend-admin-root) .user-list__ops-popper .el-dropdown-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 140px;
+  color: $primary-color;
+}
+
+body:has(.backend-admin-root) .user-list__ops-popper .el-dropdown-menu__item .el-icon {
+  color: $primary-color;
+}
+
+body:has(.backend-admin-root) .user-list__ops-popper .el-dropdown-menu__item:not(.is-disabled):hover {
+  background: #eaecf3;
+  color: $primary-color;
+}
+
+body:has(.backend-admin-root) .user-list__ops-popper .el-dropdown-menu__item:not(.is-disabled):hover .el-icon {
+  color: $primary-color;
+}
+
 .backend-admin-root .el-select .el-select__selected-item {
   color: $primary-color;
 }

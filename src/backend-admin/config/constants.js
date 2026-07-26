@@ -109,13 +109,21 @@ export const DEFAULT_REGION_LABEL = "黄岩区管理";
 export const DEFAULT_REGION_FULL_LABEL = "浙江省台州黄岩管理区";
 export const DEFAULT_PARENT_PATH = "root/黄岩区管理";
 
-/** 账户平台权限 */
+/**
+ * 账户授权平台 authPlatform（多选逗号拼接，如 "1,2"）
+ * 1 平台权限  2 伴飞客户端
+ */
 export const USER_PLATFORM = {
-  WEB: "web",
-  CLIENT: "client",
+  WEB: 1,
+  CLIENT: 2,
 };
 
 export const USER_PLATFORM_LABELS = {
-  [USER_PLATFORM.WEB]: "伴飞平台web端",
+  [USER_PLATFORM.WEB]: "平台权限",
   [USER_PLATFORM.CLIENT]: "伴飞客户端",
 };
+
+export const USER_PLATFORM_OPTIONS = [
+  { value: USER_PLATFORM.WEB, label: USER_PLATFORM_LABELS[USER_PLATFORM.WEB] },
+  { value: USER_PLATFORM.CLIENT, label: USER_PLATFORM_LABELS[USER_PLATFORM.CLIENT] },
+];

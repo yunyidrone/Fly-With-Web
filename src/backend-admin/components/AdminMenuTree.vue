@@ -29,7 +29,7 @@ import {
 defineOptions({ name: "AdminMenuTree" });
 
 defineProps({
-  /** @type {import('vue').PropType<import('@/api/auth.js').BackendMenuNode[]>} */
+  /** @type {import('vue').PropType<import('@backend/api/menu.js').BackendMenuNode[]>} */
   nodes: {
     type: Array,
     default: () => [],

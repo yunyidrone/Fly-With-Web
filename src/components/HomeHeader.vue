@@ -32,7 +32,10 @@
             <div class="user-avatar-slot" aria-hidden="true">
               <img class="user-avatar-img" src="../assets/images/account.png" alt="" />
             </div>
-            <span class="user-menu-trigger__name">{{ displayName }}</span>
+            <div class="user-menu-trigger__meta">
+              <span v-if="orgName" class="user-menu-trigger__org">{{ orgName }}</span>
+              <span class="user-menu-trigger__name">{{ displayName }}</span>
+            </div>
             <i
               class="ri-arrow-down-s-line user-menu-trigger__arrow"
               :class="{ 'user-menu-trigger__arrow--open': userMenuOpen }"
@@ -79,6 +82,7 @@ const authStore = useAuthStore();
 const displayName = computed(
   () => authStore.displayName || authStore.user?.username || "账号",
 );
+const orgName = computed(() => authStore.orgName || "");
 
 function toggleUserMenu() {
   userMenuOpen.value = !userMenuOpen.value;
@@ -229,6 +233,24 @@ onUnmounted(() => {
     background: rgba(3, 6, 10, 0.45);
     color: #fff;
   }
+}
+
+.user-menu-trigger__meta {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: 140px;
+  line-height: 1.2;
+}
+
+.user-menu-trigger__org {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .user-menu-trigger__name {

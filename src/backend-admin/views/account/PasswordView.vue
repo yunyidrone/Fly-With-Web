@@ -5,7 +5,13 @@
       <el-button @click="goBack">返回</el-button>
     </div>
 
-    <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" style="max-width: 480px">
+    <el-form
+      ref="formRef"
+      :model="form"
+      :rules="rules"
+      label-width="100px"
+      class="password-view__form"
+    >
       <el-form-item label="原密码" prop="oldPassword">
         <el-input v-model="form.oldPassword" type="password" show-password />
       </el-form-item>
@@ -26,9 +32,11 @@
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { changePassword } from "@/api/auth.js";
-import { MONITOR_BASE } from "@backend/router/routes.js";
+import { useAuthStore } from "@/stores/auth.js";
+import { validateComplexPassword } from "@backend/utils/password.js";
 
 const router = useRouter();
+const authStore = useAuthStore();
 
 const formRef = ref();
 const submitting = ref(false);
@@ -51,7 +59,7 @@ const rules = {
   oldPassword: [{ required: true, message: "请输入原密码", trigger: "blur" }],
   newPassword: [
     { required: true, message: "请输入新密码", trigger: "blur" },
-    { min: 6, message: "密码至少 6 位", trigger: "blur" },
+    { validator: validateComplexPassword, trigger: "blur" },
   ],
   confirmPassword: [
     { required: true, message: "请确认新密码", trigger: "blur" },
@@ -65,12 +73,14 @@ async function submit() {
   try {
     await changePassword({
       oldPassword: form.oldPassword,
-      newPassword: form.newPassword,
+      password: form.newPassword,
     });
-    ElMessage.success("密码修改成功");
+    ElMessage.success("密码修改成功，请重新登录");
     form.oldPassword = "";
     form.newPassword = "";
     form.confirmPassword = "";
+    await authStore.logout();
+    router.replace("/login");
   } finally {
     submitting.value = false;
   }
@@ -81,6 +91,21 @@ function goBack() {
     router.back();
     return;
   }
-  router.push(MONITOR_BASE);
+  router.push("/backend/monitor");
 }
 </script>
+
+<style scoped lang="scss">
+.password-view__form {
+  max-width: 480px;
+
+  :deep(.el-form-item) {
+    margin-bottom: 28px;
+  }
+
+  :deep(.el-form-item:last-child) {
+    margin-bottom: 0;
+    margin-top: 8px;
+  }
+}
+</style>

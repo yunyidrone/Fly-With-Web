@@ -191,7 +191,6 @@ export const backendRoutes = [
         component: () => import("@backend/views/account/ProfileView.vue"),
         meta: {
           title: "个人中心",
-          roles: ["super_admin", "org_admin", "org_viewer"],
         },
       },
       {
