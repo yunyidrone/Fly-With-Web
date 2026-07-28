@@ -28,9 +28,19 @@
             <span class="infra-page__name-tag">{{ row.name }}</span>
           </template>
         </el-table-column>
+        <el-table-column label="类型" width="100">
+          <template #default="{ row }">
+            <el-tag size="small" effect="light">{{ row.typeLabel }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="coord" label="经纬度" min-width="160">
           <template #default="{ row }">
             <span class="infra-page__coord">({{ row.coord || "-" }})</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.description || "-" }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
@@ -73,22 +83,25 @@
 
 <script setup>
 import { onMounted } from "vue";
+import { useRouter } from "vue-router";
 import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { fetchCheckpointPage } from "@backend/api/common.js";
+import { deleteCheckpoint, fetchCheckpointPage } from "@backend/api/common.js";
 import { useTableQuery } from "@backend/composables/useTableQuery.js";
+import { INFRA_BASE } from "@backend/router/routes.js";
 
+const router = useRouter();
 const { loading, records, total, query, load, onPageChange, onSizeChange } = useTableQuery(
   fetchCheckpointPage,
   { pageSize: 10 },
 );
 
 function handleCreate() {
-  ElMessage.info("新建卡点功能开发中");
+  router.push(`${INFRA_BASE}/checkpoints/new`);
 }
 
 function handleEdit(row) {
-  ElMessage.info(`编辑卡点「${row.name}」功能开发中`);
+  router.push(`${INFRA_BASE}/checkpoints/${row.id}`);
 }
 
 async function handleDelete(row) {
@@ -96,7 +109,9 @@ async function handleDelete(row) {
     type: "warning",
     confirmButtonText: "删除",
   });
-  ElMessage.info("删除卡点功能开发中");
+  await deleteCheckpoint({ id: row.id });
+  ElMessage.success("删除成功");
+  await load();
 }
 
 onMounted(load);

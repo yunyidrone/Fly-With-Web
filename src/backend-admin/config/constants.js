@@ -62,6 +62,26 @@ export const TARGET_TYPE_OPTIONS = Object.entries(TARGET_TYPE_LABELS).map(([valu
   label,
 }));
 
+/** 卡点类型：1高速口 2CBD 3学校 */
+export const CHECKPOINT_TYPE = {
+  HIGHWAY_EXIT: 1,
+  CBD: 2,
+  SCHOOL: 3,
+};
+
+export const CHECKPOINT_TYPE_LABELS = {
+  [CHECKPOINT_TYPE.HIGHWAY_EXIT]: "高速口",
+  [CHECKPOINT_TYPE.CBD]: "CBD",
+  [CHECKPOINT_TYPE.SCHOOL]: "学校",
+};
+
+export const CHECKPOINT_TYPE_OPTIONS = Object.entries(CHECKPOINT_TYPE_LABELS).map(
+  ([value, label]) => ({
+    value: Number(value),
+    label,
+  }),
+);
+
 export const LOW_BATTERY_THRESHOLD = 20;
 
 /** 看板轮询间隔（毫秒） */

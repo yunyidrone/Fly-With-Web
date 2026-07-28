@@ -205,6 +205,26 @@ export const backendRoutes = [
         },
       },
       {
+        path: "infra/checkpoints/new",
+        name: "BackendCheckpointCreate",
+        component: () => import("@backend/views/infra/CheckpointFormView.vue"),
+        meta: {
+          title: "新建卡点",
+          activeMenu: `${INFRA_BASE}/checkpoints`,
+          roles: ["super_admin", "org_admin"],
+        },
+      },
+      {
+        path: "infra/checkpoints/:id",
+        name: "BackendCheckpointEdit",
+        component: () => import("@backend/views/infra/CheckpointFormView.vue"),
+        meta: {
+          title: "编辑卡点",
+          activeMenu: `${INFRA_BASE}/checkpoints`,
+          roles: ["super_admin", "org_admin"],
+        },
+      },
+      {
         path: "infra/targets",
         name: "BackendTargetList",
         component: () => import("@backend/views/infra/TargetListView.vue"),
