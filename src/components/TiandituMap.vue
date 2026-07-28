@@ -442,6 +442,23 @@ function resolveVehicleTargetSn(vehicleData) {
   ).trim();
 }
 
+/** 按 SN / 终端号在 store 目标列表中查找（仅接口返回的设备） */
+function findTargetBySn(sn) {
+  const trimmed = String(sn || "").trim();
+  if (!trimmed) return null;
+  const targets = Array.isArray(deviceStore.targets) ? deviceStore.targets : [];
+  return (
+    targets.find((t) => {
+      const keys = [
+        t?.sn,
+        t?.raw?.sn,
+        t?.raw?.terminalPhone,
+      ];
+      return keys.some((v) => String(v || "").trim() === trimmed);
+    }) || null
+  );
+}
+
 /** 按 MQTT 主题 sn / 地图 deviceId / 目标 id 在 store 中查找伴飞目标 */
 function findTargetByMqttKey(key) {
   const trimmed = String(key || "").trim();
@@ -2727,10 +2744,12 @@ const handleCarBoxMessage = (topic, data) => {
     console.warn("⚠️ 无法从主题中提取设备号:", topic);
     return;
   }
-  // 按 SN / 终端号查找伴飞目标，接口一律使用 target.id
-  const target = findTargetByMqttKey(sn);
-  const mapDeviceId = target?.id ? String(target.id) : sn;
-  if (target && sn && mapDeviceId !== sn) {
+  // 仅响应接口目标列表中存在的设备，按 SN / 终端号匹配
+  const target = findTargetBySn(sn);
+  if (!target?.id) return;
+
+  const mapDeviceId = String(target.id);
+  if (sn) {
     target.mqttSn = sn;
     vehicleManager.removeVehicle(sn);
   }
@@ -2740,11 +2759,9 @@ const handleCarBoxMessage = (topic, data) => {
   const longitude = toFiniteNumber(data.longitude);
 
   if (Number.isFinite(latitude) && Number.isFinite(longitude) && (latitude !== 0 || longitude !== 0)) {
-    if (target) {
-      target.lat = latitude;
-      target.lng = longitude;
-    }
-    const label = target?.name || mapDeviceId;
+    target.lat = latitude;
+    target.lng = longitude;
+    const label = target.name || mapDeviceId;
     const targetType = resolveTargetType(target);
 
     if (targetType === 2) {
@@ -2790,7 +2807,7 @@ const handleCarBoxMessage = (topic, data) => {
     tryApplyPendingEscortLock(mapDeviceId);
   }
 
-  if (alarmFlag && alarmFlag !== 0 && target?.id) {
+  if (alarmFlag && alarmFlag !== 0) {
     void showAlarmDialog(String(target.id), { longitude, latitude }, terminalPhone);
   }
 
