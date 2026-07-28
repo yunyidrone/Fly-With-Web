@@ -15,7 +15,6 @@
         <div class="infra-page__title">目标设备管理</div>
         <div class="infra-page__actions">
           <el-button
-            v-permission="['super_admin', 'org_admin']"
             class="infra-page__create-btn"
             @click="goCreate"
           >
@@ -88,7 +87,6 @@
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
             <el-button
-              v-permission="['super_admin', 'org_admin']"
               link
               type="primary"
               @click="goEdit(row.id)"
@@ -96,7 +94,6 @@
               编辑
             </el-button>
             <el-button
-              v-permission="['super_admin', 'org_admin']"
               link
               type="danger"
               @click="handleDelete(row)"
@@ -134,30 +131,33 @@ import { useOrgCascader } from "@backend/composables/useOrgCascader.js";
 import { useTableQuery } from "@backend/composables/useTableQuery.js";
 import { TARGET_TYPE_OPTIONS } from "@backend/config/constants.js";
 import { INFRA_BASE } from "@backend/router/routes.js";
+import { resolveOrgContextFromTree } from "@backend/utils/org-set.js";
 import { useAuthStore } from "@/stores/auth.js";
 
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
 const {
+  orgSetId,
   orgTreeOptions,
   selectedOrgId,
   loading: orgCascaderLoading,
   cascaderDisabled,
   initOrgCascader,
   syncSelectedOrgId,
-} = useOrgCascader();
+} = useOrgCascader({ autoSelectFirst: false, autoSelectUserOrg: false });
 const targetTypeOptions = TARGET_TYPE_OPTIONS;
 
 const { loading, records, total, query, load, search, reset, onPageChange, onSizeChange } =
-  useTableQuery(fetchTargetPage, { pageSize: 10, orgId: "", name: "", sn: "", type: "" });
+  useTableQuery(fetchTargetPage, { pageSize: 10, orgId: null, name: "", sn: "", type: "" });
 
 async function loadOrgOptions() {
   await initOrgCascader(authStore);
 }
 
 function syncOrgQuery() {
-  query.orgId = selectedOrgId.value != null ? selectedOrgId.value : "";
+  query.orgId =
+    selectedOrgId.value != null && selectedOrgId.value !== "" ? selectedOrgId.value : null;
 }
 
 function applyRouteQuery() {
@@ -196,11 +196,21 @@ function resetFilters() {
 }
 
 function goCreate() {
+  const orgId = selectedOrgId.value;
+  const query = {};
+  if (route.query.type != null && route.query.type !== "") {
+    query.type = route.query.type;
+  }
+  if (orgId != null && orgId !== "") {
+    const ctx = resolveOrgContextFromTree(orgTreeOptions.value, orgId, orgSetId.value);
+    query.orgId = orgId;
+    if (ctx?.rootOrgId != null) {
+      query.rootOrgId = ctx.rootOrgId;
+    }
+  }
   router.push({
     path: `${INFRA_BASE}/targets/new`,
-    query: {
-      orgId: selectedOrgId.value ?? undefined,
-    },
+    query,
   });
 }
 

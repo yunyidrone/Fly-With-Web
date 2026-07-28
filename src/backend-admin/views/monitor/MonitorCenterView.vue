@@ -109,7 +109,7 @@
                   <span class="data-panel__badge">{{ keyLocations.length }} 条</span>
                 </div>
                 <ul class="data-panel__list">
-                  <li v-for="(item, index) in keyLocations" :key="item.id" class="data-panel__row">
+                  <li v-for="(item, index) in displayKeyLocations" :key="item.id" class="data-panel__row">
                     <span class="data-panel__index">{{ String(index + 1).padStart(2, "0") }}</span>
                     <span class="data-panel__chip">{{ item.category }}</span>
                     <span class="data-panel__name">{{ item.name }}</span>
@@ -128,7 +128,7 @@
                 </div>
                 <ul class="data-panel__list data-panel__list--stack">
                   <li
-                    v-for="item in areaCheckpoints"
+                    v-for="item in displayAreaCheckpoints"
                     :key="item.id"
                     class="data-panel__row data-panel__row--checkpoint"
                   >
@@ -159,6 +159,7 @@ import { ElMessage } from "element-plus";
 import { fetchDronePage } from "@backend/api/drone.js";
 import { fetchTargetPage } from "@backend/api/target.js";
 import { fetchCheckpointPage } from "@backend/api/common.js";
+import { fetchKeyLocationSummary } from "@backend/api/place.js";
 import { fetchOrgDetail } from "@backend/api/org.js";
 import OrgCascader from "@backend/components/OrgCascader.vue";
 import { useOrgCascader } from "@backend/composables/useOrgCascader.js";
@@ -175,7 +176,7 @@ import dbJqrPng from "@/assets/images/db_jqr.png";
 import dbJdPng from "@/assets/images/db_jd.png";
 import dbJcPng from "@/assets/images/db_jc.png";
 import TaskMonitorTab from "@backend/views/monitor/TaskMonitorTab.vue";
-import { TARGET_TYPE, TARGET_TYPE_LABELS } from "@backend/config/constants.js";
+import { TARGET_TYPE, TARGET_TYPE_LABELS, MONITOR_PANEL_LIST_LIMIT } from "@backend/config/constants.js";
 
 const MAP_LEGEND_DEVICE_ICONS = {
   drone: dbWrjPng,
@@ -236,6 +237,13 @@ const {
 const activeTab = ref("home");
 const keyLocations = ref([...DEMO_KEY_LOCATIONS]);
 const areaCheckpoints = ref([]);
+
+const displayKeyLocations = computed(() =>
+  keyLocations.value.slice(0, MONITOR_PANEL_LIST_LIMIT),
+);
+const displayAreaCheckpoints = computed(() =>
+  areaCheckpoints.value.slice(0, MONITOR_PANEL_LIST_LIMIT),
+);
 const pendingTasks = ref([...DEMO_PENDING_TASKS]);
 const jurisdictionArea = ref(null);
 
@@ -360,6 +368,16 @@ async function loadJurisdictionArea() {
   }
 }
 
+async function loadKeyLocations() {
+  try {
+    keyLocations.value = await fetchKeyLocationSummary({
+      orgId: selectedOrgId.value ?? undefined,
+    });
+  } catch {
+    keyLocations.value = [...DEMO_KEY_LOCATIONS];
+  }
+}
+
 async function loadAreaCheckpoints() {
   try {
     const data = await fetchCheckpointPage({ current: 1, pageSize: 500 });
@@ -381,6 +399,7 @@ function handleOrgChange(orgId) {
   }
   loadDeviceStats();
   loadTargetStats();
+  loadKeyLocations();
   loadAreaCheckpoints();
   loadJurisdictionArea();
 }
@@ -427,6 +446,7 @@ watch(
       syncSelectedOrgId(value);
       loadDeviceStats();
       loadTargetStats();
+      loadKeyLocations();
       loadAreaCheckpoints();
       loadJurisdictionArea();
     }
@@ -438,6 +458,7 @@ onMounted(async () => {
   await Promise.all([
     loadDeviceStats(),
     loadTargetStats(),
+    loadKeyLocations(),
     loadAreaCheckpoints(),
     loadJurisdictionArea(),
   ]);

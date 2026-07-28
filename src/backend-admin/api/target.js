@@ -2,8 +2,11 @@ import { requestData, unwrapApiList } from "@backend/utils/request.js";
 import { normalizeTargetList, normalizeTargetRecord } from "@backend/utils/target.js";
 
 export async function fetchTargetPage(params) {
-  const { name, sn, type, ...rest } = params || {};
+  const { name, sn, type, orgId, ...rest } = params || {};
   const queryParams = { ...rest };
+  if (orgId != null && orgId !== "") {
+    queryParams.orgId = orgId;
+  }
   const nameTrim = String(name ?? "").trim();
   const snTrim = String(sn ?? "").trim();
   if (nameTrim) queryParams.name = nameTrim;

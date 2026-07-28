@@ -26,10 +26,6 @@
           <el-input v-model="form.name" placeholder="请输入无人机名称" />
         </el-form-item>
 
-        <el-form-item label="无人机型号" prop="model">
-          <el-input v-model="form.model" placeholder="请输入无人机型号" />
-        </el-form-item>
-
         <el-form-item label="无人机SN号" prop="sn">
           <el-input
             v-model="form.sn"
@@ -37,27 +33,26 @@
           />
         </el-form-item>
 
-        <el-form-item label="无人机类型" prop="droneType">
-          <div class="device-form__type-group">
-            <el-checkbox
-              :model-value="form.droneType === DRONE_TYPE.SINGLE"
-              @change="(checked) => checked && (form.droneType = DRONE_TYPE.SINGLE)"
-            >
-              单兵
-            </el-checkbox>
-            <el-checkbox
-              :model-value="form.droneType === DRONE_TYPE.DOCK"
-              @change="(checked) => checked && (form.droneType = DRONE_TYPE.DOCK)"
-            >
-              机场
-            </el-checkbox>
-          </div>
+        <el-form-item label="航线ID" prop="waylineId">
+          <el-input
+            v-model="form.waylineId"
+            placeholder="请输入航线 ID"
+          />
         </el-form-item>
 
-        <el-form-item label="机场位置" prop="dockLocation">
+        <el-form-item label="机场经度" prop="longitude">
           <el-input
-            v-model="form.dockLocation"
-            placeholder="请输入机场经纬度信息"
+            v-model="form.longitude"
+            placeholder="请输入机场经度（选填）"
+            @blur="validateDockCoordinateFields"
+          />
+        </el-form-item>
+
+        <el-form-item label="机场纬度" prop="latitude">
+          <el-input
+            v-model="form.latitude"
+            placeholder="请输入机场纬度（选填）"
+            @blur="validateDockCoordinateFields"
           />
         </el-form-item>
       </el-form>
@@ -71,65 +66,115 @@ import { useRoute, useRouter } from "vue-router";
 import { ArrowLeft } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { createDrone, fetchDroneDetail, updateDrone } from "@backend/api/drone.js";
-import { DRONE_TYPE } from "@backend/config/constants.js";
+import { useOrgCascader } from "@backend/composables/useOrgCascader.js";
 import { MONITOR_BASE } from "@backend/router/routes.js";
-import { buildDronePayload } from "@backend/utils/drone.js";
+import {
+  buildDronePayload,
+  resolveDroneFormCoordinates,
+  validateOptionalDockCoordinates,
+} from "@backend/utils/drone.js";
+import { resolveOrgContextFromTree } from "@backend/utils/org-set.js";
+import { useAuthStore } from "@/stores/auth.js";
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
+const { orgSetId, orgTreeOptions, initOrgCascader } = useOrgCascader({ autoSelectFirst: false });
 
 const formRef = ref();
 const submitting = ref(false);
+const orgId = ref(null);
+const rootOrgId = ref(null);
 const isEdit = computed(() => Boolean(route.params.id) && route.params.id !== "new");
 
 const form = reactive({
   name: "",
-  model: "",
   sn: "",
-  droneType: DRONE_TYPE.SINGLE,
-  dockLocation: "",
+  waylineId: "",
+  longitude: "",
+  latitude: "",
 });
+
+function validateDockCoordinateField(_rule, _value, callback) {
+  const result = validateOptionalDockCoordinates(form.longitude, form.latitude);
+  if (!result.valid) {
+    callback(new Error(result.message));
+    return;
+  }
+  callback();
+}
+
+function validateDockCoordinateFields() {
+  formRef.value?.validateField(["longitude", "latitude"]).catch(() => {});
+}
 
 const rules = {
   name: [{ required: true, message: "请输入无人机名称", trigger: "blur" }],
-  model: [{ required: true, message: "请输入无人机型号", trigger: "blur" }],
   sn: [{ required: true, message: "请输入无人机 SN 号", trigger: "blur" }],
-  droneType: [{ required: true, message: "请选择无人机类型", trigger: "change" }],
-  dockLocation: [
-    {
-      validator: (_rule, value, callback) => {
-        if (form.droneType !== DRONE_TYPE.DOCK) {
-          callback();
-          return;
-        }
-        if (!String(value || "").trim()) {
-          callback(new Error("请输入机场经纬度信息"));
-          return;
-        }
-        callback();
-      },
-      trigger: "blur",
-    },
-  ],
+  waylineId: [{ required: true, message: "请输入航线 ID", trigger: "blur" }],
+  longitude: [{ validator: validateDockCoordinateField, trigger: "blur" }],
+  latitude: [{ validator: validateDockCoordinateField, trigger: "blur" }],
 };
+
+async function initOrgContext() {
+  if (isEdit.value) return;
+
+  const queryOrgId = route.query.orgId;
+  const queryRootOrgId = route.query.rootOrgId;
+
+  if (queryOrgId != null && queryOrgId !== "") {
+    orgId.value = Number(queryOrgId) || queryOrgId;
+  } else if (!authStore.isSuperAdmin && authStore.orgId != null) {
+    orgId.value = authStore.orgId;
+  }
+
+  if (queryRootOrgId != null && queryRootOrgId !== "") {
+    rootOrgId.value = Number(queryRootOrgId) || queryRootOrgId;
+    return;
+  }
+
+  if (orgId.value == null) return;
+
+  await initOrgCascader(authStore);
+  const ctx = resolveOrgContextFromTree(orgTreeOptions.value, orgId.value, orgSetId.value);
+  rootOrgId.value = ctx?.rootOrgId ?? null;
+}
 
 async function loadDetail() {
   if (!isEdit.value) return;
   const data = await fetchDroneDetail({ id: route.params.id });
+  const coords = resolveDroneFormCoordinates(data);
+  orgId.value = data.orgId ?? null;
+  rootOrgId.value = data.rootOrgId ?? null;
   Object.assign(form, {
     name: data.name,
-    model: data.model,
     sn: data.sn,
-    droneType: data.droneTypeKind || DRONE_TYPE.SINGLE,
-    dockLocation: data.dockLocation,
+    waylineId: data.waylineId ?? "",
+    longitude: coords.longitude,
+    latitude: coords.latitude,
   });
+
+  if (rootOrgId.value == null && orgId.value != null) {
+    await initOrgCascader(authStore);
+    const ctx = resolveOrgContextFromTree(orgTreeOptions.value, orgId.value, orgSetId.value);
+    rootOrgId.value = ctx?.rootOrgId ?? null;
+  }
 }
 
 async function submit() {
   await formRef.value.validate();
+  if (orgId.value == null || rootOrgId.value == null) {
+    ElMessage.warning("缺少单位信息，请从列表页重新进入");
+    return;
+  }
+
   submitting.value = true;
   try {
-    const payload = buildDronePayload(form, isEdit.value ? { id: route.params.id } : {});
+    const payload = buildDronePayload(form, {
+      id: isEdit.value ? route.params.id : undefined,
+      orgId: orgId.value,
+      rootOrgId: rootOrgId.value,
+    });
     if (isEdit.value) {
       await updateDrone(payload);
       ElMessage.success("保存成功");
@@ -147,7 +192,10 @@ function goBack() {
   router.push(`${MONITOR_BASE}/drones`);
 }
 
-onMounted(loadDetail);
+onMounted(async () => {
+  await initOrgContext();
+  await loadDetail();
+});
 </script>
 
 <style scoped lang="scss">
@@ -213,21 +261,6 @@ onMounted(loadDetail);
 
 .device-form__body :deep(.el-form-item__label) {
   color: #606266;
-}
-
-.device-form__type-group {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  min-height: 32px;
-}
-
-.device-form__type-group :deep(.el-checkbox__label) {
-  color: #606266;
-}
-
-.device-form__type-group :deep(.el-checkbox.is-checked .el-checkbox__label) {
-  color: var(--el-color-primary);
 }
 
 </style>

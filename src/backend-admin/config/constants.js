@@ -19,13 +19,10 @@ export const DRONE_RAW_STATUS = {
   3: { label: "返航中", type: "primary" },
 };
 
-/** 无人机作业状态（列表展示） */
-export const DRONE_WORK_STATUS = {
-  0: "-",
-  1: "空闲",
-  2: "伴飞中",
-  3: "返航中",
-};
+/** 无人机作业状态（列表展示）：仅 status=2 为伴飞中，其余为空闲 */
+export function resolveDroneWorkStatusText(status) {
+  return Number(status) === 2 ? "伴飞中" : "空闲";
+}
 
 /** 无人机类型 */
 export const DRONE_TYPE = {
@@ -82,10 +79,59 @@ export const CHECKPOINT_TYPE_OPTIONS = Object.entries(CHECKPOINT_TYPE_LABELS).ma
   }),
 );
 
+/** 计划类型：与 /place/listQuery、/place/add 的 type 一致 */
+export const PLAN_TYPE = {
+  MOUNTAIN: 1,
+  WATER: 2,
+  SECURITY: 3,
+};
+
+export const PLAN_TYPE_LABELS = {
+  [PLAN_TYPE.MOUNTAIN]: "山林救援",
+  [PLAN_TYPE.WATER]: "水上观察",
+  [PLAN_TYPE.SECURITY]: "重点安保",
+};
+
+export const PLAN_TYPE_OPTIONS = Object.entries(PLAN_TYPE_LABELS).map(([value, label]) => ({
+  value: Number(value),
+  label,
+}));
+
+/** 重点地点类别：与 /place/listQuery 的 placeType 一致 */
+export const PLACE_TYPE = {
+  PRIMARY_SCHOOL: 1,
+  MIDDLE_SCHOOL: 2,
+  UNIVERSITY: 3,
+  GAS_STATION: 4,
+  RAIL_STATION: 5,
+  HOSPITAL: 6,
+  PARK: 7,
+  GOVERNMENT: 8,
+};
+
+export const PLACE_TYPE_LABELS = {
+  [PLACE_TYPE.PRIMARY_SCHOOL]: "小学",
+  [PLACE_TYPE.MIDDLE_SCHOOL]: "中学",
+  [PLACE_TYPE.UNIVERSITY]: "高校",
+  [PLACE_TYPE.GAS_STATION]: "加油站",
+  [PLACE_TYPE.RAIL_STATION]: "动车站",
+  [PLACE_TYPE.HOSPITAL]: "医院",
+  [PLACE_TYPE.PARK]: "公园",
+  [PLACE_TYPE.GOVERNMENT]: "政府单位",
+};
+
+export const PLACE_TYPE_OPTIONS = Object.entries(PLACE_TYPE_LABELS).map(([value, label]) => ({
+  value: Number(value),
+  label,
+}));
+
 export const LOW_BATTERY_THRESHOLD = 20;
 
 /** 看板轮询间隔（毫秒） */
 export const DASHBOARD_POLL_INTERVAL = 10000;
+
+/** 监控看板列表展示上限 */
+export const MONITOR_PANEL_LIST_LIMIT = 10;
 
 /** 单位性质 */
 export const ORG_NATURE = {

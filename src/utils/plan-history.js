@@ -22,6 +22,17 @@ export function getHistoryMinDateYmd() {
   return formatDateYmd(d);
 }
 
+/** 历史记录默认日期范围：今日 */
+export function getDefaultHistoryDateRange() {
+  const today = getTodayYmd();
+  return [today, today];
+}
+
+/** 历史记录可选最大范围：近 30 日（含今日） */
+export function getHistoryFullDateRange() {
+  return [getHistoryMinDateYmd(), getTodayYmd()];
+}
+
 /**
  * @param {Date} date
  */

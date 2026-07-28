@@ -1,5 +1,10 @@
 <template>
-  <section v-if="visible" class="history-panel" aria-label="历史任务记录">
+  <section
+    v-if="visible"
+    class="history-panel"
+    :class="{ 'history-panel--fullscreen': isFullscreen }"
+    aria-label="历史任务记录"
+  >
     <header class="history-panel__head">
       <div class="history-panel__head-bar">
         <img :src="tableJlPng" class="history-panel__title-icon" alt="" aria-hidden="true" />
@@ -28,8 +33,10 @@
             :disabled-date="disabledHistoryDate"
             teleported
             popper-class="plan-editor-picker-popper"
+            @clear="onDateRangeClear"
           />
           <el-select
+            v-if="activeTab === 'plan'"
             v-model="scenarioType"
             class="history-panel__scenario"
             placeholder="全部场景"
@@ -44,12 +51,40 @@
               :value="opt.value"
             />
           </el-select>
+          <el-select
+            v-if="activeTab === 'companion'"
+            v-model="taskStatus"
+            class="history-panel__scenario"
+            placeholder="全部状态"
+            clearable
+            teleported
+            popper-class="history-panel__scenario-popper"
+          >
+            <el-option
+              v-for="opt in taskStatusOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
           <button type="button" class="history-panel__reset" @click="onResetFilters">重置</button>
+          <button
+            type="button"
+            class="history-panel__fullscreen"
+            :aria-label="isFullscreen ? '退出全屏' : '全屏查看'"
+            @click="toggleFullscreen"
+          >
+            <i :class="isFullscreen ? 'ri-fullscreen-exit-line' : 'ri-fullscreen-line'" />
+          </button>
           <button type="button" class="history-panel__close" aria-label="关闭" @click="closePanel">
             <img :src="tableClosePng" class="history-panel__close-icon" alt="" aria-hidden="true" />
           </button>
         </div>
       </div>
+      <el-tabs v-model="activeTab" class="history-panel__el-tabs">
+        <el-tab-pane label="飞行计划" name="plan" />
+        <el-tab-pane label="伴飞任务" name="companion" />
+      </el-tabs>
     </header>
 
     <div v-loading="loading" class="history-panel__body">
@@ -78,6 +113,8 @@
                     fit="cover"
                     :preview-src-list="[ev.imageUrl]"
                     preview-teleported
+                    :preview-z-index="imagePreviewZIndex"
+                    hide-on-click-modal
                   />
                   <span v-else class="history-event-img--empty">—</span>
                 </span>
@@ -88,67 +125,86 @@
                 <span class="history-event-row__cell">{{ ev.droneName || "—" }}</span>
               </div>
             </div>
-            <div v-else class="history-events-empty">暂无 AI 预警事件</div>
+            <div v-else class="history-events-empty">{{ expandEmptyText }}</div>
           </template>
         </el-table-column>
-        <el-table-column prop="scenarioTitle" label="场景类型" min-width="80" />
-        <el-table-column prop="subject" label="安保主题" min-width="120" show-overflow-tooltip />
-        <el-table-column prop="locationLabel" label="地点选择" min-width="120" show-overflow-tooltip />
-        <el-table-column label="实施时间" width="130" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ formatExecuteTimeRange(row) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="所需资源" width="100" show-overflow-tooltip>
-          <template #default="{ row }">
-            <el-popover
-              v-if="row.resourceText !== '—'"
-              trigger="click"
-              placement="bottom-start"
-              :width="330"
-              popper-class="history-resource-popover"
-            >
-              <template #reference>
-                <span class="history-resource-link">{{ row.resourceText }}</span>
-              </template>
-              <div class="history-resource-pop">
-                <template v-if="row.resourceInfo?.length">
-                  <div
-                    v-for="(ri, i) in row.resourceInfo"
-                    :key="ri.id || i"
-                    class="history-resource-pop__item"
-                  >
-                    <span class="history-resource-pop__name">{{ ri.name || "—" }}</span>
-                    <span class="history-resource-pop__id">ID: {{ ri.id || "—" }}</span>
-                    <span class="history-resource-pop__sn">SN: {{ ri.sn || "—" }}</span>
-                  </div>
+        <template v-if="activeTab === 'plan'">
+          <el-table-column prop="scenarioTitle" label="场景类型" min-width="80" />
+          <el-table-column prop="subject" label="安保主题" min-width="120" show-overflow-tooltip />
+          <el-table-column prop="locationLabel" label="地点选择" min-width="120" show-overflow-tooltip />
+          <el-table-column label="实施时间" width="130" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ formatExecuteTimeRange(row) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="所需资源" width="100" show-overflow-tooltip>
+            <template #default="{ row }">
+              <el-popover
+                v-if="row.resourceText !== '—'"
+                trigger="click"
+                placement="bottom-start"
+                :width="330"
+                popper-class="history-resource-popover"
+              >
+                <template #reference>
+                  <span class="history-resource-link">{{ row.resourceText }}</span>
                 </template>
-                <div v-else class="history-resource-pop__item">
-                  <span class="history-resource-pop__name">暂无设备详情</span>
+                <div class="history-resource-pop">
+                  <template v-if="row.resourceInfo?.length">
+                    <div
+                      v-for="(ri, i) in row.resourceInfo"
+                      :key="ri.id || i"
+                      class="history-resource-pop__item"
+                    >
+                      <span class="history-resource-pop__name">{{ ri.name || "—" }}</span>
+                      <span class="history-resource-pop__id">ID: {{ ri.id || "—" }}</span>
+                      <span class="history-resource-pop__sn">SN: {{ ri.sn || "—" }}</span>
+                    </div>
+                  </template>
+                  <div v-else class="history-resource-pop__item">
+                    <span class="history-resource-pop__name">暂无设备详情</span>
+                  </div>
                 </div>
-              </div>
-            </el-popover>
-            <span v-else>{{ row.resourceText }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="warnCount" label="AI事件总数" width="125" align="center" />
-        <el-table-column label="开始时间" width="130" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.startTime || "—" }}</template>
-        </el-table-column>
-        <el-table-column label="结束时间" width="130" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.endTime || "—" }}</template>
-        </el-table-column>
-        <el-table-column prop="startModeLabel" label="开始方式" width="105" />
-        <el-table-column label="操作" fixed="right">
-          <template #default="{ row }">
-            <button type="button" class="history-op history-op--primary" @click="onQuickCreate(row)">
-              快捷创建
-            </button>
-            <button type="button" class="history-op history-op--danger" @click="onDeleteRecord(row)">
-              删除记录
-            </button>
-          </template>
-        </el-table-column>
+              </el-popover>
+              <span v-else>{{ row.resourceText }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="warnCount" label="AI事件总数" width="125" align="center" />
+          <el-table-column label="开始时间" width="130" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.startTime || "—" }}</template>
+          </el-table-column>
+          <el-table-column label="结束时间" width="130" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.endTime || "—" }}</template>
+          </el-table-column>
+          <el-table-column prop="startModeLabel" label="开始方式" width="105" />
+          <el-table-column label="操作" fixed="right">
+            <template #default="{ row }">
+              <button type="button" class="history-op history-op--primary" @click="onQuickCreate(row)">
+                快捷创建
+              </button>
+              <button type="button" class="history-op history-op--danger" @click="onDeleteRecord(row)">
+                删除记录
+              </button>
+            </template>
+          </el-table-column>
+        </template>
+        <template v-else>
+          <el-table-column prop="name" label="任务名称" min-width="140" show-overflow-tooltip />
+          <el-table-column label="任务状态" width="110" align="center">
+            <template #default="{ row }">
+              <span class="task-status-tag" :class="row.statusClass">{{ row.statusLabel }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="任务创建时间" width="160" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.createTime || "—" }}</template>
+          </el-table-column>
+          <el-table-column label="开始时间" width="160" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.startTime || "—" }}</template>
+          </el-table-column>
+          <el-table-column label="结束时间" width="160" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.finishTime || "—" }}</template>
+          </el-table-column>
+        </template>
       </el-table>
 
       <div v-if="total > pageSize" class="history-pagination">
@@ -174,10 +230,11 @@
 </template>
 
 <script setup>
-import { ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 
 import { FlightPlanService } from "@/api/plan.js";
+import { TaskService } from "@/api/task.js";
 import { unwrapApiList } from "@/utils/request.js";
 import { normalizeWarnDataToFlatEvents } from "@/utils/plan-algorithm-data.js";
 import {
@@ -192,20 +249,28 @@ import {
   buildQuickCreateBody,
   historyQuickCreateNeedsSchedule,
 } from "@/utils/plan-history-quick-create.js";
-import { getTodayYmd, isDateInHistoryRange } from "@/utils/plan-history.js";
+import { getDefaultHistoryDateRange, getHistoryFullDateRange, isDateInHistoryRange } from "@/utils/plan-history.js";
+import { TASK_STATUS_OPTIONS, taskToRecord } from "@/utils/task-history.js";
 
 const visible = defineModel("visible", { type: Boolean, default: false });
 const tableRef = ref(null);
+const isFullscreen = ref(false);
 
 const emit = defineEmits(["quick-create", "deleted"]);
 
-const dateRange = ref([getTodayYmd(), getTodayYmd()]);
+/** @type {import('vue').Ref<'plan' | 'companion'>} */
+const activeTab = ref("plan");
+
+const dateRange = ref(getDefaultHistoryDateRange());
 /** @type {import('vue').Ref<number | null>} 1山林救援 2水上观察 3重点安保 */
 const scenarioType = ref(null);
+/** @type {import('vue').Ref<number | null>} 0-4 伴飞任务状态 */
+const taskStatus = ref(null);
 const scenarioTypeOptions = PLAN_SCENARIOS.map((s) => ({
   value: TAB_TO_API_TYPE[s.key],
   label: s.title,
 }));
+const taskStatusOptions = TASK_STATUS_OPTIONS;
 const loading = ref(false);
 const records = ref([]);
 const currentPage = ref(1);
@@ -217,6 +282,17 @@ const quickCreateRow = ref(null);
 
 /** @type {import('vue').Ref<Record<string, Array<Record<string,any>>>>} */
 const warnDataCache = ref({});
+/** @type {import('vue').Ref<Record<string, Array<Record<string,any>>>>} */
+const taskWarningCache = ref({});
+
+const suppressFilterReload = ref(false);
+
+const expandEmptyText = computed(() =>
+  activeTab.value === "companion" ? "暂无任务告警" : "暂无 AI 预警事件",
+);
+
+/** 高于 HomeHeader(10001)，避免预览关闭按钮被顶部栏遮挡 */
+const imagePreviewZIndex = computed(() => (isFullscreen.value ? 10200 : 10100));
 
 const tableHeaderStyle = {
   background: "#1c222a",
@@ -327,7 +403,12 @@ function planToRecord(p) {
 }
 
 function closePanel() {
+  isFullscreen.value = false;
   visible.value = false;
+}
+
+function toggleFullscreen() {
+  isFullscreen.value = !isFullscreen.value;
 }
 
 function expandAll() {
@@ -343,29 +424,42 @@ function collapseAll() {
 }
 
 function onResetFilters() {
-  dateRange.value = [getTodayYmd(), getTodayYmd()];
+  dateRange.value = getDefaultHistoryDateRange();
   scenarioType.value = null;
+  taskStatus.value = null;
+  currentPage.value = 1;
+}
+
+function onDateRangeClear() {
+  dateRange.value = getHistoryFullDateRange();
+}
+
+async function resetPanelState() {
+  suppressFilterReload.value = true;
+  activeTab.value = "plan";
+  dateRange.value = getDefaultHistoryDateRange();
+  scenarioType.value = null;
+  taskStatus.value = null;
+  currentPage.value = 1;
+  pageSize.value = 10;
+  total.value = 0;
+  records.value = [];
+  isFullscreen.value = false;
+  quickScheduleVisible.value = false;
+  quickCreateRow.value = null;
+  warnDataCache.value = {};
+  taskWarningCache.value = {};
+  await nextTick();
+  suppressFilterReload.value = false;
 }
 
 function buildTimeRange() {
-  const range = dateRange.value;
-  if (range && Array.isArray(range) && range.length === 2 && range[0] && range[1]) {
-    return {
-      startTime: `${range[0]} 00:00:00`,
-      endTime: `${range[1]} 23:59:59`,
-    };
-  }
-  // 未选择日期时，查询近 30 天
-  const today = getTodayYmd();
-  const d = new Date();
-  d.setDate(d.getDate() - 29);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const minDate = `${y}-${m}-${day}`;
+  const range = dateRange.value?.length === 2 && dateRange.value[0] && dateRange.value[1]
+    ? dateRange.value
+    : getHistoryFullDateRange();
   return {
-    startTime: `${minDate} 00:00:00`,
-    endTime: `${today} 23:59:59`,
+    startTime: `${range[0]} 00:00:00`,
+    endTime: `${range[1]} 23:59:59`,
   };
 }
 
@@ -374,19 +468,11 @@ async function loadRecords() {
   if (loading.value) return;
   loading.value = true;
   try {
-    const range = buildTimeRange();
-    const query = {
-      current: currentPage.value,
-      pageSize: pageSize.value,
-      ...range,
-    };
-    if (scenarioType.value != null && scenarioType.value !== "") {
-      query.type = scenarioType.value;
+    if (activeTab.value === "companion") {
+      await loadCompanionRecords();
+    } else {
+      await loadPlanRecords();
     }
-    const data = await FlightPlanService.recordPageQuery(query);
-    const list = unwrapApiList(data);
-    total.value = data?.total ?? data?.data?.total ?? list.length;
-    records.value = list.map(planToRecord).filter((r) => r.id);
   } catch (e) {
     console.error("[PlanHistory] loadRecords failed:", e);
     records.value = [];
@@ -394,6 +480,48 @@ async function loadRecords() {
   } finally {
     loading.value = false;
   }
+}
+
+async function loadPlanRecords() {
+  const range = buildTimeRange();
+  const query = {
+    current: currentPage.value,
+    pageSize: pageSize.value,
+    ...range,
+  };
+  if (scenarioType.value != null && scenarioType.value !== "") {
+    query.type = scenarioType.value;
+  }
+  const data = await FlightPlanService.recordPageQuery(query);
+  const list = unwrapApiList(data);
+  total.value = data?.total ?? data?.data?.total ?? list.length;
+  records.value = list.map(planToRecord).filter((r) => r.id);
+}
+
+async function loadCompanionRecords() {
+  const range = buildTimeRange();
+  const query = {
+    current: currentPage.value,
+    pageSize: pageSize.value,
+    ...range,
+  };
+  if (taskStatus.value != null && taskStatus.value !== "") {
+    query.status = taskStatus.value;
+  }
+  const data = await TaskService.taskPageQuery(query);
+  const list = unwrapApiList(data);
+  total.value = data?.total ?? data?.data?.total ?? list.length;
+  records.value = list
+    .map((item) => {
+      const record = taskToRecord(item);
+      if (!record) return null;
+      const uuid = record.uuid;
+      return {
+        ...record,
+        events: taskWarningCache.value[uuid] || [],
+      };
+    })
+    .filter(Boolean);
 }
 
 function onQuickCreate(row) {
@@ -469,30 +597,70 @@ function onDeleteRecord(row) {
 }
 
 async function onExpandChange(row) {
+  if (activeTab.value === "companion") {
+    await loadTaskWarnings(row);
+    return;
+  }
+  await loadPlanWarnings(row);
+}
+
+async function loadPlanWarnings(row) {
   const planId = row?.planId || row?.id;
   if (!planId || warnDataCache.value[planId]) return;
   try {
     const warnData = await FlightPlanService.planWarnData({ id: planId });
     const events = normalizeWarnDataToFlatEvents(warnData);
     warnDataCache.value = { ...warnDataCache.value, [planId]: events };
-    const idx = records.value.findIndex((r) => (r.planId || r.id) === planId);
-    if (idx >= 0) {
-      const next = [...records.value];
-      next[idx] = { ...next[idx], events, aiEventCount: events.length };
-      records.value = next;
-    }
+    patchRowEvents(planId, events, (r) => (r.planId || r.id) === planId);
   } catch {
     warnDataCache.value = { ...warnDataCache.value, [planId]: [] };
+    patchRowEvents(planId, [], (r) => (r.planId || r.id) === planId);
   }
 }
 
+async function loadTaskWarnings(row) {
+  const uuid = row?.uuid || row?.id;
+  if (!uuid || taskWarningCache.value[uuid]) return;
+  try {
+    const data = await TaskService.taskWarningPageQuery({ uuid });
+    const events = normalizeWarnDataToFlatEvents(data);
+    taskWarningCache.value = { ...taskWarningCache.value, [uuid]: events };
+    patchRowEvents(uuid, events, (r) => (r.uuid || r.id) === uuid);
+  } catch {
+    taskWarningCache.value = { ...taskWarningCache.value, [uuid]: [] };
+    patchRowEvents(uuid, [], (r) => (r.uuid || r.id) === uuid);
+  }
+}
+
+function patchRowEvents(key, events, matchFn) {
+  const idx = records.value.findIndex(matchFn);
+  if (idx < 0) return;
+  const next = [...records.value];
+  next[idx] = {
+    ...next[idx],
+    events,
+    aiEventCount: events.length,
+    warnCount: events.length,
+  };
+  records.value = next;
+}
+
+watch(visible, async (v) => {
+  if (v) {
+    await resetPanelState();
+    loadRecords();
+    return;
+  }
+  isFullscreen.value = false;
+});
+
 watch(
-  () => [visible.value, dateRange.value, scenarioType.value],
-  ([v]) => {
-    if (v) {
-      currentPage.value = 1;
-      loadRecords();
-    }
+  () => [dateRange.value, scenarioType.value, taskStatus.value, activeTab.value],
+  () => {
+    if (!visible.value || suppressFilterReload.value) return;
+    currentPage.value = 1;
+    collapseAll();
+    loadRecords();
   },
 );
 </script>
@@ -508,6 +676,16 @@ watch(
   border-radius: 6px;
   background: rgba(3, 6, 10, 0.65);
   padding: 10px;
+
+  &--fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 10020;
+    max-height: none;
+    width: 100vw;
+    border-radius: 0;
+    background: rgba(3, 6, 10, 0.96);
+  }
 }
 
 .history-panel__head {
@@ -581,6 +759,40 @@ watch(
   text-overflow: ellipsis;
 }
 
+:deep(.history-panel__el-tabs) {
+  margin-top: 10px;
+
+  .el-tabs__header {
+    margin: 0;
+  }
+
+  .el-tabs__nav-wrap::after {
+    height: 1px;
+    background-color: rgba(255, 255, 255, 0.12);
+  }
+
+  .el-tabs__item {
+    height: 40px;
+    padding: 0 20px;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 15px;
+    font-weight: 500;
+
+    &:hover {
+      color: rgba(255, 255, 255, 0.85);
+    }
+
+    &.is-active {
+      color: #558efc;
+    }
+  }
+
+  .el-tabs__active-bar {
+    height: 2px;
+    background-color: #558efc;
+  }
+}
+
 .history-panel__expand-btn {
   flex-shrink: 0;
   height: 28px;
@@ -623,6 +835,27 @@ watch(
 
   &:hover {
     background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.history-panel__fullscreen {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #558efc;
+  border-radius: 4px;
+  background: #15191e;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+
+  &:hover {
+    background: rgba(85, 142, 252, 0.15);
   }
 }
 
@@ -974,9 +1207,56 @@ watch(
     opacity: 0.85;
   }
 }
+
+.task-status-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.task-status--idle {
+  color: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.task-status--running {
+  color: #1890ff;
+  background: rgba(24, 144, 255, 0.12);
+  border-color: rgba(24, 144, 255, 0.35);
+}
+
+.task-status--abnormal {
+  color: #e6a23c;
+  background: rgba(230, 162, 60, 0.12);
+  border-color: rgba(230, 162, 60, 0.35);
+}
+
+.task-status--failed {
+  color: #f56c6c;
+  background: rgba(245, 108, 108, 0.12);
+  border-color: rgba(245, 108, 108, 0.35);
+}
+
+.task-status--completed {
+  color: #67c23a;
+  background: rgba(103, 194, 58, 0.12);
+  border-color: rgba(103, 194, 58, 0.35);
+}
 </style>
 
 <style lang="scss">
+/* 历史记录图片预览需高于 HomeHeader(10001) */
+.el-image-viewer__wrapper {
+  z-index: 10100 !important;
+}
+
 .history-pagination-popper.el-popper {
   --el-bg-color-overlay: #1a1f28;
   --el-fill-color-blank: #15191e;

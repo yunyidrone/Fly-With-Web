@@ -19,7 +19,8 @@ export function normalizeTargetRecord(raw) {
     sn,
     type: typeNum,
     typeLabel: TARGET_TYPE_LABELS[typeNum] || `类型${typeNum}`,
-    orgId: raw.orgId ?? raw.org_id ?? "",
+    orgId: raw.orgId ?? raw.org_id ?? null,
+    rootOrgId: raw.rootOrgId ?? raw.rootId ?? raw.root_org_id ?? null,
     orgName: raw.orgName ?? raw.org_name ?? "",
   };
 }
@@ -32,7 +33,7 @@ export function normalizeTargetList(payload) {
 /**
  * 提交新增/编辑时的请求体
  * @param {Record<string, any>} form
- * @param {{ id?: string }} [options]
+ * @param {{ id?: string, rootOrgId?: string|number }} [options]
  */
 export function buildTargetPayload(form, options = {}) {
   const payload = {
@@ -42,6 +43,11 @@ export function buildTargetPayload(form, options = {}) {
     type: Number(form.type) || 1,
     orgId: form.orgId,
   };
+
+  const rootOrgId = options.rootOrgId ?? form.rootOrgId;
+  if (rootOrgId != null && rootOrgId !== "") {
+    payload.rootOrgId = rootOrgId;
+  }
 
   if (options.id) {
     payload.id = String(options.id);

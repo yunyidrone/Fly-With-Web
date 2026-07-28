@@ -129,7 +129,7 @@ onUnmounted(() => {
   top: 24px;
   left: 24px;
   right: 24px;
-  z-index: 10000;
+  z-index: 99;
   pointer-events: none;
 }
 
@@ -274,7 +274,7 @@ onUnmounted(() => {
   position: absolute;
   top: calc(100% + 10px);
   right: 0;
-  z-index: 10001;
+  z-index: 100;
   min-width: 148px;
   padding: 8px;
   border: 1px solid #30363b;

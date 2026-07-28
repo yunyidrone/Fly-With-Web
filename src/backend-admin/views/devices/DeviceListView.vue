@@ -44,11 +44,9 @@
             <span class="text-primary">{{ row.name }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="类型" width="130">
+        <el-table-column prop="orgName" label="所属单位" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-tag :type="row.droneTypeTagType" size="small" effect="light" round>
-              {{ row.droneTypeLabel }}
-            </el-tag>
+            {{ row.orgName || "-" }}
           </template>
         </el-table-column>
         <el-table-column label="电量" width="80" align="center">
@@ -65,12 +63,12 @@
         <el-table-column label="在线状态" width="100">
           <template #default="{ row }">
             <span
-              v-if="row.isOnline != null"
+              v-if="row.statusText"
               class="device-list__status"
-              :class="row.isOnline ? 'device-list__status--online' : 'device-list__status--offline'"
+              :class="getOnlineStatusClass(row.rawStatus)"
             >
               <i class="device-list__status-dot" />
-              {{ row.isOnline ? "在线" : "离线" }}
+              {{ row.statusText }}
             </span>
             <span v-else class="device-list__placeholder">-</span>
           </template>
@@ -142,22 +140,24 @@ import { useOrgCascader } from "@backend/composables/useOrgCascader.js";
 import { useTableQuery } from "@backend/composables/useTableQuery.js";
 import { LOW_BATTERY_THRESHOLD } from "@backend/config/constants.js";
 import { MONITOR_BASE } from "@backend/router/routes.js";
+import { resolveOrgContextFromTree } from "@backend/utils/org-set.js";
 import { useAuthStore } from "@/stores/auth.js";
 
 const router = useRouter();
 const authStore = useAuthStore();
 const {
+  orgSetId,
   orgTreeOptions,
   selectedOrgId,
   loading: orgCascaderLoading,
   cascaderDisabled,
   initOrgCascader,
   syncSelectedOrgId,
-} = useOrgCascader();
+} = useOrgCascader({ autoSelectFirst: false, autoSelectUserOrg: false });
 
 const { loading, records, total, query, load, onPageChange, onSizeChange } = useTableQuery(
   fetchDronePage,
-  { pageSize: 10, orgId: "" },
+  { pageSize: 10, orgId: null },
 );
 
 async function loadOrgOptions() {
@@ -165,7 +165,8 @@ async function loadOrgOptions() {
 }
 
 function syncOrgQuery() {
-  query.orgId = selectedOrgId.value != null ? selectedOrgId.value : "";
+  query.orgId =
+    selectedOrgId.value != null && selectedOrgId.value !== "" ? selectedOrgId.value : null;
 }
 
 function handleOrgChange(orgId) {
@@ -179,7 +180,26 @@ function handleOrgChange(orgId) {
 }
 
 function goCreate() {
-  router.push(`${MONITOR_BASE}/drones/new`);
+  const orgId = selectedOrgId.value;
+  if (orgId == null || orgId === "") {
+    ElMessage.warning("请先选择单位");
+    return;
+  }
+  const ctx = resolveOrgContextFromTree(orgTreeOptions.value, orgId, orgSetId.value);
+  router.push({
+    path: `${MONITOR_BASE}/drones/new`,
+    query: {
+      orgId,
+      rootOrgId: ctx?.rootOrgId,
+    },
+  });
+}
+
+function getOnlineStatusClass(status) {
+  if (status === 0) return "device-list__status--offline";
+  if (status === 1) return "device-list__status--ready";
+  if (status === 2) return "device-list__status--escorting";
+  return "device-list__status--unknown";
 }
 
 function goEdit(id) {
@@ -344,7 +364,15 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.device-list__status--online {
+.device-list__status--offline {
+  color: #303133;
+
+  .device-list__status-dot {
+    background: #f56c6c;
+  }
+}
+
+.device-list__status--ready {
   color: #303133;
 
   .device-list__status-dot {
@@ -352,11 +380,19 @@ onMounted(async () => {
   }
 }
 
-.device-list__status--offline {
+.device-list__status--escorting {
   color: #303133;
 
   .device-list__status-dot {
-    background: #f56c6c;
+    background: #e6a23c;
+  }
+}
+
+.device-list__status--unknown {
+  color: #303133;
+
+  .device-list__status-dot {
+    background: #909399;
   }
 }
 

@@ -266,6 +266,26 @@ export const backendRoutes = [
           roles: ["super_admin", "org_admin"],
         },
       },
+      {
+        path: "infra/locations/new",
+        name: "BackendKeyLocationCreate",
+        component: () => import("@backend/views/infra/KeyLocationFormView.vue"),
+        meta: {
+          title: "新建重点地点",
+          activeMenu: `${INFRA_BASE}/locations`,
+          roles: ["super_admin", "org_admin"],
+        },
+      },
+      {
+        path: "infra/locations/:id",
+        name: "BackendKeyLocationEdit",
+        component: () => import("@backend/views/infra/KeyLocationFormView.vue"),
+        meta: {
+          title: "编辑重点地点",
+          activeMenu: `${INFRA_BASE}/locations`,
+          roles: ["super_admin", "org_admin"],
+        },
+      },
     ],
   },
   {

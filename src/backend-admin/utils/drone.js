@@ -2,7 +2,7 @@ import {
   DRONE_RAW_STATUS,
   DRONE_TYPE,
   DRONE_TYPE_META,
-  DRONE_WORK_STATUS,
+  resolveDroneWorkStatusText,
 } from "@backend/config/constants.js";
 
 function resolveDroneTypeKind(raw) {
@@ -67,6 +67,72 @@ function parseDockLocation(value) {
 }
 
 /**
+ * 校验可选机场经纬度：可不填；若填则须成对且数值合法
+ * @param {unknown} longitude
+ * @param {unknown} latitude
+ * @returns {{ valid: true, longitude?: number, latitude?: number } | { valid: false, message: string }}
+ */
+export function validateOptionalDockCoordinates(longitude, latitude) {
+  const lngText = String(longitude ?? "").trim();
+  const latText = String(latitude ?? "").trim();
+  const lngEmpty = !lngText;
+  const latEmpty = !latText;
+
+  if (lngEmpty && latEmpty) {
+    return { valid: true };
+  }
+  if (lngEmpty || latEmpty) {
+    return { valid: false, message: "请同时填写经度和纬度" };
+  }
+
+  const lng = Number(lngText);
+  const lat = Number(latText);
+  if (!Number.isFinite(lng)) {
+    return { valid: false, message: "请输入有效的经度" };
+  }
+  if (!Number.isFinite(lat)) {
+    return { valid: false, message: "请输入有效的纬度" };
+  }
+  if (lng < -180 || lng > 180) {
+    return { valid: false, message: "经度范围为 -180 至 180" };
+  }
+  if (lat < -90 || lat > 90) {
+    return { valid: false, message: "纬度范围为 -90 至 90" };
+  }
+
+  return { valid: true, longitude: lng, latitude: lat };
+}
+
+/**
+ * 详情/列表记录转为表单经纬度字段
+ * @param {Record<string, any>} raw
+ */
+export function resolveDroneFormCoordinates(raw) {
+  const lng = raw?.longitude;
+  const lat = raw?.latitude;
+  if (
+    lng != null &&
+    lng !== "" &&
+    lat != null &&
+    lat !== "" &&
+    Number.isFinite(Number(lng)) &&
+    Number.isFinite(Number(lat))
+  ) {
+    return { longitude: String(lng), latitude: String(lat) };
+  }
+
+  const parsed = parseDockLocation(raw?.dockLocation);
+  if (parsed?.longitude != null && parsed?.latitude != null) {
+    return {
+      longitude: String(parsed.longitude),
+      latitude: String(parsed.latitude),
+    };
+  }
+
+  return { longitude: "", latitude: "" };
+}
+
+/**
  * 将后端 drone 记录转为 Admin 列表/表单使用的结构
  * 字段对齐 accompaning-fly-project/src/stores/device.js
  * @param {Record<string, any>} raw
@@ -106,7 +172,7 @@ export function normalizeDroneRecord(raw) {
     distance: raw.distance,
     battery: resolveBattery(raw),
     isOnline: Number.isFinite(statusNum) ? statusNum !== 0 : null,
-    workStatusText: DRONE_WORK_STATUS[statusNum] ?? "-",
+    workStatusText: resolveDroneWorkStatusText(statusNum),
     deviceEnabled: resolveDeviceEnabled(raw),
     droneTypeKind,
     droneTypeLabel: `${typeMeta.prefix}-${resolveDroneModel(raw)}`,
@@ -114,6 +180,9 @@ export function normalizeDroneRecord(raw) {
     coordText: formatCoord(raw.longitude, raw.latitude),
     model: resolveDroneModel(raw),
     dockLocation: formatDockLocation(raw),
+    orgId: raw.orgId ?? raw.org_id ?? null,
+    rootOrgId: raw.rootOrgId ?? raw.rootId ?? raw.root_org_id ?? null,
+    orgName: String(raw.orgName ?? raw.org_name ?? raw.organizationName ?? "").trim(),
   };
 }
 
@@ -125,27 +194,28 @@ export function normalizeDroneList(payload) {
 /**
  * 提交新增/编辑时的请求体（与现网 /drone/add、/drone/update 对齐）
  * @param {Record<string, any>} form
- * @param {{ id?: string }} [options]
+ * @param {{ id?: string, orgId?: string|number, rootOrgId?: string|number }} [options]
  */
 export function buildDronePayload(form, options = {}) {
-  const droneType = form.droneType === DRONE_TYPE.DOCK ? DRONE_TYPE.DOCK : DRONE_TYPE.SINGLE;
-  const dockInfo = parseDockLocation(form.dockLocation);
+  const coordResult = validateOptionalDockCoordinates(form.longitude, form.latitude);
 
   const payload = {
     name: String(form.name || "").trim(),
     sn: String(form.sn || "").trim(),
-    model: String(form.model || "").trim(),
-    type: droneType === DRONE_TYPE.DOCK ? "dock" : "single",
-    category: droneType === DRONE_TYPE.DOCK ? "机场" : "单兵",
-    deviceType: droneType === DRONE_TYPE.DOCK ? "机场" : "单兵",
+    waylineId: String(form.waylineId || "").trim(),
   };
 
-  if (dockInfo?.longitude != null && dockInfo?.latitude != null) {
-    payload.longitude = dockInfo.longitude;
-    payload.latitude = dockInfo.latitude;
-    payload.dockLocation = dockInfo.raw;
-  } else if (dockInfo?.raw) {
-    payload.dockLocation = dockInfo.raw;
+  if (options.orgId != null && options.orgId !== "") {
+    payload.orgId = options.orgId;
+  }
+  if (options.rootOrgId != null && options.rootOrgId !== "") {
+    payload.rootOrgId = options.rootOrgId;
+  }
+
+  if (coordResult.valid && coordResult.longitude != null && coordResult.latitude != null) {
+    payload.longitude = coordResult.longitude;
+    payload.latitude = coordResult.latitude;
+    payload.dockLocation = `${coordResult.longitude}, ${coordResult.latitude}`;
   }
 
   if (options.id) {

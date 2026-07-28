@@ -5,7 +5,6 @@
         <div class="infra-page__title">卡点设置</div>
         <div class="infra-page__actions">
           <el-button
-            v-permission="['super_admin', 'org_admin']"
             class="infra-page__create-btn"
             @click="handleCreate"
           >
@@ -46,7 +45,6 @@
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
             <el-button
-              v-permission="['super_admin', 'org_admin']"
               link
               type="primary"
               @click="handleEdit(row)"
@@ -54,7 +52,6 @@
               编辑
             </el-button>
             <el-button
-              v-permission="['super_admin', 'org_admin']"
               link
               type="danger"
               @click="handleDelete(row)"

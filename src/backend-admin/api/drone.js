@@ -2,7 +2,11 @@ import { requestData, unwrapApiList } from "@backend/utils/request.js";
 import { normalizeDroneList, normalizeDroneRecord } from "@backend/utils/drone.js";
 
 export async function fetchDronePage(params) {
-  const data = await requestData("/drone/pageQuery", { params }, "GET");
+  const query = { ...params };
+  if (query.orgId == null || query.orgId === "") {
+    delete query.orgId;
+  }
+  const data = await requestData("/drone/pageQuery", { params: query }, "GET");
   if (data && Array.isArray(data.records)) {
     return { ...data, records: normalizeDroneList(data.records) };
   }

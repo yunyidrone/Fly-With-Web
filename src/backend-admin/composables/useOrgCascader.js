@@ -11,10 +11,10 @@ import {
 
 /**
  * 单位级联筛选
- * @param {{ autoSelectFirst?: boolean }} [options]
+ * @param {{ autoSelectFirst?: boolean, autoSelectUserOrg?: boolean }} [options]
  */
 export function useOrgCascader(options = {}) {
-  const { autoSelectFirst = true } = options;
+  const { autoSelectFirst = true, autoSelectUserOrg = true } = options;
   const { id: orgSetId, initOrgSet } = useCurrentOrgSet();
   const orgTreeOptions = ref([]);
   const selectedOrgId = ref(null);
@@ -43,7 +43,7 @@ export function useOrgCascader(options = {}) {
   }
 
   function initSelection(authStore, explicitOrgId) {
-    if (!authStore.isSuperAdmin && authStore.orgId != null) {
+    if (autoSelectUserOrg && !authStore.isSuperAdmin && authStore.orgId != null) {
       selectedOrgId.value = authStore.orgId;
       return;
     }

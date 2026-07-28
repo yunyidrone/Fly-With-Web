@@ -18,6 +18,7 @@
           </el-form-item>
           <el-form-item label="请输入新的密码" prop="newPassword">
             <el-input v-model="form.newPassword" type="password" show-password />
+            <PasswordRuleHint />
           </el-form-item>
           <el-form-item label="确认新密码" prop="confirmPassword">
             <el-input v-model="form.confirmPassword" type="password" show-password />
@@ -41,6 +42,7 @@ import { ElMessage } from "element-plus";
 import { changePassword } from "@/api/auth.js";
 import { useAuthStore } from "@/stores/auth.js";
 import { validateComplexPassword } from "@backend/utils/password.js";
+import PasswordRuleHint from "@/components/PasswordRuleHint.vue";
 
 const router = useRouter();
 const authStore = useAuthStore();

@@ -244,6 +244,45 @@ export function findOrgInTree(nodes, orgId) {
 }
 
 /**
+ * 根据单位 id 解析 orgId / rootOrgId（顶级单位 id）
+ * @param {unknown} nodes
+ * @param {string|number|null|undefined} orgId
+ * @param {string|number|null|undefined} [fallbackRootOrgId]
+ * @returns {{ orgId: string|number, rootOrgId: string|number } | null}
+ */
+export function resolveOrgContextFromTree(nodes, orgId, fallbackRootOrgId = null) {
+  if (orgId == null || orgId === "") return null;
+
+  const treeRoots = normalizeOrgTree(nodes);
+  const defaultRootId =
+    treeRoots[0]?.rootOrgId ??
+    treeRoots[0]?.rootId ??
+    treeRoots[0]?.id ??
+    fallbackRootOrgId;
+
+  function walk(nodeList, inheritedRootId) {
+    for (const node of normalizeOrgTree(nodeList)) {
+      const rootOrgId = node.rootOrgId ?? node.rootId ?? inheritedRootId ?? node.id;
+      if (String(node.id) === String(orgId)) {
+        return { orgId: node.id, rootOrgId };
+      }
+      if (node.children?.length) {
+        const found = walk(node.children, rootOrgId);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  return (
+    walk(nodes, defaultRootId) ?? {
+      orgId,
+      rootOrgId: fallbackRootOrgId ?? defaultRootId ?? orgId,
+    }
+  );
+}
+
+/**
  * @param {unknown} nodes
  */
 export function findFirstLeafOrgId(nodes) {

@@ -42,6 +42,7 @@
             autocomplete="new-password"
             placeholder="请输入新密码"
           />
+          <PasswordRuleHint />
         </el-form-item>
         <el-form-item label="确认密码" prop="confirmPassword">
           <el-input
@@ -71,6 +72,7 @@ import { ElMessage } from "element-plus";
 import { changePassword } from "@/api/auth.js";
 import { useAuthStore } from "@/stores/auth.js";
 import { validateComplexPassword } from "@backend/utils/password.js";
+import PasswordRuleHint from "@/components/PasswordRuleHint.vue";
 
 const router = useRouter();
 const authStore = useAuthStore();

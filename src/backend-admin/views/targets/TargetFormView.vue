@@ -52,6 +52,7 @@
             :loading="orgCascaderLoading"
             :disabled="!authStore.isSuperAdmin && cascaderDisabled"
             select-class="target-form__org-cascader"
+            @change="handleOrgChange"
           />
         </el-form-item>
       </el-form>
@@ -69,6 +70,7 @@ import OrgCascader from "@backend/components/OrgCascader.vue";
 import { useOrgCascader } from "@backend/composables/useOrgCascader.js";
 import { TARGET_TYPE, TARGET_TYPE_OPTIONS } from "@backend/config/constants.js";
 import { INFRA_BASE } from "@backend/router/routes.js";
+import { resolveOrgContextFromTree } from "@backend/utils/org-set.js";
 import { useAuthStore } from "@/stores/auth.js";
 import { buildTargetPayload } from "@backend/utils/target.js";
 
@@ -76,11 +78,12 @@ const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const {
+  orgSetId,
   orgTreeOptions,
   loading: orgCascaderLoading,
   cascaderDisabled,
   initOrgCascader,
-} = useOrgCascader({ autoSelectFirst: false });
+} = useOrgCascader({ autoSelectFirst: false, autoSelectUserOrg: false });
 
 const targetTypeOptions = TARGET_TYPE_OPTIONS;
 const formRef = ref();
@@ -93,6 +96,7 @@ const form = reactive({
   sn: "",
   type: Number.isFinite(initialType) && initialType > 0 ? initialType : TARGET_TYPE.POLICE_CAR,
   orgId: null,
+  rootOrgId: null,
 });
 
 const rules = {
@@ -102,17 +106,37 @@ const rules = {
   orgId: [{ required: true, message: "请选择优先关联单位", trigger: "change" }],
 };
 
-async function loadOrgOptions() {
-  const queryOrgId = route.query.orgId;
-  await initOrgCascader(authStore, queryOrgId);
-
-  if (!authStore.isSuperAdmin && authStore.orgId != null) {
-    if (form.orgId == null) form.orgId = authStore.orgId;
+function syncRootOrgId(orgId) {
+  if (orgId == null || orgId === "") {
+    form.rootOrgId = null;
     return;
   }
+  const ctx = resolveOrgContextFromTree(orgTreeOptions.value, orgId, orgSetId.value);
+  form.rootOrgId = ctx?.rootOrgId ?? null;
+}
 
+function handleOrgChange(orgId) {
+  form.orgId = orgId;
+  syncRootOrgId(orgId);
+}
+
+function applyOrgFromQuery() {
+  const queryOrgId = route.query.orgId;
+  const queryRootOrgId = route.query.rootOrgId;
   if (queryOrgId != null && queryOrgId !== "") {
     form.orgId = Number(queryOrgId) || queryOrgId;
+  }
+  if (queryRootOrgId != null && queryRootOrgId !== "") {
+    form.rootOrgId = Number(queryRootOrgId) || queryRootOrgId;
+  } else if (form.orgId != null) {
+    syncRootOrgId(form.orgId);
+  }
+}
+
+async function loadOrgOptions() {
+  await initOrgCascader(authStore);
+  if (!isEdit.value) {
+    applyOrgFromQuery();
   }
 }
 
@@ -123,12 +147,21 @@ async function loadDetail() {
     name: data.name,
     sn: data.sn,
     type: data.type,
-    orgId: data.orgId,
+    orgId: data.orgId ?? null,
+    rootOrgId: data.rootOrgId ?? null,
   });
+  if (form.rootOrgId == null && form.orgId != null) {
+    syncRootOrgId(form.orgId);
+  }
 }
 
 async function submit() {
   await formRef.value.validate();
+  syncRootOrgId(form.orgId);
+  if (form.orgId == null || form.rootOrgId == null) {
+    ElMessage.warning("请选择优先关联单位");
+    return;
+  }
   submitting.value = true;
   try {
     const payload = buildTargetPayload(form, isEdit.value ? { id: route.params.id } : {});
