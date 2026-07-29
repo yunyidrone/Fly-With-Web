@@ -142,10 +142,9 @@ const {
   orgTreeOptions,
   selectedOrgId,
   loading: orgCascaderLoading,
-  cascaderDisabled,
   initOrgCascader,
   syncSelectedOrgId,
-} = useOrgCascader({ autoSelectFirst: false, autoSelectUserOrg: false });
+} = useOrgCascader({ autoSelectFirst: false });
 const targetTypeOptions = TARGET_TYPE_OPTIONS;
 
 const { loading, records, total, query, load, search, reset, onPageChange, onSizeChange } =

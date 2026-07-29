@@ -10,7 +10,16 @@ export function fetchOrgSetList(options = {}) {
 }
 
 /**
- * 单位树（需传当前选择的单位集合 id）
+ * 当前账户可见单位树（选择单位场景，auth：GET /auth/orgList）
+ * @param {import('@/utils/request.js').RequestOptions} [options]
+ */
+export async function fetchOrgList(options = {}) {
+  const data = await authRequestData("/orgList", {}, "GET", undefined, options);
+  return normalizeOrgTree(data);
+}
+
+/**
+ * 单位树（单位管理：需传当前选择的单位集合 id，auth：GET /auth/org/orgTree）
  * @param {string|number} id
  * @param {import('@/utils/request.js').RequestOptions} [options]
  */

@@ -7,7 +7,6 @@
           v-model="selectedOrgId"
           :options="orgTreeOptions"
           :loading="orgCascaderLoading"
-          :disabled="!authStore.isSuperAdmin && cascaderDisabled"
           select-class="monitor-hero__org-select"
           @change="handleOrgChange"
         />
@@ -37,7 +36,8 @@
                 <div class="asset-card__center">
                   <img :src="item.icon" :alt="item.label" class="asset-card__icon" />
                   <div class="asset-card__count">
-                    {{ item.count }}<span class="asset-card__unit">{{ item.unit }}</span>
+                    <CountUpNumber :value="item.count" />
+                    <span class="asset-card__unit">{{ item.unit }}</span>
                   </div>
                 </div>
                 <div v-if="item.details?.length" class="asset-card__meta">
@@ -70,7 +70,8 @@
                 <div class="asset-card__center">
                   <img :src="item.icon" :alt="item.label" class="asset-card__icon" />
                   <div class="asset-card__count">
-                    {{ item.count }}<span class="asset-card__unit">个</span>
+                    <CountUpNumber :value="item.count" />
+                    <span class="asset-card__unit">个</span>
                   </div>
                 </div>
               </button>
@@ -176,7 +177,16 @@ import dbJqrPng from "@/assets/images/db_jqr.png";
 import dbJdPng from "@/assets/images/db_jd.png";
 import dbJcPng from "@/assets/images/db_jc.png";
 import TaskMonitorTab from "@backend/views/monitor/TaskMonitorTab.vue";
+import CountUpNumber from "@backend/components/CountUpNumber.vue";
 import { TARGET_TYPE, TARGET_TYPE_LABELS, MONITOR_PANEL_LIST_LIMIT } from "@backend/config/constants.js";
+
+function createEmptyTargetStats() {
+  const counts = {};
+  Object.values(TARGET_TYPE).forEach((type) => {
+    counts[type] = 0;
+  });
+  return counts;
+}
 
 const MAP_LEGEND_DEVICE_ICONS = {
   drone: dbWrjPng,
@@ -191,15 +201,6 @@ const TARGET_TYPE_ICONS = {
   [TARGET_TYPE.VEHICLE]: dbJcPng,
   [TARGET_TYPE.STUDENT_CARD]: dbJyPng,
   [TARGET_TYPE.SHOULDER_LIGHT]: dbJdPng,
-};
-
-const DEFAULT_TARGET_STATS = {
-  [TARGET_TYPE.POLICE_CAR]: 3,
-  [TARGET_TYPE.OFFICER]: 5,
-  [TARGET_TYPE.ROBOT]: 2,
-  [TARGET_TYPE.VEHICLE]: 1,
-  [TARGET_TYPE.STUDENT_CARD]: 0,
-  [TARGET_TYPE.SHOULDER_LIGHT]: 4,
 };
 
 const DEMO_KEY_LOCATIONS = [
@@ -229,7 +230,6 @@ const {
   orgTreeOptions,
   selectedOrgId,
   loading: orgCascaderLoading,
-  cascaderDisabled,
   initOrgCascader,
   syncSelectedOrgId,
 } = useOrgCascader();
@@ -247,6 +247,14 @@ const displayAreaCheckpoints = computed(() =>
 const pendingTasks = ref([...DEMO_PENDING_TASKS]);
 const jurisdictionArea = ref(null);
 
+const EMPTY_DEVICE_STATS = {
+  droneTotal: 0,
+  droneAirport: 0,
+  droneSingle: 0,
+  dogTotal: 0,
+  boatTotal: 0,
+};
+
 const taskStats = ref({
   deviceOnMissionRate: 78,
   aiEventRate: 78,
@@ -254,15 +262,9 @@ const taskStats = ref({
   dayCompare: 11,
 });
 
-const deviceStats = ref({
-  droneTotal: 7,
-  droneAirport: 6,
-  droneSingle: 1,
-  dogTotal: 0,
-  boatTotal: 0,
-});
+const deviceStats = ref({ ...EMPTY_DEVICE_STATS });
 
-const targetStats = ref({ ...DEFAULT_TARGET_STATS });
+const targetStats = ref(createEmptyTargetStats());
 
 const deviceCards = computed(() => [
   {
@@ -272,10 +274,10 @@ const deviceCards = computed(() => [
     count: deviceStats.value.droneTotal,
     unit: "架",
     path: `${MONITOR_BASE}/drones`,
-    details: [
-      { label: "机场", value: deviceStats.value.droneAirport },
-      { label: "单兵", value: deviceStats.value.droneSingle },
-    ],
+    // details: [
+    //   { label: "机场", value: deviceStats.value.droneAirport },
+    //   { label: "单兵", value: deviceStats.value.droneSingle },
+    // ],
   },
   {
     key: "dog",
@@ -316,7 +318,10 @@ async function loadDeviceStats() {
     if (selectedOrgId.value != null) params.orgId = selectedOrgId.value;
     const data = await fetchDronePage(params);
     const records = unwrapApiList(data);
-    if (!records.length) return;
+    if (!records.length) {
+      deviceStats.value = { ...EMPTY_DEVICE_STATS };
+      return;
+    }
 
     const airportCount = records.filter((item) =>
       /机场|airport|dock/i.test(`${item.name || ""} ${item.type || ""} ${item.category || ""}`),
@@ -324,13 +329,13 @@ async function loadDeviceStats() {
     const droneTotal = Number(data?.total ?? records.length) || records.length;
 
     deviceStats.value = {
-      ...deviceStats.value,
+      ...EMPTY_DEVICE_STATS,
       droneTotal,
-      droneAirport: airportCount || Math.max(droneTotal - 1, 0),
-      droneSingle: Math.max(droneTotal - airportCount, airportCount ? droneTotal - airportCount : 1),
+      droneAirport: airportCount,
+      droneSingle: Math.max(droneTotal - airportCount, 0),
     };
   } catch {
-    // 接口不可用时保留演示数据
+    deviceStats.value = { ...EMPTY_DEVICE_STATS };
   }
 }
 
@@ -341,17 +346,14 @@ async function loadTargetStats() {
     const data = await fetchTargetPage(params);
     const records = unwrapApiList(data);
 
-    const counts = {};
-    Object.values(TARGET_TYPE).forEach((type) => {
-      counts[type] = 0;
-    });
+    const counts = createEmptyTargetStats();
     records.forEach((item) => {
       const type = Number(item.type) || TARGET_TYPE.POLICE_CAR;
       if (counts[type] != null) counts[type] += 1;
     });
     targetStats.value = counts;
   } catch {
-    // 接口不可用时保留演示数据
+    targetStats.value = createEmptyTargetStats();
   }
 }
 
@@ -792,15 +794,22 @@ $primary-light: #eaecf3;
     min-height: 0;
     border-radius: 10px;
   }
+
+  :deep(.tianditu-area-map__body),
+  :deep(.tianditu-area-map__viewer) {
+    height: 100%;
+    min-height: 0;
+  }
 }
 
 .data-panel--jurisdiction {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(180px, 1fr) auto;
 
   .data-panel__map {
     flex: unset;
-    min-height: 0;
+    min-height: 180px;
+    height: 100%;
     display: flex;
     flex-direction: column;
   }

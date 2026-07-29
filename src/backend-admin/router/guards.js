@@ -76,7 +76,7 @@ export function setupBackendRouterGuards(router) {
     }
 
     if (!requiresAuth) {
-      if ((to.path === BACKEND_LOGIN_PATH || to.path === "/login2") && authStore.isLoggedIn) {
+      if (to.path === BACKEND_LOGIN_PATH && authStore.isLoggedIn) {
         if (redirectIfMustChangePassword(authStore, to, next)) {
           return;
         }

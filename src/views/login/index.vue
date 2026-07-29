@@ -60,14 +60,14 @@
               <span>记住密码</span>
             </label>
 
-            <el-button
-              type="primary"
+            <button
+              type="button"
               class="login-v2__submit"
-              :loading="loading"
+              :disabled="loading"
               @click="submit"
             >
-              登录
-            </el-button>
+              {{ loading ? "登录中..." : "登录" }}
+            </button>
           </el-form>
 
           <div v-if="useMock" class="login-v2__hint">
@@ -190,17 +190,13 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
-// 品牌主题色
-$primary-color: #3047ff;
-$primary-color-dark: #2639cc;
-$primary-color-light: #6b79ff;
-// 设计稿基准 1920 x 1080，尺寸均按原稿比例换算
+$login-primary: #3047ff;
+
 .login-v2 {
-  --design-w: 1920;
   --design-h: 1080;
   --panel-w: 792;
 
-  --login-panel-width: calc(var(--panel-w) / var(--design-w) * 100%);
+  --login-panel-width: calc(var(--panel-w) / 1920 * 100%);
   --login-pad-x: calc(130 / var(--panel-w) * 100%);
   --login-space-title-gap: calc(74 / var(--design-h) * 100vh);
 
@@ -219,7 +215,6 @@ $primary-color-light: #6b79ff;
   --login-btn-height: calc(84 / var(--design-h) * 100vh);
   --login-btn-size: clamp(20px, calc(20 / var(--design-h) * 100vh), 20px);
   --login-btn-letter: calc(4 / var(--design-h) * 100vh);
-  --login-radius: calc(4 / var(--design-h) * 100vh);
   --login-hint-size: clamp(11px, calc(12 / var(--design-h) * 100vh), 12px);
   --login-hint-gap: calc(16 / var(--design-h) * 100vh);
 
@@ -249,8 +244,7 @@ $primary-color-light: #6b79ff;
   z-index: 1;
   width: var(--login-panel-width);
   height: 100%;
-  background: linear-gradient( 270deg, rgba(3,6,10,0) 0%, rgba(19,20,23,0.85) 50%);
-  // background: linear-gradient(90deg, rgba(3,6,10,0) 0%, rgba(19,20,23,0.85) 50%);
+  background: linear-gradient(270deg, rgba(3, 6, 10, 0) 0%, rgba(19, 20, 23, 0.85) 50%);
 }
 
 .login-v2__content {
@@ -355,7 +349,6 @@ $primary-color-light: #6b79ff;
   height: var(--login-input-height);
   min-height: var(--login-input-height);
   padding: 0 12px 0 32px !important;
-  // background: rgba(255, 255, 255, 0.06);
   border: 1px solid #fff;
   border-radius: 6px;
   box-shadow: none !important;
@@ -368,14 +361,8 @@ $primary-color-light: #6b79ff;
 }
 
 .login-v2__form-item.is-error :deep(.el-input__wrapper),
-.login-v2__form-item.is-error :deep(.el-input.is-error .el-input__wrapper),
-.login-v2__input.is-error :deep(.el-input__wrapper),
 .login-v2__form-item.is-error :deep(.el-input__wrapper:hover),
-.login-v2__form-item.is-error :deep(.el-input__wrapper.is-focus),
-.login-v2__form-item.is-error :deep(.el-input.is-error .el-input__wrapper:hover),
-.login-v2__form-item.is-error :deep(.el-input.is-error .el-input__wrapper.is-focus),
-.login-v2__input.is-error :deep(.el-input__wrapper:hover),
-.login-v2__input.is-error :deep(.el-input__wrapper.is-focus) {
+.login-v2__form-item.is-error :deep(.el-input__wrapper.is-focus) {
   border-color: #f56c6c !important;
   box-shadow: none !important;
 }
@@ -524,8 +511,8 @@ $primary-color-light: #6b79ff;
 }
 
 .login-v2__remember-input:checked + .login-v2__remember-box {
-  border-color: $primary-color;
-  background-color: $primary-color;
+  border-color: $login-primary;
+  background-color: $login-primary;
 }
 
 .login-v2__remember-input:checked + .login-v2__remember-box::after {
@@ -542,36 +529,26 @@ $primary-color-light: #6b79ff;
 }
 
 .login-v2__submit {
+  display: block;
   width: 100%;
   height: var(--login-btn-height);
   border: 1px solid #fff;
   border-radius: 6px;
-  background: #3047ff;
-  overflow: hidden;
   color: #fff;
-  text-overflow: ellipsis;
   font-family: "Alibaba PuHuiTi", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: var(--login-btn-size);
-  font-style: normal;
   font-weight: 500;
   letter-spacing: var(--login-btn-letter);
-  --el-button-bg-color: #3047ff;
-  --el-button-border-color: #fff;
-  --el-button-text-color: #fff;
-  --el-button-hover-bg-color: #3047ff;
-  --el-button-hover-border-color: #fff;
-  --el-button-hover-text-color: #fff;
-  --el-button-active-bg-color: #3047ff;
-  --el-button-active-border-color: #fff;
-  --el-button-active-text-color: #fff;
-}
+  line-height: 1;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  background-color: $login-primary;
 
-.login-v2__submit:hover,
-.login-v2__submit:focus,
-.login-v2__submit:active {
-  background: #3047ff;
-  border-color: #fff;
-  color: #fff;
+  &:hover,&:visited,&:disabled {
+    opacity: 0.8;
+  }
 }
 
 .login-v2__hint {
@@ -601,7 +578,6 @@ $primary-color-light: #6b79ff;
     --login-btn-height: 56px;
     --login-btn-size: 20px;
     --login-btn-letter: 2px;
-    --login-radius: 10px;
     --login-hint-size: 15px;
     --login-hint-gap: 20px;
 
@@ -690,20 +666,6 @@ $primary-color-light: #6b79ff;
     height: 22px;
   }
 
-  .login-v2__submit {
-    height: var(--login-btn-height) !important;
-    min-height: var(--login-btn-height);
-    font-size: var(--login-btn-size) !important;
-    line-height: 1;
-    border: 1px solid #fff !important;
-    border-radius: 6px !important;
-    background: #3047ff !important;
-  }
-
-  .login-v2__submit :deep(span) {
-    font-size: 20px;
-  }
-
   .login-v2__remember-input:checked + .login-v2__remember-box::after {
     width: 4px;
     height: 7px;
@@ -722,5 +684,23 @@ $primary-color-light: #6b79ff;
     --login-title-size: 32px;
     --login-subtitle-size: 13px;
   }
+}
+</style>
+
+<style lang="scss">
+$login-primary: #3047ff;
+
+/* 覆盖全局 style.css 对 button 的默认样式 */
+.login-v2 button.login-v2__submit,
+.login-v2 button.login-v2__submit:hover,
+.login-v2 button.login-v2__submit:focus,
+.login-v2 button.login-v2__submit:focus-visible,
+.login-v2 button.login-v2__submit:active,
+.login-v2 button.login-v2__submit:disabled {
+  background-color: $login-primary !important;
+  border: 1px solid #fff !important;
+  color: #fff !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 </style>

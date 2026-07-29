@@ -6,11 +6,10 @@
     :placeholder="placeholder"
     :disabled="disabled"
     :loading="loading"
-    clearable
     filterable
     :class="['org-cascader', selectClass]"
-    @update:model-value="$emit('update:modelValue', $event)"
-    @change="$emit('change', $event)"
+    @update:model-value="onUpdate"
+    @change="onChange"
   />
 </template>
 
@@ -44,5 +43,15 @@ defineProps({
   },
 });
 
-defineEmits(["update:modelValue", "change"]);
+const emit = defineEmits(["update:modelValue", "change"]);
+
+function onUpdate(value) {
+  if (value == null || value === "") return;
+  emit("update:modelValue", value);
+}
+
+function onChange(value) {
+  if (value == null || value === "") return;
+  emit("change", value);
+}
 </script>

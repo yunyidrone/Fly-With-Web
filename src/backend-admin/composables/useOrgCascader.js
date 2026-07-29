@@ -1,9 +1,7 @@
 import { computed, ref } from "vue";
-import { fetchOrgTree } from "@backend/api/org.js";
-import { useCurrentOrgSet } from "@backend/composables/useCurrentOrgSet.js";
+import { fetchOrgList } from "@backend/api/org.js";
 import {
   buildOrgCascaderOptions,
-  collectLeafOrgIds,
   findFirstLeafOrgId,
   findOrgInTree,
   prependOrgNodeToTree,
@@ -11,21 +9,22 @@ import {
 
 /**
  * 单位级联筛选
- * @param {{ autoSelectFirst?: boolean, autoSelectUserOrg?: boolean }} [options]
+ * @param {{ autoSelectFirst?: boolean }} [options]
  */
 export function useOrgCascader(options = {}) {
-  const { autoSelectFirst = true, autoSelectUserOrg = true } = options;
-  const { id: orgSetId, initOrgSet } = useCurrentOrgSet();
+  const { autoSelectFirst = true } = options;
   const orgTreeOptions = ref([]);
   const selectedOrgId = ref(null);
   const loading = ref(false);
 
-  const cascaderDisabled = computed(() => collectLeafOrgIds(orgTreeOptions.value).length <= 1);
+  const orgSetId = computed(
+    () => orgTreeOptions.value[0]?.id ?? orgTreeOptions.value[0]?.rootOrgId ?? null,
+  );
 
   async function loadOrgTreeOptions() {
     loading.value = true;
     try {
-      const tree = (await fetchOrgTree(orgSetId.value)) || [];
+      const tree = (await fetchOrgList()) || [];
       orgTreeOptions.value = buildOrgCascaderOptions(tree);
     } catch {
       orgTreeOptions.value = [];
@@ -43,13 +42,14 @@ export function useOrgCascader(options = {}) {
   }
 
   function initSelection(authStore, explicitOrgId) {
-    if (autoSelectUserOrg && !authStore.isSuperAdmin && authStore.orgId != null) {
-      selectedOrgId.value = authStore.orgId;
+    if (explicitOrgId != null && explicitOrgId !== "") {
+      selectedOrgId.value = explicitOrgId;
       return;
     }
 
-    if (explicitOrgId != null && explicitOrgId !== "") {
-      selectedOrgId.value = explicitOrgId;
+    const userOrgId = authStore.orgId;
+    if (userOrgId != null && userOrgId !== "") {
+      selectedOrgId.value = userOrgId;
       return;
     }
 
@@ -62,7 +62,6 @@ export function useOrgCascader(options = {}) {
   }
 
   async function initOrgCascader(authStore, explicitOrgId) {
-    await initOrgSet();
     await loadOrgTreeOptions();
     ensureUserOrg(authStore);
     initSelection(authStore, explicitOrgId);
@@ -83,7 +82,6 @@ export function useOrgCascader(options = {}) {
     orgTreeOptions,
     selectedOrgId,
     loading,
-    cascaderDisabled,
     loadOrgTreeOptions,
     initOrgCascader,
     initSelection,

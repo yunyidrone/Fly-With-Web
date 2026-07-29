@@ -158,6 +158,7 @@ export function normalizeDroneRecord(raw) {
     sn: raw.sn ?? "",
     mqttSn: String(raw.sn ?? raw.mqttSn ?? "").trim(),
     waylineId: raw.waylineId ?? "",
+    targetHeight: raw.targetHeight ?? null,
     streamUrl: raw.streamUrl ?? "",
     playUrl: raw.playUrl ?? raw.play_url ?? "",
     description: raw.description ?? "",
@@ -199,10 +200,14 @@ export function normalizeDroneList(payload) {
 export function buildDronePayload(form, options = {}) {
   const coordResult = validateOptionalDockCoordinates(form.longitude, form.latitude);
 
+  const targetHeightText = String(form.targetHeight ?? "").trim();
+  const targetHeight = Number.parseInt(targetHeightText, 10);
+
   const payload = {
     name: String(form.name || "").trim(),
     sn: String(form.sn || "").trim(),
     waylineId: String(form.waylineId || "").trim(),
+    targetHeight,
   };
 
   if (options.orgId != null && options.orgId !== "") {

@@ -29,18 +29,15 @@
         class="key-location-form__body"
       >
         <el-form-item label="计划类型" prop="type">
-          <el-select
-            v-model="form.type"
-            placeholder="请选择计划类型"
-            style="width: 100%"
-          >
-            <el-option
+          <el-radio-group v-model="form.type" class="key-location-form__radio-group">
+            <el-radio
               v-for="item in planTypeOptions"
               :key="item.value"
-              :label="item.label"
               :value="item.value"
-            />
-          </el-select>
+            >
+              {{ item.label }}
+            </el-radio>
+          </el-radio-group>
         </el-form-item>
 
         <el-form-item label="所属单位" prop="orgId">
@@ -48,7 +45,6 @@
             v-model="form.orgId"
             :options="orgTreeOptions"
             :loading="orgCascaderLoading"
-            :disabled="!authStore.isSuperAdmin && cascaderDisabled"
             select-class="key-location-form__org-cascader"
             @change="handleOrgChange"
           />
@@ -156,10 +152,8 @@ const {
 
   loading: orgCascaderLoading,
 
-  cascaderDisabled,
-
   initOrgCascader,
-} = useOrgCascader({ autoSelectFirst: false, autoSelectUserOrg: false });
+} = useOrgCascader({ autoSelectFirst: false });
 
 const formRef = ref();
 
@@ -275,6 +269,8 @@ function applyOrgFromQuery() {
 
   if (queryOrgId != null && queryOrgId !== "") {
     form.orgId = Number(queryOrgId) || queryOrgId;
+  } else if (authStore.orgId != null) {
+    form.orgId = authStore.orgId;
   }
 
   if (queryRootOrgId != null && queryRootOrgId !== "") {
@@ -432,6 +428,20 @@ onMounted(async () => {
 
 .key-location-form__org-cascader {
   width: 100%;
+}
+
+.key-location-form__radio-group :deep(.el-radio) {
+  margin-right: 24px;
+}
+
+.key-location-form__radio-group :deep(.el-radio__label) {
+  color: #606266;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.key-location-form__radio-group :deep(.el-radio.is-checked .el-radio__label) {
+  color: var(--el-color-primary);
 }
 
 .key-location-form__body :deep(.el-input__wrapper),

@@ -5,7 +5,6 @@
         v-model="selectedOrgId"
         :options="orgTreeOptions"
         :loading="orgCascaderLoading"
-        :disabled="!authStore.isSuperAdmin && cascaderDisabled"
         select-class="device-list__org-select"
         @change="handleOrgChange"
       />
@@ -34,22 +33,28 @@
 
     <div class="device-list__section device-list__section--content">
       <el-table v-loading="loading" :data="records" class="device-list__table" stripe>
-        <el-table-column prop="id" label="无人机ID" min-width="140" show-overflow-tooltip>
+        <el-table-column prop="id" label="无人机ID" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="device-list__id">{{ row.id || "-" }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="无人机名称" min-width="120" show-overflow-tooltip>
+        <el-table-column prop="name" label="无人机名称" min-width="100" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="text-primary">{{ row.name }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="orgName" label="所属单位" min-width="140" show-overflow-tooltip>
+        <el-table-column prop="orgName" label="所属单位" min-width="100" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.orgName || "-" }}
           </template>
         </el-table-column>
-        <el-table-column label="电量" width="80" align="center">
+        <el-table-column label="目标高度" width="100" align="center">
+          <template #default="{ row }">
+            <span v-if="row.targetHeight != null">{{ row.targetHeight }}m</span>
+            <span v-else class="device-list__placeholder">-</span>
+          </template>
+        </el-table-column>
+        <!-- <el-table-column label="电量" width="80" align="center">
           <template #default="{ row }">
             <span
               v-if="row.battery != null"
@@ -59,7 +64,7 @@
             </span>
             <span v-else class="device-list__placeholder">/</span>
           </template>
-        </el-table-column>
+        </el-table-column> -->
         <el-table-column label="在线状态" width="100">
           <template #default="{ row }">
             <span
@@ -150,10 +155,9 @@ const {
   orgTreeOptions,
   selectedOrgId,
   loading: orgCascaderLoading,
-  cascaderDisabled,
   initOrgCascader,
   syncSelectedOrgId,
-} = useOrgCascader({ autoSelectFirst: false, autoSelectUserOrg: false });
+} = useOrgCascader({ autoSelectFirst: false });
 
 const { loading, records, total, query, load, onPageChange, onSizeChange } = useTableQuery(
   fetchDronePage,

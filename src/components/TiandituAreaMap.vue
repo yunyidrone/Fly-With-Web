@@ -135,6 +135,7 @@ const {
   getArea,
   fitMapToArea,
   clearArea,
+  resizeMap,
   polygonPointCount,
   isPolygonDrawing,
 } = useTiandituAreaMap();
@@ -144,6 +145,7 @@ let initialized = false;
 
 function handleFullscreenChange() {
   isFullscreen.value = document.fullscreenElement === rootRef.value;
+  requestAnimationFrame(() => resizeMap());
 }
 
 async function toggleFullscreen() {
@@ -178,18 +180,16 @@ async function mountMap() {
   setupMode(props.mode, areaValue.value);
   initialized = true;
 
-  if (props.autoResize && mapContainerRef.value && typeof ResizeObserver !== "undefined") {
+  if (props.autoResize && rootRef.value && typeof ResizeObserver !== "undefined") {
     resizeObserver?.disconnect();
     resizeObserver = new ResizeObserver(() => {
-      if (mapContainerRef.value && window.T) {
-        try {
-          // 天地图在容器尺寸变化后需要刷新
-          mapContainerRef.value.dispatchEvent(new Event("resize"));
-        } catch (_) { /* ignore */ }
-      }
+      resizeMap();
     });
-    resizeObserver.observe(mapContainerRef.value);
+    resizeObserver.observe(rootRef.value);
   }
+
+  await nextTick();
+  requestAnimationFrame(() => resizeMap());
 }
 
 watch(
@@ -202,13 +202,15 @@ watch(
 
 watch(
   () => normalizeAreaData(areaValue.value)?.ring?.join(","),
-  (signature) => {
+  async (signature) => {
     if (!initialized) return;
     if (props.mode === "draw") {
       const currentSignature = normalizeAreaData(drawnResult.value)?.ring?.join(",") ?? "";
       if (signature === currentSignature) return;
     }
     setupMode(props.mode, areaValue.value);
+    await nextTick();
+    requestAnimationFrame(() => resizeMap());
   },
 );
 
@@ -243,6 +245,7 @@ defineExpose({
   getArea,
   fitArea: () => fitMapToArea(areaValue.value),
   refresh: () => setupMode(props.mode, areaValue.value),
+  resizeMap,
 });
 </script>
 

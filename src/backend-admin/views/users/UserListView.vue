@@ -83,7 +83,7 @@
           @selection-change="handleSelectionChange"
         >
           <el-table-column type="selection" width="48" :selectable="canOperateUser" />
-          <el-table-column prop="id" label="账户ID" width="160">
+          <el-table-column prop="id" label="账户ID" min-width="160">
             <template #default="{ row }">
               <span class="user-list__id">{{ row.id }}</span>
             </template>
@@ -293,8 +293,7 @@ import {
   resetUserPassword,
   updateUserStatus,
 } from "@backend/api/user.js";
-import { fetchOrgTree } from "@backend/api/org.js";
-import { useCurrentOrgSet } from "@backend/composables/useCurrentOrgSet.js";
+import { fetchOrgList } from "@backend/api/org.js";
 import OrgTreeNodeLabel from "@backend/components/OrgTreeNodeLabel.vue";
 import {
   ORG_LABEL,
@@ -307,7 +306,6 @@ import { useTableQuery } from "@backend/composables/useTableQuery.js";
 
 const router = useRouter();
 const authStore = useAuthStore();
-const { id, orgSetOptions, initOrgSet } = useCurrentOrgSet();
 
 const orgTreeRef = ref();
 const orgTreeData = ref([]);
@@ -362,10 +360,7 @@ function resolvePasswordChanged(data) {
   return false;
 }
 
-const orgSetName = computed(() => {
-  const match = orgSetOptions.value.find((item) => String(item.value) === String(id.value));
-  return match?.label || "";
-});
+const orgSetName = computed(() => orgTreeData.value[0]?.name || "");
 
 const selectedOrgPath = computed(() => {
   if (!selectedOrg.value) return orgSetName.value || "请选择单位";
@@ -422,12 +417,13 @@ function filterOrgTree() {
   orgTreeRef.value?.filter(orgFilterText.value);
 }
 
-function normalizeTreeNodes(nodes, parentName = "") {
+function normalizeTreeNodes(nodes, parentName = "", rootId = null) {
+  const defaultRootId = rootId ?? nodes?.[0]?.id ?? null;
   return (Array.isArray(nodes) ? nodes : []).map((node) => ({
     ...node,
     parentName,
-    rootOrgId: node.rootOrgId ?? node.rootId ?? id.value,
-    children: normalizeTreeNodes(node.children, node.name),
+    rootOrgId: node.rootOrgId ?? node.rootId ?? defaultRootId,
+    children: normalizeTreeNodes(node.children, node.name, defaultRootId),
   }));
 }
 
@@ -448,8 +444,8 @@ function findFirstSelectableOrg(nodes) {
 async function loadOrgTree() {
   treeLoading.value = true;
   try {
-    const data = (await fetchOrgTree(id.value)) || [];
-    orgTreeData.value = normalizeTreeNodes(data, orgSetName.value);
+    const data = (await fetchOrgList()) || [];
+    orgTreeData.value = normalizeTreeNodes(data);
   } finally {
     treeLoading.value = false;
   }
@@ -478,7 +474,7 @@ function goCreate() {
     ElMessage.warning("请先选择所属单位");
     return;
   }
-  const rootId = org.rootOrgId ?? org.rootId ?? id.value;
+  const rootId = org.rootOrgId ?? org.rootId ?? orgTreeData.value[0]?.id;
   const queryParams = {
     orgId: org.id,
     orgName: org.name || "",
@@ -660,7 +656,6 @@ watch(
 );
 
 onMounted(async () => {
-  await initOrgSet();
   await loadOrgTree();
 
   let initialOrg = null;

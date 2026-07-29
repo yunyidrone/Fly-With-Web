@@ -5,7 +5,6 @@
         v-model="selectedOrgId"
         :options="orgTreeOptions"
         :loading="orgCascaderLoading"
-        :disabled="!authStore.isSuperAdmin && cascaderDisabled"
         select-class="infra-page__org-select"
         @change="handleOrgChange"
       />
@@ -209,12 +208,10 @@ const {
 
   loading: orgCascaderLoading,
 
-  cascaderDisabled,
-
   initOrgCascader,
 
   syncSelectedOrgId,
-} = useOrgCascader({ autoSelectFirst: false, autoSelectUserOrg: false });
+} = useOrgCascader({ autoSelectFirst: false });
 
 const {
   loading,

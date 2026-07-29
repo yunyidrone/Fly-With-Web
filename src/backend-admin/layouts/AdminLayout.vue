@@ -34,11 +34,13 @@
               <Expand v-else />
             </el-icon>
           </el-button>
-          <el-breadcrumb separator="/">
-            <el-breadcrumb-item v-for="item in breadcrumbItems" :key="item">
-              {{ item }}
-            </el-breadcrumb-item>
-          </el-breadcrumb>
+          <nav class="admin-layout__breadcrumb" aria-label="面包屑">
+            <el-breadcrumb separator="/">
+              <el-breadcrumb-item v-for="item in breadcrumbItems" :key="item">
+                {{ item }}
+              </el-breadcrumb-item>
+            </el-breadcrumb>
+          </nav>
         </div>
 
         <div class="admin-layout__header-right">
@@ -249,6 +251,60 @@ async function handleCommand(command) {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 0;
+}
+
+.admin-layout__header-left :deep(.el-button.is-link) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0;
+  margin: 0;
+}
+
+.admin-layout__breadcrumb {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+}
+
+.admin-layout__breadcrumb :deep(.el-breadcrumb) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  line-height: 1;
+}
+
+.admin-layout__breadcrumb :deep(.el-breadcrumb__item) {
+  display: inline-flex;
+  align-items: center;
+  float: none;
+  line-height: 1;
+}
+
+.admin-layout__breadcrumb :deep(.el-breadcrumb__inner) {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  color: #606266;
+  font-weight: 400;
+}
+
+.admin-layout__breadcrumb :deep(.el-breadcrumb__item:last-child .el-breadcrumb__inner) {
+  color: #303133;
+  font-weight: 500;
+}
+
+.admin-layout__breadcrumb :deep(.el-breadcrumb__separator) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  float: none;
+  margin: 0 8px;
+  line-height: 1;
+  color: #c0c4cc;
+  font-weight: 400;
 }
 
 .admin-layout__user {

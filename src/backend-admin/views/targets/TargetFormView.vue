@@ -50,7 +50,6 @@
             v-model="form.orgId"
             :options="orgTreeOptions"
             :loading="orgCascaderLoading"
-            :disabled="!authStore.isSuperAdmin && cascaderDisabled"
             select-class="target-form__org-cascader"
             @change="handleOrgChange"
           />
@@ -81,9 +80,8 @@ const {
   orgSetId,
   orgTreeOptions,
   loading: orgCascaderLoading,
-  cascaderDisabled,
   initOrgCascader,
-} = useOrgCascader({ autoSelectFirst: false, autoSelectUserOrg: false });
+} = useOrgCascader({ autoSelectFirst: false });
 
 const targetTypeOptions = TARGET_TYPE_OPTIONS;
 const formRef = ref();
@@ -125,6 +123,8 @@ function applyOrgFromQuery() {
   const queryRootOrgId = route.query.rootOrgId;
   if (queryOrgId != null && queryOrgId !== "") {
     form.orgId = Number(queryOrgId) || queryOrgId;
+  } else if (authStore.orgId != null) {
+    form.orgId = authStore.orgId;
   }
   if (queryRootOrgId != null && queryRootOrgId !== "") {
     form.rootOrgId = Number(queryRootOrgId) || queryRootOrgId;

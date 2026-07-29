@@ -40,6 +40,13 @@
           />
         </el-form-item>
 
+        <el-form-item label="目标高度（米）" prop="targetHeight">
+          <el-input
+            v-model="form.targetHeight"
+            placeholder="请输入目标高度（米）"
+          />
+        </el-form-item>
+
         <el-form-item label="机场经度" prop="longitude">
           <el-input
             v-model="form.longitude"
@@ -91,9 +98,19 @@ const form = reactive({
   name: "",
   sn: "",
   waylineId: "",
+  targetHeight: "",
   longitude: "",
   latitude: "",
 });
+
+function validateTargetHeight(_rule, value, callback) {
+  const text = String(value ?? "").trim();
+  if (!/^-?\d+$/.test(text)) {
+    callback(new Error("请输入有效的整数"));
+    return;
+  }
+  callback();
+}
 
 function validateDockCoordinateField(_rule, _value, callback) {
   const result = validateOptionalDockCoordinates(form.longitude, form.latitude);
@@ -112,6 +129,10 @@ const rules = {
   name: [{ required: true, message: "请输入无人机名称", trigger: "blur" }],
   sn: [{ required: true, message: "请输入无人机 SN 号", trigger: "blur" }],
   waylineId: [{ required: true, message: "请输入航线 ID", trigger: "blur" }],
+  targetHeight: [
+    { required: true, message: "请输入目标高度", trigger: "blur" },
+    { validator: validateTargetHeight, trigger: "blur" },
+  ],
   longitude: [{ validator: validateDockCoordinateField, trigger: "blur" }],
   latitude: [{ validator: validateDockCoordinateField, trigger: "blur" }],
 };
@@ -124,7 +145,7 @@ async function initOrgContext() {
 
   if (queryOrgId != null && queryOrgId !== "") {
     orgId.value = Number(queryOrgId) || queryOrgId;
-  } else if (!authStore.isSuperAdmin && authStore.orgId != null) {
+  } else if (authStore.orgId != null) {
     orgId.value = authStore.orgId;
   }
 
@@ -150,6 +171,7 @@ async function loadDetail() {
     name: data.name,
     sn: data.sn,
     waylineId: data.waylineId ?? "",
+    targetHeight: data.targetHeight != null ? String(data.targetHeight) : "",
     longitude: coords.longitude,
     latitude: coords.latitude,
   });

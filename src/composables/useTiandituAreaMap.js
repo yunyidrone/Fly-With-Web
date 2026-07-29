@@ -566,7 +566,19 @@ export function useTiandituAreaMap() {
     mapInstance.centerAndZoom(new T.LngLat(mapCenter.lng, mapCenter.lat), zoom);
     map.value = mapInstance;
     loading.value = false;
+    resizeMap();
     return mapInstance;
+  }
+
+  function resizeMap() {
+    if (!map.value) return;
+    try {
+      if (typeof map.value.checkResize === "function") {
+        map.value.checkResize();
+      }
+    } catch (_) {
+      // ignore
+    }
   }
 
   function setupMode(mode, area) {
@@ -579,17 +591,20 @@ export function useTiandituAreaMap() {
 
     if (mode === "view") {
       showArea(area, { fit: true });
+      resizeMap();
       return;
     }
 
     const normalized = normalizeAreaData(area);
     if (normalized) {
       startEditingExistingArea(normalized);
+      resizeMap();
       return;
     }
 
     currentTool.value = "rectangle";
     startDrawing("rectangle");
+    resizeMap();
   }
 
   function cleanup() {
@@ -627,6 +642,7 @@ export function useTiandituAreaMap() {
     fitMapToArea,
     startEditingExistingArea,
     clearArea,
+    resizeMap,
     polygonPointCount,
     isPolygonDrawing,
     cleanup,

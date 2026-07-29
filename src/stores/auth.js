@@ -216,7 +216,8 @@ export const useAuthStore = defineStore("auth", {
 
   persist: {
     key: "admin-auth",
-    paths: ["token", "user", "currentOrgId"],
+    // 仅持久化 token 与超管单位视角；用户信息每次刷新后由路由守卫重新拉取 /auth/info
+    paths: ["token", "currentOrgId"],
   },
 });
 

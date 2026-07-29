@@ -90,6 +90,33 @@ export function resolveMenuIcon(icon) {
   return ElementPlusIconsVue[name] || null;
 }
 
+/** 一级菜单 component 与默认图标映射（接口 icon 无效时使用） */
+const TOP_MENU_COMPONENT_ICON_MAP = new Map([
+  ["MonitoringCenter", "Monitor"],
+  ["UnitManage", "OfficeBuilding"],
+  ["AccountManage", "User"],
+  ["SystemSettings", "Setting"],
+]);
+
+const DEFAULT_TOP_MENU_ICON = "Menu";
+
+/**
+ * 侧栏菜单图标：优先接口 icon，一级菜单无效时使用默认图标
+ * @param {BackendMenuNode|null|undefined} node
+ * @param {{ topLevel?: boolean }} [options]
+ */
+export function resolveSidebarMenuIcon(node, options = {}) {
+  const resolved = resolveMenuIcon(node?.icon);
+  if (resolved) return resolved;
+
+  if (!options.topLevel) return null;
+
+  const componentKey = String(node?.component ?? "").trim();
+  const fallbackName = TOP_MENU_COMPONENT_ICON_MAP.get(componentKey) || DEFAULT_TOP_MENU_ICON;
+
+  return ElementPlusIconsVue[fallbackName] || ElementPlusIconsVue.Menu || null;
+}
+
 /**
  * 侧栏不展示按钮类菜单
  * @param {BackendMenuNode|null|undefined} node

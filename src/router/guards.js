@@ -16,6 +16,7 @@ export function setupFrontendRouterGuards(router) {
     const authStore = useAuthStore();
 
     // 未改初始密码时，任意手动改地址都拦回强制改密页（含 /backend）
+    // 刷新页面时 token 仍在 localStorage，但 user 不持久化，需重新拉取 /auth/info
     if (authStore.isLoggedIn) {
       if (!authStore.user || authStore.user.firstLogin == null) {
         try {
