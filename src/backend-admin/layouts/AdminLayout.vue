@@ -141,13 +141,6 @@ async function refreshMenu(force = false) {
 }
 
 watch(
-  () => authStore.effectiveOrgId,
-  () => {
-    refreshMenu(true);
-  },
-);
-
-watch(
   () => authStore.isLoggedIn,
   (loggedIn) => {
     if (loggedIn) {

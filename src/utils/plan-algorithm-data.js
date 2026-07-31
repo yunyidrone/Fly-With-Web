@@ -301,6 +301,12 @@ export function resolveDroneMqttSn(droneDetail, droneId = "") {
   ).trim();
 }
 
+function normalizeAiResultText(value) {
+  const text = String(value ?? "").trim();
+  if (!text || text === "—") return "";
+  return text;
+}
+
 /**
  * 将 /plan/warnData 单条告警转为 PlanTaskMonitorDroneCell events 格式
  * @param {Record<string, any>} item
@@ -310,11 +316,15 @@ export function normalizeWarnEvent(item) {
   return {
     id: String(item.warningId ?? item.id ?? `warn-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`),
     warnType: String(item.name ?? item.warnType ?? item.alarmType ?? "—"),
+    aiResult: normalizeAiResultText(
+      item.aiResult ?? item.recognizeResult ?? item.recognitionResult ?? item.recognizeName,
+    ),
     eventTime: String(item.alarmTime ?? item.eventTime ?? item.createTime ?? "—"),
     imageUrl: String(item.imageUrl ?? item.originalImageUrl ?? ""),
     label: "",
     longitude: item.longitude ?? null,
     latitude: item.latitude ?? null,
+    droneName: String(item.droneName ?? item.deviceName ?? item.reportDeviceName ?? ""),
     uuid: String(item.uuid ?? ""),
     thirdPartyId: String(item.thirdPartyId ?? ""),
   };

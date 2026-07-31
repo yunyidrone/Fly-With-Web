@@ -101,9 +101,28 @@
         <el-table-column type="expand" width="40">
           <template #default="{ row }">
             <div v-if="row.events?.length" class="history-events">
-              <div v-for="ev in row.events" :key="ev.id" class="history-event-row">
-                <span class="history-event-row__cell history-event-row__cell--type">
+              <div
+                v-for="ev in row.events"
+                :key="ev.id"
+                class="history-event-row"
+                :class="
+                  activeTab === 'companion'
+                    ? 'history-event-row--companion'
+                    : 'history-event-row--plan'
+                "
+              >
+                <span
+                  class="history-event-row__cell history-event-row__cell--type"
+                  :title="formatWarnTypeLabel(ev)"
+                >
                   【{{ ev.warnType }}】
+                </span>
+                <span
+                  v-if="activeTab === 'companion'"
+                  class="history-event-row__cell history-event-row__cell--ai"
+                  :title="ev.aiResult || '—'"
+                >
+                  {{ ev.aiResult || "—" }}
                 </span>
                 <span class="history-event-row__cell history-event-row__cell--img">
                   <el-image
@@ -118,11 +137,19 @@
                   />
                   <span v-else class="history-event-img--empty">—</span>
                 </span>
-                <span class="history-event-row__cell">{{ ev.eventTime }}</span>
-                <span class="history-event-row__cell">
+                <span class="history-event-row__cell" :title="ev.eventTime || '—'">
+                  {{ ev.eventTime }}
+                </span>
+                <span class="history-event-row__cell" :title="formatWarnLngLat(ev)">
                   {{ formatWarnLngLat(ev) }}
                 </span>
-                <span class="history-event-row__cell">{{ ev.droneName || "—" }}</span>
+                <span
+                  v-if="activeTab === 'plan'"
+                  class="history-event-row__cell"
+                  :title="ev.droneName || '—'"
+                >
+                  {{ ev.droneName || "—" }}
+                </span>
               </div>
             </div>
             <div v-else class="history-events-empty">{{ expandEmptyText }}</div>
@@ -207,7 +234,7 @@
         </template>
       </el-table>
 
-      <div v-if="total > pageSize" class="history-pagination">
+      <div class="history-pagination">
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
@@ -325,6 +352,12 @@ function formatWarnLngLat(ev) {
     return `${Number(lng).toFixed(6)}, ${Number(lat).toFixed(6)}`;
   }
   return "—";
+}
+
+function formatWarnTypeLabel(ev) {
+  const type = ev?.warnType;
+  if (type == null || type === "" || type === "—") return "—";
+  return `【${type}】`;
 }
 
 function formatExecuteTimeRange(row) {
@@ -964,7 +997,6 @@ watch(
 
 .history-event-row {
   display: grid;
-  grid-template-columns: 100px 72px 160px 1fr 1fr;
   gap: 10px;
   align-items: center;
   padding: 8px 0;
@@ -978,6 +1010,26 @@ watch(
   &:last-child {
     border-bottom: none;
   }
+
+  &--plan {
+    grid-template-columns: 140px 72px 160px 1fr 1fr;
+  }
+
+  &--companion {
+    grid-template-columns: 140px 120px 72px 160px 1fr;
+  }
+}
+
+.history-event-row__cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.history-event-row__cell--ai {
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .history-event-row__cell--img {
