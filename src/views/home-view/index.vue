@@ -20,6 +20,7 @@
       <div v-show="!immersiveFlight && manualControlVisible" class="map-legend-host">
         <ManualControlPanel
           :recording-active="manualRecordingActive"
+          :drone-serial-number="manualControlDroneSn"
           @close="closeManualControl"
           @control-event="handleManualControlEvent"
         />
@@ -27,7 +28,11 @@
     </div>
 
     <!-- 图例叠在页面层，高于左侧 dock(z-index:100)，避免底部被透明侧栏挡住点击 -->
-    <div v-show="!immersiveFlight && !manualControlVisible" class="map-legend-host">
+    <div
+      v-show="!immersiveFlight && !manualControlVisible"
+      class="map-legend-host"
+      :class="{ 'map-legend-host--stream-open': streamFloatOpen }"
+    >
       <MapLegend
         ref="mapLegendRef"
         @lockdown="onLockdown"
@@ -260,6 +265,11 @@ const manualControlVisible = ref(false);
 const manualRecordingActive = ref(false);
 const taskViewVisible = ref(false);
 
+/** 右上角视频浮窗打开时，图例需左移避免遮挡 */
+const streamFloatOpen = computed(
+  () => droneStreamVisible.value || robotStreamVisible.value,
+);
+
 const deviceStore = useDeviceStore();
 const flightPlanStore = useFlightPlanStore();
 
@@ -420,7 +430,12 @@ function onToggleImmersive() {
 }
 
 function onToggleManualControl(nextVisible) {
-  manualControlVisible.value = Boolean(nextVisible && droneStreamVisible.value);
+  const willOpen = Boolean(nextVisible && droneStreamVisible.value);
+  if (willOpen) {
+    leftSidebarRef.value?.clearSelection?.();
+    planHistoryVisible.value = false;
+  }
+  manualControlVisible.value = willOpen;
 }
 
 function closeManualControl() {
@@ -488,6 +503,12 @@ const streamDroneLive = computed(() => {
 
 const streamDroneKey = computed(() => streamDroneLive.value?.id || "none");
 const streamRobotKey = computed(() => streamRobot.value?.id || "none");
+
+/** 手动操控：当前视频流无人机 SN */
+const manualControlDroneSn = computed(() => {
+  const d = streamDroneLive.value;
+  return String(d?.sn || d?.mqttSn || "").trim();
+});
 
 /** 当前视频弹窗选中的无人机（用于地图侧高亮/圈选） */
 const activeEscortDroneId = computed(() => {
@@ -847,6 +868,22 @@ const closeRobotStream = () => {
   bottom: 0;
   z-index: 101;
   pointer-events: none;
+
+  :deep(.map-legend-wrapper) {
+    transition: padding-right 0.2s ease;
+  }
+}
+
+/*
+ * 宽高比 > 1（横屏）：视频打开时图例略左移，避开右上角视频
+ * 宽高比 ≤ 1（竖屏）：保持居中，不额外偏移
+ */
+@media (min-aspect-ratio: 1/1) {
+  .map-legend-host--stream-open {
+    :deep(.map-legend-wrapper) {
+      padding-right: min(280px, 28vw);
+    }
+  }
 }
 
 /* 任务查看临时入口按钮（入口方案确定后可移除/替换位置） */

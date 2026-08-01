@@ -1,13 +1,32 @@
 <template>
   <div class="manual-control-wrapper" @click.stop>
     <div class="manual-control-panel">
+      <div class="control-column control-column--task">
+        <button
+          type="button"
+          class="task-btn task-btn--pause"
+          :disabled="Boolean(taskActionLoading)"
+          @click="onPauseTask"
+        >
+          {{ taskActionLoading === "pause" ? "暂停中..." : "暂停任务" }}
+        </button>
+        <button
+          type="button"
+          class="task-btn task-btn--resume"
+          :disabled="Boolean(taskActionLoading)"
+          @click="onResumeTask"
+        >
+          {{ taskActionLoading === "resume" ? "恢复中..." : "恢复任务" }}
+        </button>
+      </div>
+
       <div class="control-column control-column--left">
         <div class="control-title">前进</div>
         <div class="cross-pad">
-          <button type="button" class="ctrl-btn" @click="onMoveControl('forward')"><el-icon><CaretTop /></el-icon></button>
-          <button type="button" class="ctrl-btn" @click="onMoveControl('left')"><el-icon><CaretLeft /></el-icon></button>
-          <button type="button" class="ctrl-btn" @click="onMoveControl('backward')"><el-icon><CaretBottom /></el-icon></button>
-          <button type="button" class="ctrl-btn" @click="onMoveControl('right')"><el-icon><CaretRight /></el-icon></button>
+          <button type="button" class="ctrl-btn" :disabled="dronePoseLoading" @click="onMoveControl('forward')"><el-icon><CaretTop /></el-icon></button>
+          <button type="button" class="ctrl-btn" :disabled="dronePoseLoading" @click="onMoveControl('left')"><el-icon><CaretLeft /></el-icon></button>
+          <button type="button" class="ctrl-btn" :disabled="dronePoseLoading" @click="onMoveControl('backward')"><el-icon><CaretBottom /></el-icon></button>
+          <button type="button" class="ctrl-btn" :disabled="dronePoseLoading" @click="onMoveControl('right')"><el-icon><CaretRight /></el-icon></button>
         </div>
         <div class="direction-row">
           <span>向左</span>
@@ -19,10 +38,9 @@
           <el-input-number
             v-model="moveStep"
             class="step-input-number"
-            :min="1"
-            :max="20"
+            :min="DRONE_STEP_MIN"
             controls-position="right"
-            @change="onStepChange('moveStep', $event)"
+            @change="onMoveStepChange"
           />
         </div>
       </div>
@@ -30,10 +48,10 @@
       <div class="control-column control-column--left">
         <div class="control-title">上升</div>
         <div class="cross-pad">
-          <button type="button" class="ctrl-btn" @click="onAttitudeControl('up')">↑</button>
-          <button type="button" class="ctrl-btn" @click="onAttitudeControl('yawLeft')">↶</button>
-          <button type="button" class="ctrl-btn" @click="onAttitudeControl('pitchDown')">↓</button>
-          <button type="button" class="ctrl-btn" @click="onAttitudeControl('yawRight')">↷</button>
+          <button type="button" class="ctrl-btn" :disabled="dronePoseLoading" @click="onAttitudeControl('up')">↑</button>
+          <button type="button" class="ctrl-btn" :disabled="dronePoseLoading" @click="onAttitudeControl('yawLeft')">↶</button>
+          <button type="button" class="ctrl-btn" :disabled="dronePoseLoading" @click="onAttitudeControl('pitchDown')">↓</button>
+          <button type="button" class="ctrl-btn" :disabled="dronePoseLoading" @click="onAttitudeControl('yawRight')">↷</button>
         </div>
         <div class="direction-row">
           <span>左旋</span>
@@ -45,11 +63,9 @@
           <el-input-number
             v-model="rotateStep"
             class="step-input-number"
-            :min="1"
-            :max="20"
-            size="small"
+            :min="DRONE_STEP_MIN"
             controls-position="right"
-            @change="onStepChange('rotateStep', $event)"
+            @change="onRotateStepChange"
           />
         </div>
       </div>
@@ -61,22 +77,26 @@
             v-model="cameraLens"
             class="manual-select"
             placeholder="请选择镜头"
-            size="small"
+            :disabled="lensChangeLoading"
+            :suffix-icon="CaretBottom"
+            :show-arrow="false"
             popper-class="manual-select-popper"
-            @change="onSelectChange('cameraLens', $event)"
+            @change="onCameraLensChange"
           >
-            <el-option label="广角镜头" value="wide" />
-            <el-option label="变焦镜头" value="zoom" />
-            <el-option label="热成像镜头" value="thermal" />
+            <el-option label="默认" value="normal" />
+            <el-option label="广角" value="wide" />
+            <el-option label="变焦" value="zoom" />
+            <el-option label="红外" value="ir" />
           </el-select>
         </label>
-        <label class="form-row">
+        <!-- <label class="form-row">
           <span>挂载镜头</span>
           <el-select
             v-model="payloadLens"
             class="manual-select"
             placeholder="请选择挂载"
-            size="small"
+            :suffix-icon="CaretBottom"
+            :show-arrow="false"
             popper-class="manual-select-popper"
             @change="onSelectChange('payloadLens', $event)"
           >
@@ -90,44 +110,55 @@
             v-model="cameraMode"
             class="manual-select"
             placeholder="请选择相机模式"
-            size="small"
+            :suffix-icon="CaretBottom"
+            :show-arrow="false"
             popper-class="manual-select-popper"
             @change="onSelectChange('cameraMode', $event)"
           >
             <el-option label="拍照" value="photo" />
             <el-option label="录像" value="video" />
           </el-select>
-        </label>
+        </label> -->
         <div class="focus-row">
           <span>焦距</span>
-          <input v-model.number="focusValue" type="range" min="1" max="10" @change="onFocusSliderChange" />
-          <el-input-number
-            v-model="focusValue"
-            class="step-input-number step-input-number--small"
-            :min="1"
-            :max="10"
-            controls-position="right"
-            @change="onFocusNumberChange"
-          />
+          <div class="focus-row__controls">
+            <input
+              v-model.number="focusValue"
+              type="range"
+              min="1"
+              max="20"
+              :disabled="zoomChangeLoading"
+              @change="onFocusSliderChange"
+            />
+            <el-input-number
+              v-model="focusValue"
+              class="step-input-number"
+              :min="1"
+              :max="20"
+              :disabled="zoomChangeLoading"
+              controls-position="right"
+              @change="onFocusNumberChange"
+            />
+          </div>
         </div>
       </div>
 
       <div class="control-column control-column--left">
         <div class="control-title">向上</div>
         <div class="cross-pad">
-          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-side" @click="onCameraControl('up')">
+          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-side" :disabled="gimbalPostureLoading" @click="onCameraControl('up')">
             <el-icon class="camera-main-icon"><CameraFilled /></el-icon>
             <el-icon class="camera-dir-icon"><Top /></el-icon>
           </button>
-          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-bottom" @click="onCameraControl('left')">
+          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-bottom" :disabled="gimbalPostureLoading" @click="onCameraControl('left')">
             <el-icon class="camera-main-icon"><CameraFilled /></el-icon>
             <el-icon class="camera-dir-icon"><Back /></el-icon>
           </button>
-          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-side" @click="onCameraControl('down')">
+          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-side" :disabled="gimbalPostureLoading" @click="onCameraControl('down')">
             <el-icon class="camera-main-icon"><CameraFilled /></el-icon>
             <el-icon class="camera-dir-icon"><Bottom /></el-icon>
           </button>
-          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-bottom" @click="onCameraControl('right')">
+          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-bottom" :disabled="gimbalPostureLoading" @click="onCameraControl('right')">
             <el-icon class="camera-main-icon"><CameraFilled /></el-icon>
             <el-icon class="camera-dir-icon"><Right /></el-icon>
           </button>
@@ -142,19 +173,13 @@
           <el-input-number
             v-model="angleStep"
             class="step-input-number"
-            :min="1"
-            :max="20"
             controls-position="right"
-            @change="onStepChange('angleStep', $event)"
+            @change="onAngleStepChange"
           />
         </div>
       </div>
 
       <div class="control-column control-column--right">
-        <div class="record-status" :class="{ 'record-status--active': props.recordingActive }">
-          <span class="record-status__dot" />
-          <span>{{ props.recordingActive ? "REC 录像中" : "REC 未开始" }}</span>
-        </div>
         <button type="button" class="action-btn" @click="onAction('takePhoto')">拍照</button>
         <button type="button" class="action-btn" @click="onAction('gimbalReset')">云台复位</button>
         <button
@@ -186,6 +211,7 @@
 
 <script setup>
 import { ref } from "vue";
+import { ElMessage } from "element-plus";
 import {
   CameraFilled,
   CaretBottom,
@@ -193,19 +219,143 @@ import {
   CaretRight,
   CaretTop,
 } from "@element-plus/icons-vue";
+import { DroneControlService } from "@/api/droneControl.js";
+
+const DRONE_STEP_MIN = 0;
+
+/** @type {Record<string, number>} */
+const MOVE_ACTION_TYPE = {
+  forward: 4,
+  backward: 5,
+  left: 2,
+  right: 3,
+};
+
+/** @type {Record<string, number>} */
+const ATTITUDE_ACTION_TYPE = {
+  up: 0,
+  pitchDown: 1,
+  yawLeft: 6,
+  yawRight: 7,
+};
+
+/** @type {Record<string, number>} */
+const GIMBAL_PITCH_MOTION = {
+  up: 0,
+  down: 1,
+  left: 2,
+  right: 3,
+};
 
 const emit = defineEmits(["close", "control-event"]);
 const props = defineProps({
   recordingActive: { type: Boolean, default: false },
+  /** 当前操控无人机 SN（serialNumber / airportSn） */
+  droneSerialNumber: { type: String, default: "" },
+  /** 镜头设备 SN（cameraSn）；来源待定，由父组件传入 */
+  cameraDeviceSn: { type: String, default: "" },
 });
 
-const moveStep = ref(6);
-const rotateStep = ref(6);
+const moveStep = ref(2);
+const rotateStep = ref(2);
 const angleStep = ref(6);
 const focusValue = ref(2);
+const lastAppliedZoom = ref(2);
 const cameraLens = ref("");
 const payloadLens = ref("");
 const cameraMode = ref("");
+/** @type {import('vue').Ref<'' | 'pause' | 'resume'>} */
+const taskActionLoading = ref("");
+const lensChangeLoading = ref(false);
+const zoomChangeLoading = ref(false);
+const dronePoseLoading = ref(false);
+const gimbalPostureLoading = ref(false);
+
+function clampDroneStep(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return DRONE_STEP_MIN;
+  return Math.max(DRONE_STEP_MIN, n);
+}
+
+function resolveSerialNumber() {
+  return String(props.droneSerialNumber || "").trim();
+}
+
+function resolveCameraDeviceSn() {
+  return String(props.cameraDeviceSn || "").trim();
+}
+
+async function onCameraLensChange(cameraType) {
+  const airportSn = resolveSerialNumber();
+  const cameraSn = resolveCameraDeviceSn();
+  if (!airportSn) {
+    ElMessage.warning("未获取到无人机 SN");
+    cameraLens.value = "";
+    return;
+  }
+  //if (!cameraSn) {
+  //  ElMessage.warning("镜头设备 SN 暂未配置");
+  //  cameraLens.value = "";
+  //  return;
+  //}
+  if (lensChangeLoading.value) return;
+  lensChangeLoading.value = true;
+  try {
+    await DroneControlService.changeLens({
+      airportSn,
+      cameraSn,
+      cameraType: String(cameraType || "").trim(),
+    });
+    ElMessage.success("镜头切换成功");
+    dispatchControlEvent("setting", "cameraLensChange", {
+      cameraType,
+      airportSn,
+      cameraSn,
+    });
+  } catch {
+    cameraLens.value = "";
+  } finally {
+    lensChangeLoading.value = false;
+  }
+}
+
+async function onPauseTask() {
+  const serialNumber = resolveSerialNumber();
+  if (!serialNumber) {
+    ElMessage.warning("未获取到无人机 SN");
+    return;
+  }
+  if (taskActionLoading.value) return;
+  taskActionLoading.value = "pause";
+  try {
+    await DroneControlService.taskSuspension(serialNumber);
+    ElMessage.success("已暂停任务");
+    dispatchControlEvent("task", "pause", { serialNumber });
+  } catch {
+    // 失败提示由 request 拦截器处理
+  } finally {
+    taskActionLoading.value = "";
+  }
+}
+
+async function onResumeTask() {
+  const serialNumber = resolveSerialNumber();
+  if (!serialNumber) {
+    ElMessage.warning("未获取到无人机 SN");
+    return;
+  }
+  if (taskActionLoading.value) return;
+  taskActionLoading.value = "resume";
+  try {
+    await DroneControlService.recoveryTask(serialNumber);
+    ElMessage.success("已恢复任务");
+    dispatchControlEvent("task", "resume", { serialNumber });
+  } catch {
+    // 失败提示由 request 拦截器处理
+  } finally {
+    taskActionLoading.value = "";
+  }
+}
 
 function dispatchControlEvent(type, action, extra = {}) {
   const payload = {
@@ -222,25 +372,86 @@ function dispatchControlEvent(type, action, extra = {}) {
     ...extra,
   };
   emit("control-event", payload);
-
-  // TODO: 后续在这里接入真实无人机操控接口（如云台/飞行控制 API）
-  // 示例：await DroneControlService.sendCommand(payload)
-  console.debug("[ManualControlPanel] 控制事件已触发（未调接口）", payload);
 }
 
-function onMoveControl(action) {
-  dispatchControlEvent("move", action);
+async function applyDroneHeight(actionType, pfs, actionName) {
+  const serialNumber = resolveSerialNumber();
+  if (!serialNumber) {
+    ElMessage.warning("未获取到无人机 SN");
+    return;
+  }
+  const stepMeters = clampDroneStep(pfs);
+  if (dronePoseLoading.value) return;
+  dronePoseLoading.value = true;
+  try {
+    await DroneControlService.droneHeight({
+      serialNumber,
+      actionType,
+      pfs: stepMeters,
+    });
+    dispatchControlEvent("pose", actionName, {
+      serialNumber,
+      actionType,
+      pfs: stepMeters,
+    });
+  } catch {
+    // 失败提示由 request 拦截器处理
+  } finally {
+    dronePoseLoading.value = false;
+  }
 }
 
-function onAttitudeControl(action) {
-  dispatchControlEvent("attitude", action);
+async function onMoveControl(action) {
+  const actionType = MOVE_ACTION_TYPE[action];
+  if (actionType == null) return;
+  await applyDroneHeight(actionType, moveStep.value, action);
 }
 
-function onCameraControl(action) {
-  dispatchControlEvent("camera", action);
+async function onAttitudeControl(action) {
+  const actionType = ATTITUDE_ACTION_TYPE[action];
+  if (actionType == null) return;
+  await applyDroneHeight(actionType, rotateStep.value, action);
+}
+
+async function applyGimbalPosture(pitchingMotion, actionName) {
+  const serialNumber = resolveSerialNumber();
+  if (!serialNumber) {
+    ElMessage.warning("未获取到无人机 SN");
+    return;
+  }
+  const pitchAngle = Number(angleStep.value);
+  if (!Number.isFinite(pitchAngle)) return;
+  if (gimbalPostureLoading.value) return;
+  gimbalPostureLoading.value = true;
+  try {
+    await DroneControlService.gimbalPostureAdjustment({
+      serialNumber,
+      pitchAngle,
+      pitchingMotion,
+    });
+    dispatchControlEvent("gimbal", actionName, {
+      serialNumber,
+      pitchAngle,
+      pitchingMotion,
+    });
+  } catch {
+    // 失败提示由 request 拦截器处理
+  } finally {
+    gimbalPostureLoading.value = false;
+  }
+}
+
+async function onCameraControl(action) {
+  const pitchingMotion = GIMBAL_PITCH_MOTION[action];
+  if (pitchingMotion == null) return;
+  await applyGimbalPosture(pitchingMotion, action);
 }
 
 function onAction(action) {
+  if (action === "gimbalReset") {
+    ElMessage.info("云台复位功能开发中");
+    return;
+  }
   dispatchControlEvent("action", action);
 }
 
@@ -248,16 +459,56 @@ function onStepChange(field, value) {
   dispatchControlEvent("setting", "stepChange", { field, value });
 }
 
+function onMoveStepChange(value) {
+  moveStep.value = clampDroneStep(value ?? moveStep.value);
+  onStepChange("moveStep", moveStep.value);
+}
+
+function onRotateStepChange(value) {
+  rotateStep.value = clampDroneStep(value ?? rotateStep.value);
+  onStepChange("rotateStep", rotateStep.value);
+}
+
+function onAngleStepChange(value) {
+  onStepChange("angleStep", value ?? angleStep.value);
+}
+
 function onSelectChange(field, value) {
   dispatchControlEvent("setting", "selectChange", { field, value });
 }
 
+async function applyCameraZoom(zoomRatio) {
+  const serialNumber = resolveSerialNumber();
+  const ratio = Number(zoomRatio);
+  if (!serialNumber) {
+    ElMessage.warning("未获取到无人机 SN");
+    focusValue.value = lastAppliedZoom.value;
+    return;
+  }
+  if (!Number.isFinite(ratio) || ratio < 1 || ratio > 20) {
+    focusValue.value = lastAppliedZoom.value;
+    return;
+  }
+  if (zoomChangeLoading.value) return;
+  zoomChangeLoading.value = true;
+  try {
+    await DroneControlService.cameraZoom({ serialNumber, zoomRatio: ratio });
+    lastAppliedZoom.value = ratio;
+    focusValue.value = ratio;
+    dispatchControlEvent("setting", "cameraZoom", { zoomRatio: ratio, serialNumber });
+  } catch {
+    focusValue.value = lastAppliedZoom.value;
+  } finally {
+    zoomChangeLoading.value = false;
+  }
+}
+
 function onFocusSliderChange() {
-  dispatchControlEvent("setting", "focusSliderChange", { value: focusValue.value });
+  void applyCameraZoom(focusValue.value);
 }
 
 function onFocusNumberChange(value) {
-  dispatchControlEvent("setting", "focusNumberChange", { value });
+  void applyCameraZoom(value ?? focusValue.value);
 }
 </script>
 
@@ -286,7 +537,14 @@ function onFocusNumberChange(value) {
   gap: 16px;
   box-sizing: border-box;
   pointer-events: auto;
-  margin-left: -25rem;
+  margin-left: 0;
+}
+
+/* 横屏（宽高比 ≥ 1）保持左偏；竖屏居中 */
+@media (min-aspect-ratio: 1/1) {
+  .manual-control-panel {
+    margin-left: -30rem;
+  }
 }
 
 .control-column {
@@ -301,6 +559,38 @@ function onFocusNumberChange(value) {
   flex-shrink: 0;
 }
 
+.control-column--task {
+  width: 80px;
+  flex-shrink: 0;
+  gap: 8px;
+  justify-content: flex-start;
+  padding-top: 2px;
+}
+
+.task-btn {
+  height: 28px;
+  border-radius: 2px;
+  border: 1px solid rgba(85, 142, 252, 0.85);
+  background: rgba(7, 24, 48, 0.72);
+  box-shadow: inset 0 0 7px rgba(85, 142, 252, 0.55);
+  color: #9fd2ff;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 6px;
+  white-space: nowrap;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.task-btn--pause {
+  box-shadow: inset 0 0 7px rgba(253, 127, 55, 0.8);
+  border-color: rgba(253, 127, 55, 0.85);
+  color: #ffd4b8;
+}
+
 .control-column--center {
   width: 280px;
   gap: 10px;
@@ -308,33 +598,8 @@ function onFocusNumberChange(value) {
 
 .control-column--right {
   margin-left: auto;
-  width: 120px;
-  gap: 8px;
-}
-
-.record-status {
-  display: inline-flex;
-  align-items: center;
+  width: 80px;
   gap: 6px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
-  margin-bottom: 2px;
-}
-
-.record-status__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.4);
-}
-
-.record-status--active {
-  color: #ff696b;
-}
-
-.record-status--active .record-status__dot {
-  background: #ff4d4f;
-  box-shadow: 0 0 8px rgba(255, 77, 79, 0.6);
 }
 
 .control-title {
@@ -385,9 +650,10 @@ function onFocusNumberChange(value) {
 
 .ctrl-btn,
 .action-btn {
-  border: 1px solid #2f7ad8;
+  border: 1px solid rgba(85, 142, 252, 0.85);
   background: rgba(7, 24, 48, 0.72);
-  color: #78c2ff;
+  box-shadow: inset 0 0 7px rgba(85, 142, 252, 0.55);
+  color: #9fd2ff;
   cursor: pointer;
 }
 
@@ -400,6 +666,11 @@ function onFocusNumberChange(value) {
   align-items: center;
   justify-content: center;
   padding: 0;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
 }
 
 .ctrl-btn :deep(.el-icon) {
@@ -438,16 +709,12 @@ function onFocusNumberChange(value) {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  margin-top: auto;
+  margin-top: 10px;
   color: #61bdff;
 }
 
 .step-input-number {
   width: 88px;
-}
-
-.step-input-number--small {
-  width: 72px;
 }
 
 .form-row {
@@ -462,21 +729,65 @@ function onFocusNumberChange(value) {
   width: 100%;
 }
 
-.manual-control-panel :deep(.el-input-number),
-.manual-control-panel :deep(.el-select) {
-  --el-bg-color: #1c222a;
-  --el-fill-color-blank: #1c222a;
-  --el-border-color: #2f7ad8;
-  --el-border-color-hover: #4f6dd6;
-  --el-border-color-light: #2f7ad8;
-  --el-input-border-color: #07080c;
-  --el-input-hover-border-color: #4f6dd6;
-  --el-text-color-regular: #ffffff;
-  --el-input-text-color: #ffffff;
+.manual-control-panel :deep(.manual-select.el-select) {
+  --el-fill-color-blank: #03060a;
+  --el-bg-color: #03060a;
+  --el-border-color: rgba(255, 255, 255, 0.12);
+  --el-border-color-hover: rgba(255, 255, 255, 0.12);
+  --el-color-primary: #4f6dd6;
+  --el-input-text-color: #fff;
   --el-text-color-placeholder: rgba(255, 255, 255, 0.45);
-  --el-color-primary: #558efc;
+  --el-select-input-color: rgba(255, 255, 255, 0.55);
+
+  .el-select__wrapper {
+    min-height: 36px;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 2px;
+    background: #03060a;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+  }
+
+  .el-select__wrapper.is-hovering:not(.is-focused),
+  .el-select__wrapper.is-focused {
+    background: #03060a;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+  }
+
+  .el-select__placeholder,
+  .el-select__selected-item .el-select__tags-text,
+  .el-select__selected-item > span {
+    color: #fff;
+    font-size: 14px;
+    line-height: 36px;
+  }
+
+  .el-select__placeholder,
+  .el-select__placeholder.is-transparent {
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  .el-select__suffix {
+    .el-select__caret {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      color: rgba(255, 255, 255, 0.55);
+      font-size: 14px;
+      line-height: 1;
+
+      svg {
+        display: block;
+        width: 14px;
+        height: 14px;
+      }
+    }
+  }
 }
-:deep(.el-input-number.is-controls-right) {
+
+.manual-control-panel :deep(.el-input-number) {
   --el-input-number-control-height: 18px;
   height: 36px;
   flex-shrink: 0;
@@ -523,68 +834,33 @@ function onFocusNumberChange(value) {
     border-left: 1px solid rgba(255, 255, 255, 0.12);
   }
 }
-// .manual-control-panel :deep(.el-input-number .el-input__wrapper),
-// .manual-control-panel :deep(.el-select .el-select__wrapper) {
-//   box-shadow: 0 0 0 1px #2f7ad8 inset !important;
-//   background: #1c222a !important;
-//   border-radius: 2px;
-// }
-
-// .manual-control-panel :deep(.el-input-number .el-input__inner),
-// .manual-control-panel :deep(.el-select .el-select__placeholder),
-// .manual-control-panel :deep(.el-select .el-select__selected-item) {
-//   color: #ffffff !important;
-// }
-
-// .manual-control-panel :deep(.el-input-number.is-controls-right .el-input-number__increase),
-// .manual-control-panel :deep(.el-input-number.is-controls-right .el-input-number__decrease) {
-//   width: 22px;
-//   right: 1px;
-//   background: #202a47;
-//   color: #8cb7ff;
-//   border-left: 1px solid #2f7ad8;
-// }
-
-// .manual-control-panel :deep(.el-input-number.is-controls-right .el-input-number__increase) {
-//   border-bottom: 1px solid #2f7ad8;
-// }
-
-// .manual-control-panel :deep(.el-input-number.is-controls-right .el-input-number__increase .el-icon),
-// .manual-control-panel :deep(.el-input-number.is-controls-right .el-input-number__decrease .el-icon) {
-//   font-size: 12px;
-//   font-weight: 700;
-// }
-
-:deep(.manual-select-popper.el-popper) {
-  border: 1px solid #2f7ad8 !important;
-  background: #1c222a !important;
-}
-
-:deep(.manual-select-popper .el-select-dropdown__item) {
-  color: #ffffff;
-}
-
-:deep(.manual-select-popper .el-select-dropdown__item.is-hovering),
-:deep(.manual-select-popper .el-select-dropdown__item:hover) {
-  background: rgba(85, 142, 252, 0.2);
-}
-
-:deep(.manual-select-popper .el-select-dropdown__item.is-selected) {
-  color: #77a8ff;
-}
 
 .focus-row {
   display: grid;
-  grid-template-columns: 34px 1fr 52px;
+  grid-template-columns: 72px 1fr;
   align-items: center;
   gap: 8px;
   color: #61bdff;
 }
 
+.focus-row__controls {
+  display: grid;
+  grid-template-columns: 1fr 88px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+
+  input[type="range"] {
+    width: 100%;
+    min-width: 0;
+    accent-color: #558efc;
+  }
+}
+
 .action-btn {
-  height: 34px;
+  height: 28px;
   border-radius: 2px;
-  font-size: 14px;
+  font-size: 13px;
 
   &:disabled {
     opacity: 0.45;
@@ -593,8 +869,9 @@ function onFocusNumberChange(value) {
 }
 
 .action-btn--recording {
-  background: rgba(255, 77, 79, 0.22);
-  border-color: #ff6d6f;
+  box-shadow: inset 0 0 7px rgba(255, 77, 79, 0.65);
+  background: rgba(255, 77, 79, 0.15);
+  border-color: rgba(255, 109, 111, 0.85);
   color: #ffd7d8;
 }
 
@@ -615,5 +892,44 @@ function onFocusNumberChange(value) {
   background: rgba(7, 24, 48, 0.72);
   color: #9fd2ff;
   cursor: pointer;
+}
+</style>
+
+<!-- 下拉层 teleport 到 body，需非 scoped 才能生效 -->
+<style lang="scss">
+.manual-select-popper.el-popper {
+  --el-bg-color-overlay: #15191e;
+  --el-fill-color-blank: #15191e;
+  --el-text-color-regular: rgba(255, 255, 255, 0.88);
+  --el-border-color-light: rgba(255, 255, 255, 0.12);
+  background: #15191e !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 2px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45) !important;
+
+  .el-select-dropdown__list {
+    padding: 4px 0;
+  }
+
+  .el-select-dropdown__item {
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 14px;
+    height: 34px;
+    line-height: 34px;
+
+    &.is-hovering,
+    &:hover {
+      background: rgba(85, 142, 252, 0.15);
+    }
+
+    &.is-selected {
+      color: #78c2ff;
+      font-weight: 500;
+    }
+  }
+
+  .el-popper__arrow {
+    display: none;
+  }
 }
 </style>

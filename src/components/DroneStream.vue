@@ -190,14 +190,14 @@
     </div>
 
     <footer class="card-footer">
-      <!-- <button
+      <button
         type="button"
         class="footer-btn btn-neutral"
         :class="{ 'btn-neutral--active': props.manualControlVisible }"
         @click="handleManualControlToggle"
       >
         {{ props.manualControlVisible ? "退出操控" : "手动操控" }}
-      </button> -->
+      </button>
       <button
         type="button"
         class="footer-btn btn-neutral"
@@ -431,10 +431,7 @@ const initPlayVideo = async () => {
 
 const handleScreenshot = () => {
   const video = videoPlayerRef.value;
-  if (!video || !video.videoWidth) {
-    ElMessage.warning("暂无视频画面");
-    return;
-  }
+  if (!ensureVideoFrameReady(video)) return;
   const canvas = document.createElement("canvas");
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
@@ -466,14 +463,26 @@ function resolveRecordingMimeType() {
   return "";
 }
 
+function ensureVideoFrameReady(video = videoPlayerRef.value) {
+  if (!video || !video.videoWidth) {
+    ElMessage.warning("暂无视频画面");
+    return false;
+  }
+  return true;
+}
+
 const startLocalRecording = () => {
   if (isRecording.value) {
     ElMessage.warning("录像已在进行中");
     return false;
   }
-  const stream = videoPlayerRef.value?.srcObject;
+  const video = videoPlayerRef.value;
+  if (!ensureVideoFrameReady(video)) {
+    return false;
+  }
+  const stream = video.srcObject;
   if (!(stream instanceof MediaStream) || !stream.getVideoTracks().length) {
-    ElMessage.warning("暂无可录制视频流");
+    ElMessage.warning("暂无视频画面");
     return false;
   }
   if (!window.MediaRecorder) {
