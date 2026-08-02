@@ -193,3 +193,105 @@ export const USER_PLATFORM_OPTIONS = [
   { value: USER_PLATFORM.WEB, label: USER_PLATFORM_LABELS[USER_PLATFORM.WEB] },
   { value: USER_PLATFORM.CLIENT, label: USER_PLATFORM_LABELS[USER_PLATFORM.CLIENT] },
 ];
+
+/** 监控库车辆动力类型：1 燃油车 2 新能源 */
+export const VEHICLE_POWER_TYPE = {
+  FUEL: 1,
+  NEW_ENERGY: 2,
+};
+
+export const VEHICLE_POWER_TYPE_LABELS = {
+  [VEHICLE_POWER_TYPE.NEW_ENERGY]: "新能源",
+  [VEHICLE_POWER_TYPE.FUEL]: "燃油车",
+};
+
+export const VEHICLE_POWER_TYPE_OPTIONS = [
+  { value: VEHICLE_POWER_TYPE.FUEL, label: "燃油车" },
+  { value: VEHICLE_POWER_TYPE.NEW_ENERGY, label: "新能源" },
+];
+
+/** 车牌省份简称（含全称，供搜索） */
+export const VEHICLE_PLATE_PROVINCES = [
+  { value: "京", name: "北京" },
+  { value: "津", name: "天津" },
+  { value: "沪", name: "上海" },
+  { value: "渝", name: "重庆" },
+  { value: "冀", name: "河北" },
+  { value: "豫", name: "河南" },
+  { value: "云", name: "云南" },
+  { value: "辽", name: "辽宁" },
+  { value: "黑", name: "黑龙江" },
+  { value: "湘", name: "湖南" },
+  { value: "皖", name: "安徽" },
+  { value: "鲁", name: "山东" },
+  { value: "新", name: "新疆" },
+  { value: "苏", name: "江苏" },
+  { value: "浙", name: "浙江" },
+  { value: "赣", name: "江西" },
+  { value: "鄂", name: "湖北" },
+  { value: "桂", name: "广西" },
+  { value: "甘", name: "甘肃" },
+  { value: "晋", name: "山西" },
+  { value: "蒙", name: "内蒙古" },
+  { value: "陕", name: "陕西" },
+  { value: "吉", name: "吉林" },
+  { value: "闽", name: "福建" },
+  { value: "贵", name: "贵州" },
+  { value: "粤", name: "广东" },
+  { value: "青", name: "青海" },
+  { value: "藏", name: "西藏" },
+  { value: "川", name: "四川" },
+  { value: "宁", name: "宁夏" },
+  { value: "琼", name: "海南" },
+];
+
+export const VEHICLE_PLATE_PROVINCE_OPTIONS = VEHICLE_PLATE_PROVINCES.map((item) => ({
+  value: item.value,
+  label: item.value,
+  name: item.name,
+}));
+
+export function resolveVehiclePowerTypeLabel(type) {
+  const key = Number(type);
+  if (Number.isFinite(key) && VEHICLE_POWER_TYPE_LABELS[key]) {
+    return VEHICLE_POWER_TYPE_LABELS[key];
+  }
+  return String(type ?? "").trim();
+}
+
+/** 监控库人像预警类型 warningType */
+export const PORTRAIT_WARNING_TYPE = {
+  CONTROL: 1,
+  DISTURBANCE: 2,
+  FUGITIVE: 3,
+  OTHER: 4,
+};
+
+export const PORTRAIT_WARNING_TYPE_LABELS = {
+  [PORTRAIT_WARNING_TYPE.CONTROL]: "布控",
+  [PORTRAIT_WARNING_TYPE.DISTURBANCE]: "可解密事",
+  [PORTRAIT_WARNING_TYPE.FUGITIVE]: "在逃人员",
+  [PORTRAIT_WARNING_TYPE.OTHER]: "其他",
+};
+
+export const PORTRAIT_WARNING_TYPE_OPTIONS = Object.entries(PORTRAIT_WARNING_TYPE_LABELS).map(
+  ([value, label]) => ({
+    value: Number(value),
+    label,
+  }),
+);
+
+export function resolvePortraitWarningTypeLabel(type) {
+  const key = Number(type);
+  if (Number.isFinite(key) && PORTRAIT_WARNING_TYPE_LABELS[key]) {
+    return PORTRAIT_WARNING_TYPE_LABELS[key];
+  }
+  return String(type ?? "").trim();
+}
+
+/** @deprecated 使用 PORTRAIT_WARNING_TYPE */
+export const PORTRAIT_WARN_TYPE = PORTRAIT_WARNING_TYPE;
+/** @deprecated 使用 PORTRAIT_WARNING_TYPE_LABELS */
+export const PORTRAIT_WARN_TYPE_LABELS = PORTRAIT_WARNING_TYPE_LABELS;
+/** @deprecated 使用 PORTRAIT_WARNING_TYPE_OPTIONS */
+export const PORTRAIT_WARN_TYPE_OPTIONS = PORTRAIT_WARNING_TYPE_OPTIONS;

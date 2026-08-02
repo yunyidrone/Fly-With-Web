@@ -286,6 +286,63 @@ export const backendRoutes = [
           roles: ["super_admin", "org_admin"],
         },
       },
+      {
+        path: "infra/library",
+        component: () => import("@backend/views/infra/MonitorLibraryLayout.vue"),
+        children: [
+          {
+            path: "",
+            name: "BackendMonitorLibraryList",
+            component: () => import("@backend/views/infra/MonitorLibraryListView.vue"),
+            meta: {
+              title: "监控库管理",
+              menu: true,
+              menuGroup: "infra",
+              roles: ["super_admin", "org_admin"],
+            },
+          },
+          {
+            path: "portraits/new",
+            name: "BackendPortraitCreate",
+            component: () => import("@backend/views/infra/MonitorLibraryPortraitFormView.vue"),
+            meta: {
+              title: "新建人像",
+              activeMenu: `${INFRA_BASE}/library`,
+              roles: ["super_admin", "org_admin"],
+            },
+          },
+          {
+            path: "portraits/:id",
+            name: "BackendPortraitEdit",
+            component: () => import("@backend/views/infra/MonitorLibraryPortraitFormView.vue"),
+            meta: {
+              title: "编辑人像",
+              activeMenu: `${INFRA_BASE}/library`,
+              roles: ["super_admin", "org_admin"],
+            },
+          },
+          {
+            path: "vehicles/new",
+            name: "BackendMonitorVehicleCreate",
+            component: () => import("@backend/views/infra/MonitorLibraryVehicleFormView.vue"),
+            meta: {
+              title: "新建车辆",
+              activeMenu: `${INFRA_BASE}/library`,
+              roles: ["super_admin", "org_admin"],
+            },
+          },
+          {
+            path: "vehicles/:id",
+            name: "BackendMonitorVehicleEdit",
+            component: () => import("@backend/views/infra/MonitorLibraryVehicleFormView.vue"),
+            meta: {
+              title: "编辑车辆",
+              activeMenu: `${INFRA_BASE}/library`,
+              roles: ["super_admin", "org_admin"],
+            },
+          },
+        ],
+      },
     ],
   },
   {
@@ -302,7 +359,30 @@ export const backendRoutes = [
 
 export function getMenuRoutes() {
   const adminRoute = backendRoutes.find((r) => r.path === BACKEND_BASE);
-  return (adminRoute?.children || []).filter((r) => r.meta?.menu);
+  /** @type {Array<any>} */
+  const menus = [];
+
+  /** @param {Array<any>} routes @param {string} parentPath */
+  function walk(routes, parentPath = "") {
+    for (const route of routes || []) {
+      const segment = String(route.path ?? "").replace(/^\/+/, "");
+      const fullPath = segment ? (parentPath ? `${parentPath}/${segment}` : segment) : parentPath;
+
+      if (route.meta?.menu) {
+        menus.push({
+          ...route,
+          path: fullPath,
+        });
+      }
+
+      if (route.children?.length) {
+        walk(route.children, fullPath);
+      }
+    }
+  }
+
+  walk(adminRoute?.children || []);
+  return menus;
 }
 
 export function getMenuTree(role, user, canAccess) {

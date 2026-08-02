@@ -55,6 +55,12 @@ export function setupBackendRouterGuards(router) {
     return walk(menuTree);
   }
 
+  function canAccessByActiveMenu(menuTree, to) {
+    const activeMenu = String(to.meta?.activeMenu || "").trim();
+    if (!activeMenu) return false;
+    return canAccessByBackendMenu(menuTree, activeMenu);
+  }
+
   router.beforeEach(async (to, from, next) => {
     const isBackendRoute = to.path.startsWith(BACKEND_BASE);
     if (!isBackendRoute) {
@@ -121,7 +127,9 @@ export function setupBackendRouterGuards(router) {
 
     const titleRoutePathMap = buildMenuTitleRoutePathMap(router.getRoutes());
     const hasMenuTree = Array.isArray(menuStore.tree) && menuStore.tree.length > 0;
-    const menuGranted = hasMenuTree && canAccessByBackendMenu(menuStore.tree, to.path);
+    const menuGranted =
+      hasMenuTree &&
+      (canAccessByBackendMenu(menuStore.tree, to.path) || canAccessByActiveMenu(menuStore.tree, to));
 
     // 联调约定：有后端菜单时优先按菜单授权，不再死磕前端 meta.roles
     if (hasMenuTree) {

@@ -5,28 +5,26 @@
         <button
           type="button"
           class="task-btn task-btn--pause"
-          :disabled="Boolean(taskActionLoading)"
           @click="onPauseTask"
         >
-          {{ taskActionLoading === "pause" ? "暂停中..." : "暂停任务" }}
+          暂停任务
         </button>
         <button
           type="button"
           class="task-btn task-btn--resume"
-          :disabled="Boolean(taskActionLoading)"
           @click="onResumeTask"
         >
-          {{ taskActionLoading === "resume" ? "恢复中..." : "恢复任务" }}
+          恢复任务
         </button>
       </div>
 
       <div class="control-column control-column--left">
         <div class="control-title">前进</div>
         <div class="cross-pad">
-          <button type="button" class="ctrl-btn" :disabled="dronePoseLoading" @click="onMoveControl('forward')"><el-icon><CaretTop /></el-icon></button>
-          <button type="button" class="ctrl-btn" :disabled="dronePoseLoading" @click="onMoveControl('left')"><el-icon><CaretLeft /></el-icon></button>
-          <button type="button" class="ctrl-btn" :disabled="dronePoseLoading" @click="onMoveControl('backward')"><el-icon><CaretBottom /></el-icon></button>
-          <button type="button" class="ctrl-btn" :disabled="dronePoseLoading" @click="onMoveControl('right')"><el-icon><CaretRight /></el-icon></button>
+          <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('move:forward') }" @click="onMoveControl('forward')"><el-icon><CaretTop /></el-icon></button>
+          <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('move:left') }" @click="onMoveControl('left')"><el-icon><CaretLeft /></el-icon></button>
+          <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('move:backward') }" @click="onMoveControl('backward')"><el-icon><CaretBottom /></el-icon></button>
+          <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('move:right') }" @click="onMoveControl('right')"><el-icon><CaretRight /></el-icon></button>
         </div>
         <div class="direction-row">
           <span>向左</span>
@@ -48,10 +46,10 @@
       <div class="control-column control-column--left">
         <div class="control-title">上升</div>
         <div class="cross-pad">
-          <button type="button" class="ctrl-btn" :disabled="dronePoseLoading" @click="onAttitudeControl('up')">↑</button>
-          <button type="button" class="ctrl-btn" :disabled="dronePoseLoading" @click="onAttitudeControl('yawLeft')">↶</button>
-          <button type="button" class="ctrl-btn" :disabled="dronePoseLoading" @click="onAttitudeControl('pitchDown')">↓</button>
-          <button type="button" class="ctrl-btn" :disabled="dronePoseLoading" @click="onAttitudeControl('yawRight')">↷</button>
+          <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('attitude:up') }" @click="onAttitudeControl('up')">↑</button>
+          <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('attitude:yawLeft') }" @click="onAttitudeControl('yawLeft')">↶</button>
+          <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('attitude:pitchDown') }" @click="onAttitudeControl('pitchDown')">↓</button>
+          <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('attitude:yawRight') }" @click="onAttitudeControl('yawRight')">↷</button>
         </div>
         <div class="direction-row">
           <span>左旋</span>
@@ -77,7 +75,7 @@
             v-model="cameraLens"
             class="manual-select"
             placeholder="请选择镜头"
-            :disabled="lensChangeLoading"
+            :disabled="isControlBusy('lens:change')"
             :suffix-icon="CaretBottom"
             :show-arrow="false"
             popper-class="manual-select-popper"
@@ -127,7 +125,7 @@
               type="range"
               min="1"
               max="20"
-              :disabled="zoomChangeLoading"
+              :disabled="isControlBusy('zoom:change')"
               @change="onFocusSliderChange"
             />
             <el-input-number
@@ -135,7 +133,7 @@
               class="step-input-number"
               :min="1"
               :max="20"
-              :disabled="zoomChangeLoading"
+              :disabled="isControlBusy('zoom:change')"
               controls-position="right"
               @change="onFocusNumberChange"
             />
@@ -146,19 +144,19 @@
       <div class="control-column control-column--left">
         <div class="control-title">向上</div>
         <div class="cross-pad">
-          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-side" :disabled="gimbalPostureLoading" @click="onCameraControl('up')">
+          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-side" :class="{ 'ctrl-btn--busy': isControlBusy('gimbal:up') }" @click="onCameraControl('up')">
             <el-icon class="camera-main-icon"><CameraFilled /></el-icon>
             <el-icon class="camera-dir-icon"><Top /></el-icon>
           </button>
-          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-bottom" :disabled="gimbalPostureLoading" @click="onCameraControl('left')">
+          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-bottom" :class="{ 'ctrl-btn--busy': isControlBusy('gimbal:left') }" @click="onCameraControl('left')">
             <el-icon class="camera-main-icon"><CameraFilled /></el-icon>
             <el-icon class="camera-dir-icon"><Back /></el-icon>
           </button>
-          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-side" :disabled="gimbalPostureLoading" @click="onCameraControl('down')">
+          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-side" :class="{ 'ctrl-btn--busy': isControlBusy('gimbal:down') }" @click="onCameraControl('down')">
             <el-icon class="camera-main-icon"><CameraFilled /></el-icon>
             <el-icon class="camera-dir-icon"><Bottom /></el-icon>
           </button>
-          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-bottom" :disabled="gimbalPostureLoading" @click="onCameraControl('right')">
+          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-bottom" :class="{ 'ctrl-btn--busy': isControlBusy('gimbal:right') }" @click="onCameraControl('right')">
             <el-icon class="camera-main-icon"><CameraFilled /></el-icon>
             <el-icon class="camera-dir-icon"><Right /></el-icon>
           </button>
@@ -264,12 +262,36 @@ const lastAppliedZoom = ref(2);
 const cameraLens = ref("");
 const payloadLens = ref("");
 const cameraMode = ref("");
-/** @type {import('vue').Ref<'' | 'pause' | 'resume'>} */
-const taskActionLoading = ref("");
-const lensChangeLoading = ref(false);
-const zoomChangeLoading = ref(false);
-const dronePoseLoading = ref(false);
-const gimbalPostureLoading = ref(false);
+
+/** 同一按键防抖间隔（毫秒） */
+const CONTROL_DEBOUNCE_MS = 300;
+/** @type {import('vue').Ref<Set<string>>} 正在请求中的控件 key */
+const loadingKeys = ref(new Set());
+/** @type {Map<string, number>} 各控件上次触发时间 */
+const lastTriggerAt = new Map();
+
+function isControlBusy(key) {
+  return loadingKeys.value.has(key);
+}
+
+/** 通过防抖且未在请求中则标记为 loading，返回是否可继续 */
+function beginControl(key) {
+  if (loadingKeys.value.has(key)) return false;
+  const now = Date.now();
+  const last = lastTriggerAt.get(key) || 0;
+  if (now - last < CONTROL_DEBOUNCE_MS) return false;
+  lastTriggerAt.set(key, now);
+  const next = new Set(loadingKeys.value);
+  next.add(key);
+  loadingKeys.value = next;
+  return true;
+}
+
+function endControl(key) {
+  const next = new Set(loadingKeys.value);
+  next.delete(key);
+  loadingKeys.value = next;
+}
 
 function clampDroneStep(value) {
   const n = Number(value);
@@ -286,6 +308,7 @@ function resolveCameraDeviceSn() {
 }
 
 async function onCameraLensChange(cameraType) {
+  const controlKey = "lens:change";
   const airportSn = resolveSerialNumber();
   const cameraSn = resolveCameraDeviceSn();
   if (!airportSn) {
@@ -298,8 +321,7 @@ async function onCameraLensChange(cameraType) {
   //  cameraLens.value = "";
   //  return;
   //}
-  if (lensChangeLoading.value) return;
-  lensChangeLoading.value = true;
+  if (!beginControl(controlKey)) return;
   try {
     await DroneControlService.changeLens({
       airportSn,
@@ -315,18 +337,18 @@ async function onCameraLensChange(cameraType) {
   } catch {
     cameraLens.value = "";
   } finally {
-    lensChangeLoading.value = false;
+    endControl(controlKey);
   }
 }
 
 async function onPauseTask() {
+  const controlKey = "task:pause";
   const serialNumber = resolveSerialNumber();
   if (!serialNumber) {
     ElMessage.warning("未获取到无人机 SN");
     return;
   }
-  if (taskActionLoading.value) return;
-  taskActionLoading.value = "pause";
+  if (!beginControl(controlKey)) return;
   try {
     await DroneControlService.taskSuspension(serialNumber);
     ElMessage.success("已暂停任务");
@@ -334,18 +356,18 @@ async function onPauseTask() {
   } catch {
     // 失败提示由 request 拦截器处理
   } finally {
-    taskActionLoading.value = "";
+    endControl(controlKey);
   }
 }
 
 async function onResumeTask() {
+  const controlKey = "task:resume";
   const serialNumber = resolveSerialNumber();
   if (!serialNumber) {
     ElMessage.warning("未获取到无人机 SN");
     return;
   }
-  if (taskActionLoading.value) return;
-  taskActionLoading.value = "resume";
+  if (!beginControl(controlKey)) return;
   try {
     await DroneControlService.recoveryTask(serialNumber);
     ElMessage.success("已恢复任务");
@@ -353,7 +375,7 @@ async function onResumeTask() {
   } catch {
     // 失败提示由 request 拦截器处理
   } finally {
-    taskActionLoading.value = "";
+    endControl(controlKey);
   }
 }
 
@@ -374,15 +396,14 @@ function dispatchControlEvent(type, action, extra = {}) {
   emit("control-event", payload);
 }
 
-async function applyDroneHeight(actionType, pfs, actionName) {
+async function applyDroneHeight(controlKey, actionType, pfs, actionName) {
   const serialNumber = resolveSerialNumber();
   if (!serialNumber) {
     ElMessage.warning("未获取到无人机 SN");
     return;
   }
   const stepMeters = clampDroneStep(pfs);
-  if (dronePoseLoading.value) return;
-  dronePoseLoading.value = true;
+  if (!beginControl(controlKey)) return;
   try {
     await DroneControlService.droneHeight({
       serialNumber,
@@ -397,23 +418,23 @@ async function applyDroneHeight(actionType, pfs, actionName) {
   } catch {
     // 失败提示由 request 拦截器处理
   } finally {
-    dronePoseLoading.value = false;
+    endControl(controlKey);
   }
 }
 
 async function onMoveControl(action) {
   const actionType = MOVE_ACTION_TYPE[action];
   if (actionType == null) return;
-  await applyDroneHeight(actionType, moveStep.value, action);
+  await applyDroneHeight(`move:${action}`, actionType, moveStep.value, action);
 }
 
 async function onAttitudeControl(action) {
   const actionType = ATTITUDE_ACTION_TYPE[action];
   if (actionType == null) return;
-  await applyDroneHeight(actionType, rotateStep.value, action);
+  await applyDroneHeight(`attitude:${action}`, actionType, rotateStep.value, action);
 }
 
-async function applyGimbalPosture(pitchingMotion, actionName) {
+async function applyGimbalPosture(controlKey, pitchingMotion, actionName) {
   const serialNumber = resolveSerialNumber();
   if (!serialNumber) {
     ElMessage.warning("未获取到无人机 SN");
@@ -421,8 +442,7 @@ async function applyGimbalPosture(pitchingMotion, actionName) {
   }
   const pitchAngle = Number(angleStep.value);
   if (!Number.isFinite(pitchAngle)) return;
-  if (gimbalPostureLoading.value) return;
-  gimbalPostureLoading.value = true;
+  if (!beginControl(controlKey)) return;
   try {
     await DroneControlService.gimbalPostureAdjustment({
       serialNumber,
@@ -437,14 +457,14 @@ async function applyGimbalPosture(pitchingMotion, actionName) {
   } catch {
     // 失败提示由 request 拦截器处理
   } finally {
-    gimbalPostureLoading.value = false;
+    endControl(controlKey);
   }
 }
 
 async function onCameraControl(action) {
   const pitchingMotion = GIMBAL_PITCH_MOTION[action];
   if (pitchingMotion == null) return;
-  await applyGimbalPosture(pitchingMotion, action);
+  await applyGimbalPosture(`gimbal:${action}`, pitchingMotion, action);
 }
 
 function onAction(action) {
@@ -478,6 +498,7 @@ function onSelectChange(field, value) {
 }
 
 async function applyCameraZoom(zoomRatio) {
+  const controlKey = "zoom:change";
   const serialNumber = resolveSerialNumber();
   const ratio = Number(zoomRatio);
   if (!serialNumber) {
@@ -489,8 +510,7 @@ async function applyCameraZoom(zoomRatio) {
     focusValue.value = lastAppliedZoom.value;
     return;
   }
-  if (zoomChangeLoading.value) return;
-  zoomChangeLoading.value = true;
+  if (!beginControl(controlKey)) return;
   try {
     await DroneControlService.cameraZoom({ serialNumber, zoomRatio: ratio });
     lastAppliedZoom.value = ratio;
@@ -499,7 +519,7 @@ async function applyCameraZoom(zoomRatio) {
   } catch {
     focusValue.value = lastAppliedZoom.value;
   } finally {
-    zoomChangeLoading.value = false;
+    endControl(controlKey);
   }
 }
 
@@ -525,6 +545,8 @@ function onFocusNumberChange(value) {
 }
 
 .manual-control-panel {
+  --ctrl-btn-size: 32px;
+  --ctrl-btn-gap: 4px;
   position: relative;
   // width: min(1180px, calc(100vw - 48px));
   // min-height: 100px;
@@ -534,7 +556,7 @@ function onFocusNumberChange(value) {
   background: rgba(3, 6, 10, 0.8);
   display: flex;
   align-items: stretch;
-  gap: 16px;
+  gap: 10px;
   box-sizing: border-box;
   pointer-events: auto;
   margin-left: 0;
@@ -555,7 +577,7 @@ function onFocusNumberChange(value) {
 }
 
 .control-column--left {
-  width: 150px;
+  width: 160px;
   flex-shrink: 0;
 }
 
@@ -610,8 +632,8 @@ function onFocusNumberChange(value) {
 
 .direction-row {
   display: grid;
-  grid-template-columns: repeat(3, 32px);
-  column-gap: 4px;
+  grid-template-columns: repeat(3, var(--ctrl-btn-size));
+  column-gap: var(--ctrl-btn-gap);
   width: max-content;
   justify-items: center;
   align-items: center;
@@ -623,9 +645,9 @@ function onFocusNumberChange(value) {
 
 .cross-pad {
   display: grid;
-  grid-template-columns: repeat(3, 32px);
-  grid-template-rows: repeat(2, 32px);
-  gap: 4px;
+  grid-template-columns: repeat(3, var(--ctrl-btn-size));
+  grid-template-rows: repeat(2, var(--ctrl-btn-size));
+  gap: var(--ctrl-btn-gap);
   width: max-content;
   justify-content: center;
   margin: 0 auto 2px;
@@ -658,19 +680,22 @@ function onFocusNumberChange(value) {
 }
 
 .ctrl-btn {
-  width: 32px;
-  height: 32px;
+  width: var(--ctrl-btn-size);
+  height: var(--ctrl-btn-size);
   border-radius: 2px;
   font-size: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
+  box-sizing: border-box;
+}
 
-  &:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
+/* 姿态/云台忙碌：仅变暗，不显示禁用光标；pointer-events 阻断点击 */
+.ctrl-btn--busy {
+  opacity: 0.45;
+  cursor: pointer;
+  pointer-events: none;
 }
 
 .ctrl-btn :deep(.el-icon) {
@@ -695,12 +720,12 @@ function onFocusNumberChange(value) {
 }
 
 .camera-main-icon {
-  font-size: 13px !important;
+  font-size: 14px !important;
   line-height: 1;
 }
 
 .camera-dir-icon {
-  font-size: 10px !important;
+  font-size: 13px !important;
   line-height: 1;
 }
 

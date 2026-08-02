@@ -9,7 +9,7 @@ export const BACKEND_BASE = "/backend";
  * 约定：
  * - 一级：MonitoringCenter / UnitManage / AccountManage / SystemSettings
  * - 二级：MonitoringData / DroneManage / BoatManage / HoundManage
- *        PointSettings / TargetDeviceManage / KeyPointManage
+ *        PointSettings / TargetDeviceManage / KeyPointManage / MonitorLibraryManage
  */
 const MENU_COMPONENT_ROUTE_PATH_MAP = new Map([
   // 一级菜单
@@ -28,6 +28,7 @@ const MENU_COMPONENT_ROUTE_PATH_MAP = new Map([
   ["PointSettings", "/backend/infra/checkpoints"],
   ["TargetDeviceManage", "/backend/infra/targets"],
   ["KeyPointManage", "/backend/infra/locations"],
+  ["MonitorLibraryManage", "/backend/infra/library"],
 ]);
 
 export function resolveStaticRoutePath(path) {
@@ -38,22 +39,46 @@ export function resolveStaticRoutePath(path) {
 }
 
 /**
- * 由 router.getRoutes() 构造标题到路径映射，避免模块循环依赖
- * @param {Array<{path?: string, meta?: Record<string, unknown>}>} routes
+ * 由 router.getRoutes() 构造标题到路径映射（支持嵌套路由）
+ * @param {Array<{path?: string, meta?: Record<string, unknown>, children?: Array<any>}>} routes
  */
 export function buildMenuTitleRoutePathMap(routes = []) {
-  return new Map(
-    routes
-      .map((route) => ({
-        title: String(route?.meta?.title || "").trim(),
-        path: resolveStaticRoutePath(route?.path),
-      }))
-      .filter((item) => item.title),
-  );
+  /** @type {Map<string, string>} */
+  const map = new Map();
+
+  /** @param {Array<any>} routeList @param {string} parentPath */
+  function walk(routeList, parentPath = "") {
+    for (const route of routeList || []) {
+      const rawPath = String(route?.path ?? "");
+      let fullPath = parentPath;
+
+      if (rawPath) {
+        if (rawPath.startsWith("/")) {
+          fullPath = rawPath;
+        } else if (parentPath) {
+          fullPath = `${parentPath.replace(/\/+$/, "")}/${rawPath.replace(/^\/+/, "")}`;
+        } else {
+          fullPath = `/${rawPath.replace(/^\/+/, "")}`;
+        }
+      }
+
+      const title = String(route?.meta?.title || "").trim();
+      if (title && fullPath) {
+        map.set(title, resolveStaticRoutePath(fullPath));
+      }
+
+      if (route.children?.length) {
+        walk(route.children, fullPath);
+      }
+    }
+  }
+
+  walk(routes);
+  return map;
 }
 
 /**
- * 菜单路由优先级：frontPermission > path
+ * 菜单路由优先级：component > frontPermission/path > menuName(title)
  * @param {BackendMenuNode|null|undefined} node
  * @param {Map<string, string>} [titleRoutePathMap]
  */

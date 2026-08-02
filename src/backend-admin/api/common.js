@@ -5,6 +5,52 @@ import {
 } from "@backend/utils/checkpoint.js";
 
 /**
+ * 通用文件上传保存目录 path
+ * 1. 算子仓库图片 algorithm/image
+ * 2. 用户文件 user/image
+ * 3. 驾驶舱 cockpit/image
+ * 4. 系统 system/image
+ * 5. 人像管理 portrait/image
+ */
+export const UPLOAD_PATH = {
+  ALGORITHM_IMAGE: "algorithm/image",
+  USER_IMAGE: "user/image",
+  COCKPIT_IMAGE: "cockpit/image",
+  SYSTEM_IMAGE: "system/image",
+  PORTRAIT_IMAGE: "portrait/image",
+};
+
+function resolveUploadFileUrl(data) {
+  if (typeof data === "string") return data.trim();
+  if (!data || typeof data !== "object") return "";
+
+  return String(
+    data.url ??
+      data.fileUrl ??
+      data.imageUrl ??
+      data.fullUrl ??
+      data.path ??
+      data.filePath ??
+      "",
+  ).trim();
+}
+
+/**
+ * 通用文件上传
+ * POST /sys/uploadFile multipart/form-data
+ * @param {File|Blob} file
+ * @param {string} path 保存目录，见 UPLOAD_PATH
+ */
+export async function uploadFile(file, path) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("path", String(path ?? "").trim());
+
+  const data = await requestData("/sys/uploadFile", formData, "POST", "multipart/form-data");
+  return resolveUploadFileUrl(data);
+}
+
+/**
  * 封控点 / 卡点列表
  */
 export async function controlPointListQuery(params = {}) {
