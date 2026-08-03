@@ -178,8 +178,22 @@
       </div>
 
       <div class="control-column control-column--right">
-        <button type="button" class="action-btn" @click="onAction('takePhoto')">拍照</button>
-        <button type="button" class="action-btn" @click="onAction('gimbalReset')">云台复位</button>
+        <button
+          type="button"
+          class="action-btn"
+          :disabled="isControlBusy('action:takePhoto')"
+          @click="onAction('takePhoto')"
+        >
+          {{ isControlBusy('action:takePhoto') ? "拍照中..." : "拍照" }}
+        </button>
+        <button
+          type="button"
+          class="action-btn"
+          :disabled="isControlBusy('action:gimbalReset')"
+          @click="onAction('gimbalReset')"
+        >
+          {{ isControlBusy('action:gimbalReset') ? "复位中..." : "云台复位" }}
+        </button>
         <button
           type="button"
           class="action-btn"
@@ -241,17 +255,21 @@ const ATTITUDE_ACTION_TYPE = {
 const GIMBAL_PITCH_MOTION = {
   up: 0,
   down: 1,
-  left: 2,
-  right: 3,
+};
+
+/** 云台左右 → 无人机左旋/右旋（/droneHeight） */
+const GIMBAL_YAW_ACTION_TYPE = {
+  left: 6,
+  right: 7,
 };
 
 const emit = defineEmits(["close", "control-event"]);
 const props = defineProps({
   recordingActive: { type: Boolean, default: false },
-  /** 当前操控无人机 SN（serialNumber / airportSn） */
+  /** 当前操控无人机 SN（serialNumber / cameraSn） */
   droneSerialNumber: { type: String, default: "" },
-  /** 镜头设备 SN（cameraSn）；来源待定，由父组件传入 */
-  cameraDeviceSn: { type: String, default: "" },
+  /** 机场 SN（详情 airportSn，用于切换镜头） */
+  airportSn: { type: String, default: "" },
 });
 
 const moveStep = ref(2);
@@ -303,24 +321,24 @@ function resolveSerialNumber() {
   return String(props.droneSerialNumber || "").trim();
 }
 
-function resolveCameraDeviceSn() {
-  return String(props.cameraDeviceSn || "").trim();
+function resolveAirportSn() {
+  return String(props.airportSn || "").trim();
 }
 
 async function onCameraLensChange(cameraType) {
   const controlKey = "lens:change";
-  const airportSn = resolveSerialNumber();
-  const cameraSn = resolveCameraDeviceSn();
-  if (!airportSn) {
+  const cameraSn = resolveSerialNumber();
+  const airportSn = resolveAirportSn();
+  if (!cameraSn) {
     ElMessage.warning("未获取到无人机 SN");
     cameraLens.value = "";
     return;
   }
-  //if (!cameraSn) {
-  //  ElMessage.warning("镜头设备 SN 暂未配置");
-  //  cameraLens.value = "";
-  //  return;
-  //}
+  if (!airportSn) {
+    ElMessage.warning("未获取到机场 SN");
+    cameraLens.value = "";
+    return;
+  }
   if (!beginControl(controlKey)) return;
   try {
     await DroneControlService.changeLens({
@@ -462,14 +480,54 @@ async function applyGimbalPosture(controlKey, pitchingMotion, actionName) {
 }
 
 async function onCameraControl(action) {
+  const yawActionType = GIMBAL_YAW_ACTION_TYPE[action];
+  if (yawActionType != null) {
+    // 云台向左/向右：走无人机左旋/右旋接口，步距用本列「角度」
+    await applyDroneHeight(`gimbal:${action}`, yawActionType, angleStep.value, action);
+    return;
+  }
   const pitchingMotion = GIMBAL_PITCH_MOTION[action];
   if (pitchingMotion == null) return;
   await applyGimbalPosture(`gimbal:${action}`, pitchingMotion, action);
 }
 
-function onAction(action) {
+async function onAction(action) {
+  if (action === "takePhoto") {
+    const controlKey = "action:takePhoto";
+    const serialNumber = resolveSerialNumber();
+    if (!serialNumber) {
+      ElMessage.warning("未获取到无人机 SN");
+      return;
+    }
+    if (!beginControl(controlKey)) return;
+    try {
+      await DroneControlService.takePhoto(serialNumber);
+      ElMessage.success("拍照指令已下发");
+      dispatchControlEvent("action", "takePhoto", { serialNumber });
+    } catch {
+      // 失败提示由 request 拦截器处理
+    } finally {
+      endControl(controlKey);
+    }
+    return;
+  }
   if (action === "gimbalReset") {
-    ElMessage.info("云台复位功能开发中");
+    const controlKey = "action:gimbalReset";
+    const serialNumber = resolveSerialNumber();
+    if (!serialNumber) {
+      ElMessage.warning("未获取到无人机 SN");
+      return;
+    }
+    if (!beginControl(controlKey)) return;
+    try {
+      await DroneControlService.gimbalPostureCentering(serialNumber);
+      ElMessage.success("云台已复位");
+      dispatchControlEvent("action", "gimbalReset", { serialNumber });
+    } catch {
+      // 失败提示由 request 拦截器处理
+    } finally {
+      endControl(controlKey);
+    }
     return;
   }
   dispatchControlEvent("action", action);

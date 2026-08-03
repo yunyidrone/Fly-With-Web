@@ -96,4 +96,30 @@ export class DroneControlService {
       "application/json",
     );
   }
+
+  /**
+   * 云台复位（回中）
+   * @param {string} serialNumber 无人机 SN
+   */
+  static gimbalPostureCentering(serialNumber) {
+    return requestData(
+      "/gimbalPostureCentering",
+      { serialNumber: String(serialNumber || "").trim() },
+      "POST",
+      "application/json",
+    );
+  }
+
+  /**
+   * 拍照
+   * @param {string} serialNumber 无人机 SN
+   */
+  static takePhoto(serialNumber) {
+    return requestData(
+      "/takePhoto",
+      { serialNumber: String(serialNumber || "").trim() },
+      "POST",
+      "application/json",
+    );
+  }
 }

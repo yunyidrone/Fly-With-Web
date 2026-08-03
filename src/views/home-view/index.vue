@@ -21,6 +21,7 @@
         <ManualControlPanel
           :recording-active="manualRecordingActive"
           :drone-serial-number="manualControlDroneSn"
+          :airport-sn="manualControlAirportSn"
           @close="closeManualControl"
           @control-event="handleManualControlEvent"
         />
@@ -508,6 +509,12 @@ const streamRobotKey = computed(() => streamRobot.value?.id || "none");
 const manualControlDroneSn = computed(() => {
   const d = streamDroneLive.value;
   return String(d?.sn || d?.mqttSn || "").trim();
+});
+
+/** 手动操控：机场 SN（来自无人机详情 airportSn） */
+const manualControlAirportSn = computed(() => {
+  const d = streamDroneLive.value;
+  return String(d?.airportSn ?? d?.airport_sn ?? "").trim();
 });
 
 /** 当前视频弹窗选中的无人机（用于地图侧高亮/圈选） */

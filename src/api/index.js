@@ -8,7 +8,7 @@ export class AccompanyingFlyService {
   static async droneList(query = {}) {
     const params = {
       current: 1, 
-      pageSize: 100,
+      pageSize: 999,
       ...query,
     };
     return requestData("/drone/pageQuery", { params }, "GET");
@@ -35,7 +35,7 @@ export class AccompanyingFlyService {
   static async targetList(query = {}) {
     const params = {
       current: 1,
-      pageSize: 100,
+      pageSize: 9999,
       ...query,
     };
     return requestData("/target/pageQuery", { params }, "GET");
