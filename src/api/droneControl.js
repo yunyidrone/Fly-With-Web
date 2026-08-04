@@ -122,4 +122,30 @@ export class DroneControlService {
       "application/json",
     );
   }
+
+  /**
+   * 一键返航
+   * @param {string} serialNumber 无人机 SN
+   */
+  static returnHome(serialNumber) {
+    return requestData(
+      "/returnHome",
+      { serialNumber: String(serialNumber || "").trim() },
+      "POST",
+      "application/json",
+    );
+  }
+
+  /**
+   * 取消返航
+   * @param {string} serialNumber 无人机 SN
+   */
+  static returnHomeCancel(serialNumber) {
+    return requestData(
+      "/returnHomeCancel",
+      { serialNumber: String(serialNumber || "").trim() },
+      "POST",
+      "application/json",
+    );
+  }
 }

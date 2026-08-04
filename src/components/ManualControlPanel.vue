@@ -2,20 +2,42 @@
   <div class="manual-control-wrapper" @click.stop>
     <div class="manual-control-panel">
       <div class="control-column control-column--task">
-        <button
-          type="button"
-          class="task-btn task-btn--pause"
-          @click="onPauseTask"
-        >
-          暂停任务
-        </button>
-        <button
-          type="button"
-          class="task-btn task-btn--resume"
-          @click="onResumeTask"
-        >
-          恢复任务
-        </button>
+        <div class="task-btn-row">
+          <button
+            type="button"
+            class="task-btn task-btn--pause"
+            :class="{ 'task-btn--busy': isControlBusy('task:pause') }"
+            @click="onPauseTask"
+          >
+            暂停任务
+          </button>
+          <button
+            type="button"
+            class="task-btn task-btn--resume"
+            :class="{ 'task-btn--busy': isControlBusy('task:resume') }"
+            @click="onResumeTask"
+          >
+            恢复任务
+          </button>
+        </div>
+        <div class="task-btn-row">
+          <button
+            type="button"
+            class="task-btn task-btn--return"
+            :class="{ 'task-btn--busy': isControlBusy('task:returnHome') }"
+            @click="onReturnHome"
+          >
+            一键返航
+          </button>
+          <button
+            type="button"
+            class="task-btn task-btn--return-cancel"
+            :class="{ 'task-btn--busy': isControlBusy('task:returnHomeCancel') }"
+            @click="onReturnHomeCancel"
+          >
+            取消返航
+          </button>
+        </div>
       </div>
 
       <div class="control-column control-column--left">
@@ -194,9 +216,9 @@
         >
           {{ isControlBusy('action:gimbalReset') ? "复位中..." : "云台复位" }}
         </button>
-        <button
+        <!-- <button
           type="button"
-          class="action-btn"
+          class="action-btn action-btn--start-record"
           :class="{ 'action-btn--recording': props.recordingActive }"
           :disabled="props.recordingActive"
           @click="onAction('startRecord')"
@@ -205,12 +227,12 @@
         </button>
         <button
           type="button"
-          class="action-btn"
+          class="action-btn action-btn--stop-record"
           :disabled="!props.recordingActive"
           @click="onAction('stopRecord')"
         >
           结束录像
-        </button>
+        </button> -->
         <!-- <button type="button" class="action-btn action-btn--danger" @click="$emit('close')">
           退出操控
         </button> -->
@@ -390,6 +412,44 @@ async function onResumeTask() {
     await DroneControlService.recoveryTask(serialNumber);
     ElMessage.success("已恢复任务");
     dispatchControlEvent("task", "resume", { serialNumber });
+  } catch {
+    // 失败提示由 request 拦截器处理
+  } finally {
+    endControl(controlKey);
+  }
+}
+
+async function onReturnHome() {
+  const controlKey = "task:returnHome";
+  const serialNumber = resolveSerialNumber();
+  if (!serialNumber) {
+    ElMessage.warning("未获取到无人机 SN");
+    return;
+  }
+  if (!beginControl(controlKey)) return;
+  try {
+    await DroneControlService.returnHome(serialNumber);
+    ElMessage.success("已下发一键返航");
+    dispatchControlEvent("task", "returnHome", { serialNumber });
+  } catch {
+    // 失败提示由 request 拦截器处理
+  } finally {
+    endControl(controlKey);
+  }
+}
+
+async function onReturnHomeCancel() {
+  const controlKey = "task:returnHomeCancel";
+  const serialNumber = resolveSerialNumber();
+  if (!serialNumber) {
+    ElMessage.warning("未获取到无人机 SN");
+    return;
+  }
+  if (!beginControl(controlKey)) return;
+  try {
+    await DroneControlService.returnHomeCancel(serialNumber);
+    ElMessage.success("已取消返航");
+    dispatchControlEvent("task", "returnHomeCancel", { serialNumber });
   } catch {
     // 失败提示由 request 拦截器处理
   } finally {
@@ -623,7 +683,7 @@ function onFocusNumberChange(value) {
 /* 横屏（宽高比 ≥ 1）保持左偏；竖屏居中 */
 @media (min-aspect-ratio: 1/1) {
   .manual-control-panel {
-    margin-left: -30rem;
+    margin-left: -33rem;
   }
 }
 
@@ -640,14 +700,23 @@ function onFocusNumberChange(value) {
 }
 
 .control-column--task {
-  width: 80px;
+  width: 180px;
   flex-shrink: 0;
   gap: 8px;
   justify-content: flex-start;
   padding-top: 2px;
 }
 
+.task-btn-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
 .task-btn {
+  flex: 1;
   height: 28px;
   border-radius: 2px;
   border: 1px solid rgba(85, 142, 252, 0.85);
@@ -658,17 +727,31 @@ function onFocusNumberChange(value) {
   cursor: pointer;
   padding: 0 6px;
   white-space: nowrap;
+}
 
-  &:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
+.task-btn--busy {
+  opacity: 0.45;
+  cursor: pointer;
+  pointer-events: none;
 }
 
 .task-btn--pause {
   box-shadow: inset 0 0 7px rgba(253, 127, 55, 0.8);
   border-color: rgba(253, 127, 55, 0.85);
   color: #ffd4b8;
+}
+
+.task-btn--resume,
+.task-btn--return-cancel {
+  box-shadow: inset 0 0 7px rgba(101, 230, 190, 0.8);
+  border-color: rgba(101, 230, 190, 0.85);
+  color: #c8fff0;
+}
+
+.task-btn--return {
+  box-shadow: inset 0 0 7px rgba(236, 83, 92, 0.8);
+  border-color: rgba(236, 83, 92, 0.85);
+  color: #ffd0d3;
 }
 
 .control-column--center {
@@ -951,11 +1034,23 @@ function onFocusNumberChange(value) {
   }
 }
 
+.action-btn--start-record {
+  box-shadow: inset 0 0 7px rgba(101, 230, 190, 0.8);
+  border-color: rgba(101, 230, 190, 0.85);
+  color: #c8fff0;
+}
+
+.action-btn--stop-record {
+  box-shadow: inset 0 0 7px rgba(253, 127, 55, 0.8);
+  border-color: rgba(253, 127, 55, 0.85);
+  color: #ffd4b8;
+}
+
 .action-btn--recording {
-  box-shadow: inset 0 0 7px rgba(255, 77, 79, 0.65);
-  background: rgba(255, 77, 79, 0.15);
-  border-color: rgba(255, 109, 111, 0.85);
-  color: #ffd7d8;
+  box-shadow: inset 0 0 7px rgba(101, 230, 190, 0.55);
+  background: rgba(101, 230, 190, 0.12);
+  border-color: rgba(101, 230, 190, 0.65);
+  color: #c8fff0;
 }
 
 .action-btn--danger {
