@@ -67,7 +67,7 @@
       </div>
 
       <div class="task-block">
-        <div class="task-block__title">
+        <!-- <div class="task-block__title">
           <img
             :src="arrowRightPng"
             alt=""
@@ -77,13 +77,13 @@
             aria-hidden="true"
           />
           <span>伴飞任务：{{ showNoTask ? "暂无伴飞任务" : companionTitle }}</span>
-        </div>
+        </div> -->
         <div class="task-block__lines">
           <div class="task-block__line">
             <span class="meta-k">伴飞开始时间：</span>{{ showNoTask ? '—' : escortStartText }}
           </div>
           <div class="task-block__line">
-            <span class="meta-k">伴飞目标设备：</span>{{ targetDeviceLabel }}
+            <span class="meta-k">伴飞目标设备：</span>{{ showNoTask ? '—' : targetDeviceLabel }}
           </div>
         </div>
       </div>
@@ -189,6 +189,12 @@
       </button>
     </div>
 
+    <AiRecognitionPanel
+      :events="aiEvents"
+      @mark="(event) => emit('ai-mark', event)"
+      @report="(event) => emit('ai-report', event)"
+    />
+
     <footer class="card-footer">
       <button
         type="button"
@@ -206,6 +212,7 @@
         全局展示
         <img class="footer-btn__icon-img" :src="qjxsPng" alt="" aria-hidden="true" />
       </button>
+      <!-- v-if="hasEscortTarget" -->
       <button
         v-if="hasEscortTarget"
         type="button"
@@ -243,6 +250,7 @@ import qjxsPng from "@/assets/images/qjxs.png";
 import cjbfPng from "@/assets/images/cjbf.png";
 import yjzhPng from "@/assets/images/yjzh.png";
 import { useVideoFullscreen } from "@/composables/useVideoFullscreen.js";
+import AiRecognitionPanel from "@/components/AiRecognitionPanel.vue";
 
 const props = defineProps({
   droneId: { type: String, default: "" },
@@ -265,6 +273,8 @@ const props = defineProps({
   playUrl: { type: String, default: "" },
   /** 算法 AI 结果流地址 */
   aiPlayUrl: { type: String, default: "" },
+  /** AI 智能识别事件列表 */
+  aiEvents: { type: Array, default: () => [] },
   /** 伴飞目标 id，用于 stopFollow 的 id 参数 */
   targetDeviceId: { type: String, default: "" },
   lng: { type: [Number, String], default: undefined },
@@ -280,6 +290,8 @@ const emit = defineEmits([
   "toggle-manual-control",
   "recording-change",
   "recall",
+  "ai-mark",
+  "ai-report",
 ]);
 
 let pc;
@@ -678,6 +690,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   width: 100%;
+  height: 100%;
+  min-height: 0;
   max-height: 100%;
   border-radius: 6px;
   border: 1px solid #30363b;
@@ -840,16 +854,23 @@ onUnmounted(() => {
 
   &__lines {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     padding: 8px 31px;
+    flex-wrap: wrap;
   }
 
   &__line {
     min-width: 0;
+    flex: 1 1 auto;
     color: #fff;
     font-family: "Alibaba PuHuiTi 3.0";
     font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .meta-k {
@@ -904,10 +925,10 @@ onUnmounted(() => {
 
 .video-wrap {
   position: relative;
-  flex: 1;
-  min-height: 200px;
+  flex: 0 0 352px;
+  height: 352px;
   background: #000;
-  margin: 0 12px 12px;
+  margin: 0 12px 8px;
   border-radius: 6px;
   overflow: hidden;
 }
@@ -1095,7 +1116,6 @@ onUnmounted(() => {
   position: relative;
   width: 100%;
   height: 100%;
-  min-height: 324px;
 }
 
 .video-offline-overlay {
@@ -1114,9 +1134,9 @@ onUnmounted(() => {
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 324px;
   object-fit: contain;
   vertical-align: top;
+  background: #000;
 }
 
 .card-footer {

@@ -69,6 +69,8 @@ export function normalizeDroneRecord(raw) {
     waylineId: raw.waylineId,
     streamUrl: raw.streamUrl,
     playUrl: raw.playUrl ?? raw.play_url ?? "",
+    aiPlayUrl: raw.aiPlayUrl ?? raw.ai_play_url ?? "",
+    thirdPartyId: String(raw.thirdPartyId ?? raw.third_party_id ?? "").trim() || undefined,
     longitude: raw.longitude,
     latitude: raw.latitude,
     lng:

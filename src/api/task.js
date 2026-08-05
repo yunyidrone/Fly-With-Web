@@ -16,4 +16,13 @@ export class TaskService {
   static taskWarningPageQuery(params = {}) {
     return requestData("/task/warning/pageQuery", { params }, "GET");
   }
+
+  /**
+   * 识别结果是否弹窗提示
+   * @param {{ aiResult: string }} data
+   * @returns {Promise<boolean>}
+   */
+  static alertCheck(data = {}) {
+    return requestData("/task/alertCheck", data, "POST", "application/json");
+  }
 }

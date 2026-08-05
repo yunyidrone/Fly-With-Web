@@ -135,6 +135,7 @@
               :companion-task-title="streamCompanionTaskTitle"
               :immersive-flight="immersiveFlight"
               :manual-control-visible="manualControlVisible"
+              :ai-events="streamAiEvents"
               @toggle-immersive="onToggleImmersive"
               @toggle-manual-control="onToggleManualControl"
               @recording-change="onDroneRecordingChange"
@@ -143,6 +144,12 @@
         </div>
       </Transition>
     </Teleport>
+
+    <AiAlertDetailDialog
+      :visible="aiAlertDetailVisible"
+      :detail="aiAlertDetail"
+      @close="closeAiAlertDetail"
+    />
 
     <!-- 机器人视频：风格与无人机一致，内容精简 -->
     <Teleport to="body">
@@ -185,6 +192,7 @@ import LeftSidebarTabs from "@/components/LeftSidebarTabs.vue";
 import PlanUpcomingAlert from "@/components/plan-panel/PlanUpcomingAlert.vue";
 import PlanHistoryPanel from "@/components/plan-panel/PlanHistoryPanel.vue";
 import PlanTaskMonitorView from "@/components/plan-panel/PlanTaskMonitorView.vue";
+import AiAlertDetailDialog from "@/components/AiAlertDetailDialog.vue";
 
 const PlanPanel = defineAsyncComponent(() => import("@/components/PlanPanel.vue"));
 const TaskView = defineAsyncComponent(() => import("@/views/task-view/index.vue"));
@@ -195,6 +203,7 @@ const RobotStream = defineAsyncComponent(() => import("@/components/RobotStream.
 import { MAP_CONFIG } from "@/config/app-config.js";
 import { DEFAULT_ROBOT_ID, DEFAULT_COMMUNITY_ID } from "@/api/robot.js";
 import { ensureDroneOsdMqtt } from "@/composables/useDroneOsdMqtt.js";
+import { useDroneAiRecognition } from "@/composables/useDroneAiRecognition.js";
 import { useDeviceStore } from "@/stores/device.js";
 import { useFlightPlanStore } from "@/stores/flightPlan.js";
 import { AccompanyingFlyService } from "@/api";
@@ -271,7 +280,40 @@ const streamFloatOpen = computed(
   () => droneStreamVisible.value || robotStreamVisible.value,
 );
 
+/** 合并详情快照与列表中的实时字段 */
+function mergeStreamDroneWithLive(base) {
+  if (!base) return null;
+  const live = deviceStore.drones.find(
+    (d) =>
+      String(d?.id || "") === String(base.id || "") ||
+      (d?.sn && base.sn && String(d.sn) === String(base.sn)),
+  );
+  if (!live) return base;
+  return {
+    ...base,
+    ...live,
+    streamUrl: base.streamUrl || live.streamUrl || "",
+    playUrl: base.playUrl || live.playUrl || "",
+    aiPlayUrl: base.aiPlayUrl || live.aiPlayUrl || "",
+    thirdPartyId: live.thirdPartyId || base.thirdPartyId || "",
+  };
+}
+
 const deviceStore = useDeviceStore();
+const {
+  aiEvents: streamAiEvents,
+  alertDetail: aiAlertDetail,
+  alertDetailVisible: aiAlertDetailVisible,
+  closeAlertDetail: closeAiAlertDetail,
+  bindDroneStream: bindStreamAiRecognition,
+  syncDroneStream: syncStreamAiRecognition,
+  unbindDroneStream: unbindStreamAiRecognition,
+} = useDroneAiRecognition({
+  refreshDroneFromList: async () => {
+    await deviceStore.fetchDroneList();
+    return mergeStreamDroneWithLive(streamDrone.value);
+  },
+});
 const flightPlanStore = useFlightPlanStore();
 
 // ===== 地点设置 → 地图框选弹窗 =====
@@ -369,6 +411,7 @@ onMounted(() => {
   droneListTimer = setInterval(async () => {
     await deviceStore.fetchDroneList();
     if (droneStreamVisible.value) {
+      await syncStreamAiRecognition(streamDroneLive.value);
       await checkAndSwitchEscortStreamDrone({ closeIfNoReplacement: true });
     }
   }, DRONE_LIST_POLL_INTERVAL);
@@ -485,22 +528,15 @@ function onMapAreaClick() {
   leftSidebarRef.value?.clearSelection?.();
 }
 
-const streamDroneLive = computed(() => {
-  const base = streamDrone.value;
-  if (!base) return null;
-  const live = deviceStore.drones.find(
-    (d) =>
-      String(d?.id || "") === String(base.id || "") ||
-      (d?.sn && base.sn && String(d.sn) === String(base.sn)),
-  );
-  if (!live) return base;
-  return {
-    ...base,
-    ...live,
-    streamUrl: base.streamUrl || live.streamUrl || "",
-    playUrl: base.playUrl || live.playUrl || "",
-  };
-});
+const streamDroneLive = computed(() => mergeStreamDroneWithLive(streamDrone.value));
+
+watch(
+  () => streamDroneLive.value,
+  (drone) => {
+    if (!droneStreamVisible.value || !drone) return;
+    void syncStreamAiRecognition(drone);
+  },
+);
 
 const streamDroneKey = computed(() => streamDroneLive.value?.id || "none");
 const streamRobotKey = computed(() => streamRobot.value?.id || "none");
@@ -768,6 +804,7 @@ const openDroneStream = async (device) => {
   streamDroneWasReturning = isDroneCurrentlyReturning(
     liveFromStore ? { ...streamDrone.value, ...liveFromStore } : streamDrone.value,
   );
+  await bindStreamAiRecognition(streamDroneLive.value);
 };
 
 /** 沉浸中「开始伴飞并跳转」：先退出沉浸，再切视频（锁车由地图侧 submitStartFollow 完成） */
@@ -808,6 +845,7 @@ const handleStreamRecall = async ({ droneId } = {}) => {
 };
 
 const closeDroneStream = () => {
+  unbindStreamAiRecognition();
   droneStreamRef.value?.exitVideoFullscreen?.();
   if (document.fullscreenElement) {
     document.exitFullscreen().catch(() => {});
@@ -923,14 +961,26 @@ const closeRobotStream = () => {
   position: fixed;
   top: 96px;
   right: 16px;
+  /* 与 MapLegend 的 bottom: 20px 对齐，高度刚好落到图例底边 */
+  bottom: 20px;
   z-index: 2000;
   width: min(650px, calc(100vw - 32px));
-  max-height: calc(100vh - 88px);
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.drone-stream-float .drone-stream-card,
+.drone-stream-float .robot-stream-card {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
 }
 
 .drone-stream-float--immersive {
   top: 0;
+  bottom: 0;
   left: 50vw;
   right: auto;
   width: 50vw;

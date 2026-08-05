@@ -320,7 +320,10 @@ export function normalizeWarnEvent(item) {
       item.aiResult ?? item.recognizeResult ?? item.recognitionResult ?? item.recognizeName,
     ),
     eventTime: String(item.alarmTime ?? item.eventTime ?? item.createTime ?? "—"),
-    imageUrl: String(item.imageUrl ?? item.originalImageUrl ?? ""),
+    imageUrl: String(item.imageUrl ?? item.imgUrl ?? item.pictureUrl ?? ""),
+    originalImageUrl: String(
+      item.originalImageUrl ?? item.original_image_url ?? item.imageUrl ?? "",
+    ),
     label: "",
     longitude: item.longitude ?? null,
     latitude: item.latitude ?? null,
