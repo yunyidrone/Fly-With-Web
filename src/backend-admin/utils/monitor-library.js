@@ -142,7 +142,7 @@ export function formatPlateNumber(province, letter, body) {
   const letterText = sanitizePlateLetter(letter);
   const bodyText = sanitizePlateBody(body);
   if (!provinceText || !letterText || !bodyText) return "";
-  return `${provinceText}${letterText}${bodyText}`;
+  return `${provinceText}${letterText}·${bodyText}`;
 }
 
 /** 列表展示：浙J54K82 → 浙J·54K82 */

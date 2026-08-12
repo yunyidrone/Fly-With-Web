@@ -157,7 +157,7 @@ function handleProvinceVisibleChange(visible) {
 }
 
 function syncPlateNumberField() {
-  form.plateNumber = `${form.plateProvince}${form.plateLetter}${form.plateBody}`;
+  form.plateNumber = `${form.plateProvince}${form.plateLetter}·${form.plateBody}`;
 }
 
 function handlePlateLetterInput(value) {
@@ -267,13 +267,14 @@ onMounted(loadDetail);
 .vehicle-form__plate {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0;
   width: 100%;
 }
 
 .vehicle-form__plate-province {
   width: 108px;
   flex-shrink: 0;
+  margin-right: 8px;
 }
 
 .vehicle-form__province-short {
@@ -295,6 +296,8 @@ onMounted(loadDetail);
 
 .vehicle-form__plate-dot {
   flex-shrink: 0;
+  margin: 0;
+  padding: 0;
   color: #303133;
   font-size: 18px;
   line-height: 1;
@@ -304,6 +307,7 @@ onMounted(loadDetail);
 .vehicle-form__plate-body {
   flex: 1;
   min-width: 0;
+  margin-left: 0;
 }
 
 .vehicle-form__body :deep(.el-input__wrapper),

@@ -601,6 +601,17 @@ const systemStore = useSystemStore();
 const deviceStore = useDeviceStore();
 const flightPlanStore = useFlightPlanStore();
 let routeLayerVisible = false;
+/** 当前正在被伴飞的目标 id 集合（由伴飞中无人机反推） */
+const escortingTargetIds = new Set();
+
+function isEscortingTargetId(deviceId) {
+  const id = String(deviceId || "").trim();
+  return Boolean(id && escortingTargetIds.has(id));
+}
+
+function shouldShowTargetRoutePath(deviceId) {
+  return Boolean(routeLayerVisible && isEscortingTargetId(deviceId));
+}
 
 /** @type {import('cesium').Entity[]} */
 let flightPlanPolygonEntities = [];
@@ -1159,7 +1170,7 @@ const vehicleManager = {
           }
         : getVehicleShapeGraphics()),
       path: {
-        show: routeLayerVisible,
+        show: shouldShowTargetRoutePath(deviceId),
         width: 5,
         material: defaultPathMaterial,
         leadTime: 0,
@@ -1232,6 +1243,52 @@ const vehicleManager = {
     }
   },
 
+  _removeAllPositionSamples(vehicle) {
+    vehicle.positionProp.removeSamples(
+      new Cesium.TimeInterval({
+        start: Cesium.JulianDate.fromIso8601("1970-01-01T00:00:00Z"),
+        stop: Cesium.JulianDate.fromIso8601("9999-12-31T23:59:59Z"),
+      }),
+    );
+  },
+
+  _refreshPath(vehicle, deviceId) {
+    if (!vehicle?.entity?.path) return;
+    vehicle.entity.path.show = false;
+    vehicle.entity.path.show = shouldShowTargetRoutePath(deviceId);
+  },
+
+  clearVehicleTrajectory(deviceId) {
+    const vehicle = this.vehicles.get(deviceId);
+    if (!vehicle) return;
+
+    this._removeAllPositionSamples(vehicle);
+
+    if (
+      mainViewer &&
+      !mainViewer.isDestroyed?.() &&
+      vehicle.lastPosition?.longitude != null &&
+      vehicle.lastPosition?.latitude != null
+    ) {
+      const now = mainViewer.clock.currentTime;
+      vehicle.positionProp.addSample(
+        now,
+        Cesium.Cartesian3.fromDegrees(
+          vehicle.lastPosition.longitude,
+          vehicle.lastPosition.latitude,
+          vehicle.lastPosition.height ?? 0,
+        ),
+      );
+    }
+
+    this._refreshPath(vehicle, deviceId);
+  },
+
+  setVehiclePathVisible(deviceId, show) {
+    const vehicle = this.vehicles.get(deviceId);
+    if (vehicle?.entity?.path) vehicle.entity.path.show = show;
+  },
+
   // 获取所有车辆
   getAllVehicles() {
     return Array.from(this.vehicles.keys());
@@ -1261,6 +1318,7 @@ const vehicleManager = {
 const billboardTargetManagerContext = {
   getViewer: () => mainViewer,
   getRouteLayerVisible: () => routeLayerVisible,
+  isEscortingTarget: (deviceId) => isEscortingTargetId(deviceId),
   getTargetLayerVisibility: () => targetLayerVisibility,
   getVehicleViewFrom: (to2D) => getVehicleViewFrom(to2D),
   formatTargetDisplayLabel,
@@ -1308,6 +1366,8 @@ const officerManager = {
   createOfficer: officerEntityManager.create,
   updateOfficerPosition: officerEntityManager.updatePosition,
   updateOfficerLabel: officerEntityManager.updateLabel,
+  clearOfficerTrajectory: officerEntityManager.clearTrajectory,
+  setOfficerPathVisible: officerEntityManager.setPathVisible,
   removeOfficer: officerEntityManager.remove,
   clearAll: officerEntityManager.clearAll,
 };
@@ -1317,6 +1377,8 @@ const robotManager = {
   createRobot: robotEntityManager.create,
   updateRobotPosition: robotEntityManager.updatePosition,
   updateRobotLabel: robotEntityManager.updateLabel,
+  clearRobotTrajectory: robotEntityManager.clearTrajectory,
+  setRobotPathVisible: robotEntityManager.setPathVisible,
   removeRobot: robotEntityManager.remove,
   clearAll: robotEntityManager.clearAll,
 };
@@ -1326,6 +1388,8 @@ const shoulderLightManager = {
   createShoulderLight: shoulderLightEntityManager.create,
   updateShoulderLightPosition: shoulderLightEntityManager.updatePosition,
   updateShoulderLightLabel: shoulderLightEntityManager.updateLabel,
+  clearShoulderLightTrajectory: shoulderLightEntityManager.clearTrajectory,
+  setShoulderLightPathVisible: shoulderLightEntityManager.setPathVisible,
   removeShoulderLight: shoulderLightEntityManager.remove,
   clearAll: shoulderLightEntityManager.clearAll,
 };
@@ -2819,6 +2883,35 @@ const handleCarBoxMessage = (topic, data) => {
  */
 /** 上一轮同步时处于伴飞中的无人机 entityKey 集合，用于检测就绪→伴飞中的状态跃迁 */
 const prevEscortingDroneKeys = new Set();
+/** 上一轮同步时正在被伴飞的目标 id 集合，用于检测目标进入伴飞时清空旧轨迹 */
+const prevEscortingTargetIds = new Set();
+
+function clearTargetTrajectory(targetId) {
+  const id = String(targetId || "").trim();
+  if (!id) return;
+  vehicleManager.clearVehicleTrajectory(id);
+  officerManager.clearOfficerTrajectory(id);
+  robotManager.clearRobotTrajectory(id);
+  shoulderLightManager.clearShoulderLightTrajectory(id);
+}
+
+function syncTargetRoutePathVisibility() {
+  vehicleManager.vehicles.forEach((_vehicle, id) => {
+    vehicleManager.setVehiclePathVisible(id, shouldShowTargetRoutePath(id));
+  });
+  officerManager.officers.forEach((_officer, id) => {
+    officerManager.setOfficerPathVisible(id, shouldShowTargetRoutePath(id));
+  });
+  robotManager.robots.forEach((_robot, id) => {
+    robotManager.setRobotPathVisible(id, shouldShowTargetRoutePath(id));
+  });
+  shoulderLightManager.shoulderLights.forEach((_shoulderLight, id) => {
+    shoulderLightManager.setShoulderLightPathVisible(
+      id,
+      shouldShowTargetRoutePath(id),
+    );
+  });
+}
 
 function syncStoreDevicesToMap() {
   if (!mainViewer || mainViewer.isDestroyed?.()) return;
@@ -2911,6 +3004,7 @@ function syncStoreDevicesToMap() {
   const droneList = Array.isArray(deviceStore.drones) ? deviceStore.drones : [];
   const activeDroneKeys = new Set();
   const currentEscortingKeys = new Set();
+  const currentEscortingTargetIds = new Set();
   droneList.forEach((drone) => {
     if (isDroneOffline(drone)) return;
     const key = getDroneEntityKey(drone);
@@ -2918,6 +3012,8 @@ function syncStoreDevicesToMap() {
       activeDroneKeys.add(key);
       if (drone.isEscorting) {
         currentEscortingKeys.add(key);
+        const targetId = resolveEscortTargetId(drone);
+        if (targetId) currentEscortingTargetIds.add(targetId);
       }
     }
   });
@@ -2930,6 +3026,22 @@ function syncStoreDevicesToMap() {
   });
   prevEscortingDroneKeys.clear();
   currentEscortingKeys.forEach((key) => prevEscortingDroneKeys.add(key));
+
+  // 目标首次进入伴飞集合时清空旧轨迹，再开始记新段
+  currentEscortingTargetIds.forEach((targetId) => {
+    if (!prevEscortingTargetIds.has(targetId)) {
+      clearTargetTrajectory(targetId);
+    }
+  });
+  prevEscortingTargetIds.clear();
+  currentEscortingTargetIds.forEach((targetId) =>
+    prevEscortingTargetIds.add(targetId),
+  );
+  escortingTargetIds.clear();
+  currentEscortingTargetIds.forEach((targetId) =>
+    escortingTargetIds.add(targetId),
+  );
+  syncTargetRoutePathVisibility();
 
   droneList.forEach((drone) => {
     if (isDroneOffline(drone)) return;
@@ -3019,6 +3131,7 @@ const { toggleLayerVisibility } = useMapLayerVisibility({
   setRouteLayerVisible: (active) => {
     routeLayerVisible = active;
   },
+  getEscortingTargetIds: () => escortingTargetIds,
   targetLayerVisibility,
   ensureCheckpointLayer,
   setCheckpointVisibility,

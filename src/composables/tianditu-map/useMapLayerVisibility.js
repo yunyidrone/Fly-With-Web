@@ -22,6 +22,7 @@ export function useMapLayerVisibility(options = {}) {
     getVerticalLines,
     getCompanionRouteEntities,
     setRouteLayerVisible,
+    getEscortingTargetIds,
     targetLayerVisibility,
     ensureCheckpointLayer,
     setCheckpointVisibility,
@@ -38,9 +39,20 @@ export function useMapLayerVisibility(options = {}) {
     if (entity?.path) entity.path.show = show;
   };
 
+  const isEscortingTarget = (deviceId) => {
+    const id = String(deviceId || "").trim();
+    if (!id) return false;
+    const escortingIds = getEscortingTargetIds?.();
+    if (!escortingIds) return false;
+    if (typeof escortingIds.has === "function") return escortingIds.has(id);
+    if (Array.isArray(escortingIds)) return escortingIds.includes(id);
+    return false;
+  };
+
   /**
    * 地图工具栏/资源面板触发的统一图层开关。
    * route 分支负责“路线”层：伴飞连接线、路径点、高度线和各类设备轨迹都在这里统一显隐。
+   * 目标设备 path 在图层开启时仍需满足「正在被伴飞」才显示。
    */
   const toggleLayerVisibility = async ({ key, active }) => {
     if (!getViewer?.()) return;
@@ -86,22 +98,25 @@ export function useMapLayerVisibility(options = {}) {
         setEntitiesShow(getRouteMarkers?.(), active); // 路径点
         setEntitiesShow(getVerticalLines?.(), active); // 地面到空中目标点的高度指示线
         setEntitiesShow(getCompanionRouteEntities?.(), active); // 伴飞连接线/动态路线
-        vehicleManager.vehicles.forEach((vehicle) =>
-          setEntityPathShow(vehicle.entity, active),
+        vehicleManager.vehicles.forEach((vehicle, id) =>
+          setEntityPathShow(vehicle.entity, active && isEscortingTarget(id)),
         );
-        officerManager.officers.forEach((officer) =>
-          setEntityPathShow(officer.entity, active),
+        officerManager.officers.forEach((officer, id) =>
+          setEntityPathShow(officer.entity, active && isEscortingTarget(id)),
         );
-        robotManager.robots.forEach((robot) =>
-          setEntityPathShow(robot.entity, active),
+        robotManager.robots.forEach((robot, id) =>
+          setEntityPathShow(robot.entity, active && isEscortingTarget(id)),
         );
-        shoulderLightManager.shoulderLights.forEach((shoulderLight) =>
-          setEntityPathShow(shoulderLight.entity, active),
+        shoulderLightManager.shoulderLights.forEach((shoulderLight, id) =>
+          setEntityPathShow(
+            shoulderLight.entity,
+            active && isEscortingTarget(id),
+          ),
         );
         droneTestManager.drones.forEach((drone) =>
           setEntityPathShow(drone.entity, active),
         );
-        setEntityPathShow(getCarEntity?.(), active);
+        setEntityPathShow(getCarEntity?.(), active && isEscortingTarget(""));
         setEntityPathShow(getDroneEntity?.(), active);
         break;
 

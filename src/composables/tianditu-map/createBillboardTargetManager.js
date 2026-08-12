@@ -7,6 +7,30 @@ import * as Cesium from "cesium";
 export function createBillboardTargetManager(config, context) {
   const records = new Map();
 
+  function shouldShowPath(deviceId) {
+    return Boolean(
+      context.getRouteLayerVisible?.() &&
+        context.isEscortingTarget?.(deviceId),
+    );
+  }
+
+  function _removeAllPositionSamples(record) {
+    record.positionProp.removeSamples(
+      new Cesium.TimeInterval({
+        start: Cesium.JulianDate.fromIso8601("1970-01-01T00:00:00Z"),
+        stop: Cesium.JulianDate.fromIso8601("9999-12-31T23:59:59Z"),
+      }),
+    );
+  }
+
+  function _refreshPath(record) {
+    if (!record?.entity?.path) return;
+    record.entity.path.show = false;
+    record.entity.path.show = shouldShowPath(
+      record.entity.properties?.deviceId ?? "",
+    );
+  }
+
   function create(viewer, deviceId, labelText = deviceId) {
     if (records.has(deviceId)) {
       return records.get(deviceId);
@@ -65,7 +89,7 @@ export function createBillboardTargetManager(config, context) {
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
       path: {
-        show: context.getRouteLayerVisible(),
+        show: shouldShowPath(deviceId),
         width: 4,
         material: defaultPathMaterial,
         leadTime: 0,
@@ -117,6 +141,38 @@ export function createBillboardTargetManager(config, context) {
     }
   }
 
+  function clearTrajectory(deviceId) {
+    const record = records.get(deviceId);
+    if (!record) return;
+
+    _removeAllPositionSamples(record);
+
+    const viewer = context.getViewer();
+    if (
+      viewer &&
+      !viewer.isDestroyed?.() &&
+      record.lastPosition?.longitude != null &&
+      record.lastPosition?.latitude != null
+    ) {
+      const now = viewer.clock.currentTime;
+      record.positionProp.addSample(
+        now,
+        Cesium.Cartesian3.fromDegrees(
+          record.lastPosition.longitude,
+          record.lastPosition.latitude,
+          record.lastPosition.height ?? 0,
+        ),
+      );
+    }
+
+    _refreshPath(record);
+  }
+
+  function setPathVisible(deviceId, show) {
+    const record = records.get(deviceId);
+    if (record?.entity?.path) record.entity.path.show = show;
+  }
+
   function remove(deviceId) {
     const record = records.get(deviceId);
     if (!record) return;
@@ -137,6 +193,8 @@ export function createBillboardTargetManager(config, context) {
     create,
     updatePosition,
     updateLabel,
+    clearTrajectory,
+    setPathVisible,
     remove,
     clearAll,
   };
