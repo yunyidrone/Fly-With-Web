@@ -1,5 +1,9 @@
 import { useAuthStore, FORCE_CHANGE_PASSWORD_PATH } from "@/stores/auth.js";
 import { redirectIfMustChangePassword } from "@/utils/force-change-password-guard.js";
+import {
+  clearAuthSessionExpired,
+  isAuthSessionExpired,
+} from "@/utils/handle-api-unauthorized.js";
 
 const LOGIN_PATH = "/login";
 const FRONTEND_APP_TITLE = "伴飞";
@@ -39,10 +43,11 @@ export function setupFrontendRouterGuards(router) {
     updateFrontendDocumentTitle(to);
 
     if (whiteList.includes(to.path)) {
-      if (authStore.isLoggedIn) {
+      if (authStore.isLoggedIn && !isAuthSessionExpired()) {
         next({ path: "/" });
         return;
       }
+      clearAuthSessionExpired();
       next();
       return;
     }

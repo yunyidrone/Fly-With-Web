@@ -83,12 +83,13 @@
 
 <script setup>
 import { ArrowLeft } from "@element-plus/icons-vue";
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { createUser, fetchRoleList, fetchUserDetail, updateUser } from "@backend/api/user.js";
 import { BACKEND_BASE } from "@backend/router/routes.js";
 import { USER_PLATFORM, USER_PLATFORM_OPTIONS } from "@backend/config/constants.js";
+import { buildUserUpdatePayload, resolveUserRecordId } from "@backend/utils/user-form.js";
 import { useAuthStore } from "@/stores/auth.js";
 
 const route = useRoute();
@@ -115,6 +116,7 @@ const orgId = computed(() => {
 });
 
 const form = reactive({
+  id: null,
   userName: "",
   phone: "",
   email: "",
@@ -274,8 +276,16 @@ async function loadRoleOptions() {
 async function loadDetail() {
   if (!isEdit.value) return;
 
-  const data = await fetchUserDetail({ userId: route.params.id });
+  const routeUserId = resolveUserRecordId({ id: route.params.id });
+  if (routeUserId == null) {
+    ElMessage.warning("缺少账户 ID，请从列表重新进入编辑");
+    return;
+  }
+
+  const data = await fetchUserDetail({ userId: routeUserId });
+  const id = resolveUserRecordId(data) ?? routeUserId;
   Object.assign(form, {
+    id,
     userName: data.userName || data.username || "",
     phone: data.phone || "",
     email: data.email || "",
@@ -305,16 +315,19 @@ async function submit() {
   submitting.value = true;
   try {
     if (isEdit.value) {
-      await updateUser({
-        userId: route.params.id,
-        userName: form.userName,
-        phone: form.phone || undefined,
-        email: form.email || undefined,
-        roleId: form.roleId,
-        orgId: orgId.value,
-        rootOrgId: rootOrgId.value,
-        authPlatform: buildAuthPlatform(form.authPlatforms),
-      });
+      const id = resolveUserRecordId(form);
+      if (id == null) {
+        ElMessage.warning("缺少账户 ID，请从列表重新进入编辑");
+        return;
+      }
+      await updateUser(
+        buildUserUpdatePayload(form, {
+          id,
+          orgId: orgId.value,
+          rootOrgId: rootOrgId.value,
+          authPlatform: buildAuthPlatform(form.authPlatforms),
+        }),
+      );
       ElMessage.success("保存成功");
     } else {
       await createUser({
@@ -349,6 +362,15 @@ onMounted(async () => {
   }
   await loadRoleOptions();
 });
+
+watch(
+  () => route.params.id,
+  async (id, prevId) => {
+    if (!isEdit.value || id === prevId) return;
+    await loadDetail();
+    await loadRoleOptions();
+  },
+);
 </script>
 
 <style scoped lang="scss">

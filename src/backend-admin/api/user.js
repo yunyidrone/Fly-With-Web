@@ -44,7 +44,7 @@ export function createUser(data, options = {}) {
 /**
  * 编辑账户（auth：POST /auth/user/update）
  * @param {{
- *   userId: string|number,
+ *   id: string|number,
  *   orgId?: string|number,
  *   rootOrgId?: string|number,
  *   roleId?: string|number,
@@ -56,7 +56,21 @@ export function createUser(data, options = {}) {
  * @param {import('@/utils/request.js').RequestOptions} [options]
  */
 export function updateUser(data, options = {}) {
-  return authRequestData("/user/update", data, "POST", undefined, options);
+  const id = data.id ?? data.userId;
+  if (id == null || id === "") {
+    return Promise.reject(new Error("缺少 id"));
+  }
+  const { userId: _userId, ...rest } = data;
+  return authRequestData(
+    "/user/update",
+    {
+      ...rest,
+      id,
+    },
+    "POST",
+    undefined,
+    options,
+  );
 }
 
 /**

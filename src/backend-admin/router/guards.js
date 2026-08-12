@@ -9,6 +9,7 @@ import {
   resolveMenuPath,
 } from "@backend/utils/menu.js";
 import { redirectIfMustChangePassword } from "@/utils/force-change-password-guard.js";
+import { redirectToLoginIfSessionExpired } from "@/utils/handle-api-unauthorized.js";
 
 const BACKEND_LOGIN_PATH = `${BACKEND_BASE}/login`;
 const BACKEND_FORBIDDEN_PATH = `${BACKEND_BASE}/403`;
@@ -98,6 +99,10 @@ export function setupBackendRouterGuards(router) {
       return;
     }
 
+    if (redirectToLoginIfSessionExpired(to, next, SHARED_LOGIN_PATH)) {
+      return;
+    }
+
     if (!authStore.user || authStore.user.firstLogin == null) {
       try {
         await authStore.fetchProfile({ force: true });
@@ -125,6 +130,10 @@ export function setupBackendRouterGuards(router) {
       // 菜单拉取失败时继续走静态角色守卫
     }
 
+    if (redirectToLoginIfSessionExpired(to, next, SHARED_LOGIN_PATH)) {
+      return;
+    }
+
     const titleRoutePathMap = buildMenuTitleRoutePathMap(router.getRoutes());
     const hasMenuTree = Array.isArray(menuStore.tree) && menuStore.tree.length > 0;
     const menuGranted =
@@ -135,6 +144,7 @@ export function setupBackendRouterGuards(router) {
     if (hasMenuTree) {
       if (menuGranted) {
         if (to.meta?.hideForGrassroots && isGrassrootsOrgUser(authStore.user)) {
+          if (redirectToLoginIfSessionExpired(to, next, SHARED_LOGIN_PATH)) return;
           next({ path: BACKEND_FORBIDDEN_PATH });
           return;
         }
@@ -151,17 +161,20 @@ export function setupBackendRouterGuards(router) {
         }
       }
 
+      if (redirectToLoginIfSessionExpired(to, next, SHARED_LOGIN_PATH)) return;
       next({ path: BACKEND_FORBIDDEN_PATH });
       return;
     }
 
     const roles = to.meta?.roles;
     if (roles && !hasRole(roles, authStore.role)) {
+      if (redirectToLoginIfSessionExpired(to, next, SHARED_LOGIN_PATH)) return;
       next({ path: BACKEND_FORBIDDEN_PATH });
       return;
     }
 
     if (to.meta?.hideForGrassroots && isGrassrootsOrgUser(authStore.user)) {
+      if (redirectToLoginIfSessionExpired(to, next, SHARED_LOGIN_PATH)) return;
       next({ path: BACKEND_FORBIDDEN_PATH });
       return;
     }

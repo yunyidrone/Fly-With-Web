@@ -491,7 +491,12 @@ function goCreate() {
 }
 
 function goEdit(row) {
-  router.push(`${BACKEND_BASE}/users/${row.id}`);
+  const userId = row.id ?? row.userId;
+  if (userId == null || userId === "") {
+    ElMessage.warning("该账户缺少 ID，无法编辑");
+    return;
+  }
+  router.push(`${BACKEND_BASE}/users/${userId}`);
 }
 
 async function openResetPassword(row) {

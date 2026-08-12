@@ -10,11 +10,13 @@ import axiosRetry from "axios-retry";
 import { networkConfig } from "@/config/network.js";
 import { isEmpty, cloneDeep } from "lodash-es";
 import { ElMessage } from "element-plus";
-import appRouter from "@/router";
-import { getToken, clearToken } from "@/utils/auth-token.js";
-import { useAuthStore } from "@/stores/auth.js";
+import { getToken } from "@/utils/auth-token.js";
+import {
+  handleApiUnauthorizedFromError,
+  handleApiUnauthorizedFromResponse,
+} from "@/utils/handle-api-unauthorized.js";
 
-const { baseURL, contentType, requestTimeout, successCode, invalidCode, throttleTime, unauthorizedCode } =
+const { baseURL, contentType, requestTimeout, successCode, throttleTime, unauthorizedCode } =
   networkConfig;
 
 /** 与 network.js 中 successCode 一致，业务层勿再写死 2000 */
@@ -188,27 +190,21 @@ client.interceptors.response.use(
       ElMessage.warning("接口响应为空（常见于 HTTP 304 缓存），请勿对 JSON 列表接口做强缓存");
       return Promise.reject(new Error("EMPTY_OR_NOT_MODIFIED"));
     }
-    let { code, message, msg, ...rest } = payload;
-    const errorMsg = msg || message;
-    const silent = response.config?.meta?.silent === true;
 
-    if (Number(code) === Number(unauthorizedCode)) {
-      clearToken();
-      try {
-        useAuthStore().resetAuth();
-      } catch {
-        // pinia 未初始化时忽略
-      }
-      const loginPath = "/login";
-      if (appRouter.currentRoute.value.path !== loginPath) {
-        appRouter.push({
-          path: loginPath,
-          query: { redirect: appRouter.currentRoute.value.fullPath },
-        });
-      }
-      if (!silent) ElMessage.warning(errorMsg || "登录已失效，请重新登录");
-      return Promise.reject(new ApiBusinessError(errorMsg, code, payload));
+    const silent = response.config?.meta?.silent === true;
+    const unauthorized = handleApiUnauthorizedFromResponse(response, {
+      silent,
+      unauthorizedCode,
+    });
+    if (unauthorized.handled) {
+      const { code } = unauthorized.payload || {};
+      return Promise.reject(
+        new ApiBusinessError(unauthorized.errorMsg, code, unauthorized.payload),
+      );
     }
+
+    const { msg, message } = unauthorized.payload || payload;
+    const errorMsg = msg || message;
 
     // 只在错误时提示，成功时不弹出消息避免干扰用户
     if (!isApiSuccess(payload) && !silent) {
@@ -220,10 +216,23 @@ client.interceptors.response.use(
     if (Axios.isCancel(error) || error.name === "CanceledError") {
       return Promise.reject(error);
     }
+
+    const silent = error.config?.meta?.silent === true;
+    const unauthorized = handleApiUnauthorizedFromError(error, {
+      silent,
+      unauthorizedCode,
+    });
+    if (unauthorized.handled) {
+      const { code } = unauthorized.payload || {};
+      return Promise.reject(
+        new ApiBusinessError(unauthorized.errorMsg, code, unauthorized.payload),
+      );
+    }
+
     // 统一处理 HTTP 错误
     const bodyMsg = error.response?.data?.msg || error.response?.data?.message;
     const errorMessage = bodyMsg || error.message || "网络请求错误";
-    ElMessage.error(errorMessage);
+    if (!silent) ElMessage.error(errorMessage);
     return Promise.reject(error);
   },
 );

@@ -6,6 +6,7 @@ import { isSuperAdmin } from "@/utils/permission.js";
 import { setToken, clearToken, getToken } from "@/utils/auth-token.js";
 import { extractLoginPayload, normalizeAuthUser } from "@/utils/auth-user.js";
 import { encryptLoginPassword } from "@/utils/login-crypto.js";
+import { clearAuthSessionExpired } from "@/utils/handle-api-unauthorized.js";
 
 /** 强制改密独立页（不进入业务界面） */
 export const FORCE_CHANGE_PASSWORD_PATH = "/force-change-password";
@@ -73,6 +74,7 @@ export const useAuthStore = defineStore("auth", {
       this.token = token;
       setToken(token);
       this.pendingOldPassword = "";
+      clearAuthSessionExpired();
 
       // 登录换人后强制失效旧菜单，确保进后台会重新拉 /menu/list
       try {
@@ -127,6 +129,7 @@ export const useAuthStore = defineStore("auth", {
       this.user = user;
       this.pendingOldPassword = "";
       setToken(token);
+      clearAuthSessionExpired();
       this.currentOrgId = "all";
       if (this.mustChangePassword) {
         this.pendingOldPassword = password;

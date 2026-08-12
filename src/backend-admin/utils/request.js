@@ -1,10 +1,12 @@
 import Axios from "axios";
 import axiosRetry from "axios-retry";
 import { ElMessage } from "element-plus";
-import appRouter from "@/router";
 import { networkConfig, appConfig } from "@backend/config/network.js";
-import { getToken, clearToken } from "@/utils/auth-token.js";
-import { useAuthStore } from "@/stores/auth.js";
+import { getToken } from "@/utils/auth-token.js";
+import {
+  handleApiUnauthorizedFromError,
+  handleApiUnauthorizedFromResponse,
+} from "@/utils/handle-api-unauthorized.js";
 
 const { baseURL, contentType, requestTimeout, successCode, throttleTime } = networkConfig;
 
@@ -115,26 +117,20 @@ client.interceptors.response.use(
     }
 
     const silent = response.config?.meta?.silent === true;
-    const { msg, message } = payload;
-    const errorMsg = msg || message;
-
-    if (Number(payload.code) === Number(networkConfig.unauthorizedCode)) {
-      if (appConfig.skipAuth) {
-        return payload;
-      }
-      clearToken();
-      try {
-        useAuthStore().resetAuth();
-      } catch {
-        // pinia 未初始化时忽略
-      }
-      const loginPath = "/login";
-      if (appRouter.currentRoute.value.path !== loginPath) {
-        appRouter.push({ path: loginPath, query: { redirect: appRouter.currentRoute.value.fullPath } });
-      }
-      if (!silent) ElMessage.warning(errorMsg || "登录已失效，请重新登录");
-      return Promise.reject(new ApiBusinessError(errorMsg, payload.code, payload));
+    const unauthorized = handleApiUnauthorizedFromResponse(response, {
+      silent,
+      skipAuth: appConfig.skipAuth,
+      unauthorizedCode: networkConfig.unauthorizedCode,
+    });
+    if (unauthorized.handled) {
+      const { code } = unauthorized.payload || {};
+      return Promise.reject(
+        new ApiBusinessError(unauthorized.errorMsg, code, unauthorized.payload),
+      );
     }
+
+    const { msg, message } = unauthorized.payload || payload;
+    const errorMsg = msg || message;
 
     if (!isApiSuccess(payload) && !silent) {
       ElMessage.warning(errorMsg || "请求失败");
@@ -146,9 +142,23 @@ client.interceptors.response.use(
     if (Axios.isCancel(error) || error.name === "CanceledError") {
       return Promise.reject(error);
     }
+
+    const silent = error.config?.meta?.silent === true;
+    const unauthorized = handleApiUnauthorizedFromError(error, {
+      silent,
+      skipAuth: appConfig.skipAuth,
+      unauthorizedCode: networkConfig.unauthorizedCode,
+    });
+    if (unauthorized.handled) {
+      const { code } = unauthorized.payload || {};
+      return Promise.reject(
+        new ApiBusinessError(unauthorized.errorMsg, code, unauthorized.payload),
+      );
+    }
+
     const bodyMsg = error.response?.data?.msg || error.response?.data?.message;
     const errorMessage = bodyMsg || error.message || "网络请求错误";
-    ElMessage.error(errorMessage);
+    if (!silent) ElMessage.error(errorMessage);
     return Promise.reject(error);
   },
 );
