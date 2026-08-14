@@ -343,6 +343,26 @@ export const backendRoutes = [
           },
         ],
       },
+      {
+        path: "infra/library/vehicle-batch",
+        name: "BackendMonitorVehicleBatchCreate",
+        component: () => import("@backend/views/infra/MonitorLibraryVehicleBatchView.vue"),
+        meta: {
+          title: "批量新建车牌",
+          activeMenu: `${INFRA_BASE}/library`,
+          roles: ["super_admin", "org_admin"],
+        },
+      },
+      {
+        path: "infra/library/portrait-batch",
+        name: "BackendPortraitBatchCreate",
+        component: () => import("@backend/views/infra/MonitorLibraryPortraitBatchView.vue"),
+        meta: {
+          title: "批量新建人像",
+          activeMenu: `${INFRA_BASE}/library`,
+          roles: ["super_admin", "org_admin"],
+        },
+      },
     ],
   },
   {

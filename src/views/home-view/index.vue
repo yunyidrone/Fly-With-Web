@@ -37,6 +37,7 @@
       <MapLegend
         ref="mapLegendRef"
         @lockdown="onLockdown"
+        @unlockdown="onUnlockdown"
         @toggle="onLegendToggle"
       />
     </div>
@@ -218,11 +219,16 @@ async function onLegendToggle(event) {
   }
 }
 
-async function onLockdown() {
-  const result = await mapRef.value?.triggerLockdown();
+async function onLockdown(payload) {
+  const result = await mapRef.value?.triggerLockdown(payload);
   if (result?.hasPoints) {
     mapLegendRef.value?.setItemActive?.("checkpoint", true);
   }
+}
+
+async function onUnlockdown() {
+  await mapRef.value?.releaseLockdown?.();
+  mapLegendRef.value?.setItemActive?.("checkpoint", false);
 }
 
 const robotStreamRef = ref(null);

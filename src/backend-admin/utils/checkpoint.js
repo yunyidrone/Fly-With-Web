@@ -1,5 +1,20 @@
 import { CHECKPOINT_TYPE_LABELS } from "@backend/config/constants.js";
 
+function resolveDroneId(raw) {
+  const nested = raw?.drone && typeof raw.drone === "object" ? raw.drone : null;
+  const value = raw?.droneId ?? raw?.drone_id ?? raw?.uavId ?? nested?.id;
+  if (value == null || value === "") return "";
+  return String(value);
+}
+
+function resolveDroneName(raw) {
+  const nested = raw?.drone && typeof raw.drone === "object" ? raw.drone : null;
+  const name =
+    raw?.droneName ?? raw?.drone_name ?? raw?.uavName ?? nested?.name ?? nested?.sn;
+  if (name == null || String(name).trim() === "") return "";
+  return String(name).trim();
+}
+
 /**
  * 将后端卡点记录转为 Admin 列表使用的结构
  * @param {Record<string, any>} raw
@@ -16,6 +31,9 @@ export function normalizeCheckpointRecord(raw) {
     coordParts.push(altitude);
   }
 
+  const droneId = resolveDroneId(raw);
+  const droneName = resolveDroneName(raw);
+
   return {
     ...raw,
     id: raw.id != null ? raw.id : "",
@@ -26,6 +44,8 @@ export function normalizeCheckpointRecord(raw) {
     longitude,
     latitude,
     description: raw.description ?? "",
+    droneId,
+    droneName,
   };
 }
 
@@ -41,6 +61,7 @@ export function buildCheckpointPayload(form, extra = {}) {
     latitude: Number(form.latitude),
     type: Number(form.type),
     description: String(form.description ?? "").trim(),
+    droneId: String(form.droneId ?? "").trim(),
     ...extra,
   };
   if (extra.id != null) {

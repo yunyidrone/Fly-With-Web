@@ -2,6 +2,7 @@ import * as Cesium from "cesium";
 import yjfcPng from "@/assets/images/dt_kd.png";
 import { CommonService } from "@/api/common.js";
 import { unwrapApiList } from "@/utils/request.js";
+import { LOCKDOWN_LIST_QUERY_PARAMS } from "@/utils/lockdown-assign.js";
 
 // 封控点数据（由 ensureLockdownPointsFetched 从接口拉取填充，全局只请求一次）
 const DEFAULT_LOCKDOWN_POINTS = [];
@@ -15,7 +16,7 @@ async function ensureLockdownPointsFetched() {
   if (!lockdownPointsFetchPromise) {
     lockdownPointsFetchPromise = (async () => {
       try {
-        const data = await CommonService.controlPointListQuery();
+        const data = await CommonService.controlPointListQuery(LOCKDOWN_LIST_QUERY_PARAMS);
         const list = unwrapApiList(data);
         const points = list
           .map((item) => ({
@@ -52,6 +53,7 @@ export function useLockdown({
   lockdownPoints = DEFAULT_LOCKDOWN_POINTS,
 }) {
   const lockdownEntities = [];
+  const lockdownLinkEntities = [];
 
   const clearLockdownMarkers = () => {
     const viewer = getViewer?.();
@@ -59,6 +61,58 @@ export function useLockdown({
       if (viewer) viewer.entities.remove(entity);
     });
     lockdownEntities.length = 0;
+  };
+
+  const clearLockdownLinks = () => {
+    const viewer = getViewer?.();
+    lockdownLinkEntities.forEach((entity) => {
+      if (viewer) viewer.entities.remove(entity);
+    });
+    lockdownLinkEntities.length = 0;
+    getViewer?.()?.scene?.requestRender?.();
+  };
+
+  const addLockdownLinks = (links = []) => {
+    const viewer = getViewer?.();
+    if (!viewer) return;
+    clearLockdownLinks();
+
+    for (const link of links) {
+      const checkpointLng = Number(link?.checkpointLng);
+      const checkpointLat = Number(link?.checkpointLat);
+      const droneLng = Number(link?.droneLng);
+      const droneLat = Number(link?.droneLat);
+      if (
+        !Number.isFinite(checkpointLng) ||
+        !Number.isFinite(checkpointLat) ||
+        !Number.isFinite(droneLng) ||
+        !Number.isFinite(droneLat)
+      ) {
+        continue;
+      }
+
+      const entity = viewer.entities.add({
+        polyline: {
+          positions: Cesium.Cartesian3.fromDegreesArray([
+            checkpointLng,
+            checkpointLat,
+            droneLng,
+            droneLat,
+          ]),
+          width: 2,
+          material: new Cesium.PolylineDashMaterialProperty({
+            color: Cesium.Color.fromCssColorString("#7f97e6").withAlpha(0.95),
+            dashLength: 16,
+            gapColor: Cesium.Color.TRANSPARENT,
+          }),
+          clampToGround: true,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      });
+      lockdownLinkEntities.push(entity);
+    }
+
+    viewer.scene.requestRender();
   };
 
   const addLockdownMarkers = (viewer) => {
@@ -118,10 +172,16 @@ export function useLockdown({
     });
   };
 
-  const getLockdownBounds = () => {
-    if (lockdownPoints.length === 0) return null;
-    const lngs = lockdownPoints.map((point) => point.lng);
-    const lats = lockdownPoints.map((point) => point.lat);
+  const getLockdownBounds = (extraPoints = []) => {
+    const points = [
+      ...lockdownPoints,
+      ...extraPoints.filter(
+        (point) => Number.isFinite(point?.lng) && Number.isFinite(point?.lat),
+      ),
+    ];
+    if (points.length === 0) return null;
+    const lngs = points.map((point) => point.lng);
+    const lats = points.map((point) => point.lat);
     return {
       west: Math.min(...lngs),
       east: Math.max(...lngs),
@@ -130,8 +190,8 @@ export function useLockdown({
     };
   };
 
-  const getFocusView = (viewer) => {
-    const bounds = getLockdownBounds();
+  const getFocusView = (viewer, extraPoints = []) => {
+    const bounds = getLockdownBounds(extraPoints);
     if (!bounds) return null;
     const { west, east, south, north } = bounds;
     const centerLng = (west + east) / 2;
@@ -154,8 +214,8 @@ export function useLockdown({
     };
   };
 
-  const focusLockdownArea = (viewer) => {
-    const focusView = getFocusView(viewer);
+  const focusLockdownArea = (viewer, extraPoints = []) => {
+    const focusView = getFocusView(viewer, extraPoints);
     if (!focusView) return;
     const { centerLng, centerLat, height } = focusView;
 
@@ -179,6 +239,9 @@ export function useLockdown({
     lockdownEntities.forEach((entity) => {
       if (entity) entity.show = show;
     });
+    lockdownLinkEntities.forEach((entity) => {
+      if (entity) entity.show = show;
+    });
     getViewer?.()?.scene?.requestRender?.();
   };
 
@@ -198,7 +261,7 @@ export function useLockdown({
     return { ok: true, hasPoints: true };
   };
 
-  const triggerLockdown = async () => {
+  const triggerLockdown = async (payload) => {
     const viewer = getViewer?.();
     if (!viewer) return { ok: false, hasPoints: false };
 
@@ -206,7 +269,13 @@ export function useLockdown({
     if (!result.hasPoints) return result;
 
     setCheckpointVisibility(true);
-    focusLockdownArea(viewer);
+    addLockdownLinks(payload?.links || []);
+
+    const extraPoints = (payload?.links || []).flatMap((link) => [
+      { lng: Number(link.checkpointLng), lat: Number(link.checkpointLat) },
+      { lng: Number(link.droneLng), lat: Number(link.droneLat) },
+    ]).filter((point) => Number.isFinite(point.lng) && Number.isFinite(point.lat));
+    focusLockdownArea(viewer, extraPoints);
     return result;
   };
 
@@ -215,6 +284,7 @@ export function useLockdown({
     ensureCheckpointLayer,
     setCheckpointVisibility,
     clearLockdownMarkers,
+    clearLockdownLinks,
     lockdownEntities,
   };
 }

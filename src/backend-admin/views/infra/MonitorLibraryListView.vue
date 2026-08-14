@@ -31,6 +31,9 @@
         </el-tabs>
 
         <div class="monitor-library__actions">
+          <el-button class="infra-page__create-btn" @click="goBatchCreate">
+            批量新建
+          </el-button>
           <el-button class="infra-page__create-btn" @click="goCreate">
             {{ createButtonLabel }}
           </el-button>
@@ -211,7 +214,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { Picture, Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -228,14 +231,21 @@ import {
   VEHICLE_POWER_TYPE,
   VEHICLE_POWER_TYPE_OPTIONS,
 } from "@backend/config/constants.js";
+import { INFRA_BASE } from "@backend/router/routes.js";
 import { useAuthStore } from "@/stores/auth.js";
 import { formatPlateNumberDisplay } from "@backend/utils/monitor-library.js";
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
-const activeTab = ref("portrait");
 const warningTypeOptions = PORTRAIT_WARNING_TYPE_OPTIONS;
 const powerTypeOptions = VEHICLE_POWER_TYPE_OPTIONS;
+
+function resolveLibraryTab(value) {
+  return value === "vehicle" ? "vehicle" : "portrait";
+}
+
+const activeTab = ref(resolveLibraryTab(route.query.tab));
 
 const {
   orgTreeOptions,
@@ -308,7 +318,12 @@ function reloadCurrent() {
   return activeTab.value === "portrait" ? loadPortrait() : loadVehicle();
 }
 
-function handleTabChange() {
+function handleTabChange(name) {
+  const tab = resolveLibraryTab(name);
+  activeTab.value = tab;
+  if (String(route.query.tab || "") !== tab) {
+    router.replace({ query: { ...route.query, tab } });
+  }
   reloadCurrent();
 }
 
@@ -360,18 +375,32 @@ function handleOrgChange(orgId) {
 
 function goCreate() {
   if (activeTab.value === "portrait") {
-    router.push({ name: "BackendPortraitCreate" });
+    router.push({ name: "BackendPortraitCreate", query: { tab: "portrait" } });
     return;
   }
-  router.push({ name: "BackendMonitorVehicleCreate" });
+  router.push({ name: "BackendMonitorVehicleCreate", query: { tab: "vehicle" } });
+}
+
+function goBatchCreate() {
+  if (activeTab.value === "portrait") {
+    router.push({
+      path: `${INFRA_BASE}/library/portrait-batch`,
+      query: { tab: "portrait" },
+    });
+    return;
+  }
+  router.push({
+    path: `${INFRA_BASE}/library/vehicle-batch`,
+    query: { tab: "vehicle" },
+  });
 }
 
 function goEdit(id) {
   if (activeTab.value === "portrait") {
-    router.push({ name: "BackendPortraitEdit", params: { id } });
+    router.push({ name: "BackendPortraitEdit", params: { id }, query: { tab: "portrait" } });
     return;
   }
-  router.push({ name: "BackendMonitorVehicleEdit", params: { id } });
+  router.push({ name: "BackendMonitorVehicleEdit", params: { id }, query: { tab: "vehicle" } });
 }
 
 async function handleDelete(row) {
@@ -413,7 +442,7 @@ watch(
 onMounted(async () => {
   await loadOrgOptions();
   syncOrgQuery();
-  await loadPortrait();
+  await reloadCurrent();
 });
 </script>
 

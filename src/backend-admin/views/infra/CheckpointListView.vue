@@ -32,6 +32,11 @@
             <el-tag size="small" effect="light">{{ row.typeLabel }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="设定无人机" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ resolveDroneDisplayName(row) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="coord" label="经纬度" min-width="160">
           <template #default="{ row }">
             <span class="infra-page__coord">({{ row.coord || "-" }})</span>
@@ -79,19 +84,55 @@
 </template>
 
 <script setup>
-import { onMounted } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { deleteCheckpoint, fetchCheckpointPage } from "@backend/api/common.js";
+import { fetchDronePage } from "@backend/api/drone.js";
 import { useTableQuery } from "@backend/composables/useTableQuery.js";
 import { INFRA_BASE } from "@backend/router/routes.js";
+import { useAuthStore } from "@/stores/auth.js";
 
 const router = useRouter();
+const authStore = useAuthStore();
+const droneNameMap = ref(new Map());
 const { loading, records, total, query, load, onPageChange, onSizeChange } = useTableQuery(
   fetchCheckpointPage,
   { pageSize: 10 },
 );
+
+function resolveDroneDisplayName(row) {
+  const name = String(row?.droneName ?? "").trim();
+  if (name) return name;
+  const droneId = String(row?.droneId ?? "").trim();
+  if (!droneId) return "-";
+  return droneNameMap.value.get(droneId) || "-";
+}
+
+function buildDroneQuery() {
+  const params = { current: 1, pageSize: 1000 };
+  const orgId = authStore.effectiveOrgId;
+  if (orgId != null && orgId !== "") {
+    params.orgId = orgId;
+  }
+  return params;
+}
+
+async function loadDroneNameMap() {
+  try {
+    const data = await fetchDronePage(buildDroneQuery());
+    const map = new Map();
+    for (const item of data.records || []) {
+      const id = String(item?.id ?? "").trim();
+      if (!id) continue;
+      map.set(id, String(item.name ?? "").trim() || id);
+    }
+    droneNameMap.value = map;
+  } catch {
+    droneNameMap.value = new Map();
+  }
+}
 
 function handleCreate() {
   router.push(`${INFRA_BASE}/checkpoints/new`);
@@ -111,7 +152,17 @@ async function handleDelete(row) {
   await load();
 }
 
-onMounted(load);
+watch(
+  () => authStore.effectiveOrgId,
+  () => {
+    loadDroneNameMap();
+  },
+);
+
+onMounted(() => {
+  load();
+  loadDroneNameMap();
+});
 </script>
 
 <style scoped lang="scss">

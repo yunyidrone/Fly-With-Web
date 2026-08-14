@@ -208,7 +208,10 @@ async function submit() {
 }
 
 function goBack() {
-  router.push(`${INFRA_BASE}/library`);
+  router.push({
+    path: `${INFRA_BASE}/library`,
+    query: { tab: "vehicle" },
+  });
 }
 
 onMounted(loadDetail);

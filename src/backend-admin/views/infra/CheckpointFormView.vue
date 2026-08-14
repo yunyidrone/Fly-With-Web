@@ -45,6 +45,24 @@
           <el-input v-model="form.latitude" placeholder="请输入目标纬度" />
         </el-form-item>
 
+        <el-form-item label="设定无人机" prop="droneId">
+          <el-select
+            v-model="form.droneId"
+            placeholder="请选择无人机"
+            style="width: 100%"
+            filterable
+            clearable
+            :loading="droneLoading"
+          >
+            <el-option
+              v-for="item in droneOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
+        
         <el-form-item label="描述" prop="description">
           <el-input
             v-model="form.description"
@@ -61,7 +79,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ArrowLeft } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
@@ -70,15 +88,20 @@ import {
   fetchCheckpointDetail,
   updateCheckpoint,
 } from "@backend/api/common.js";
+import { fetchDronePage } from "@backend/api/drone.js";
 import { CHECKPOINT_TYPE, CHECKPOINT_TYPE_OPTIONS } from "@backend/config/constants.js";
 import { INFRA_BASE } from "@backend/router/routes.js";
 import { buildCheckpointPayload } from "@backend/utils/checkpoint.js";
+import { useAuthStore } from "@/stores/auth.js";
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
 const checkpointTypeOptions = CHECKPOINT_TYPE_OPTIONS;
 const formRef = ref();
 const submitting = ref(false);
+const droneLoading = ref(false);
+const droneOptions = ref([]);
 const isEdit = computed(() => Boolean(route.params.id) && route.params.id !== "new");
 
 const form = reactive({
@@ -87,6 +110,8 @@ const form = reactive({
   longitude: "",
   latitude: "",
   description: "",
+  droneId: "",
+  droneName: "",
 });
 
 function validateCoordinate(_rule, value, callback) {
@@ -111,6 +136,48 @@ const rules = {
   ],
 };
 
+function ensureCurrentDroneOption() {
+  const id = String(form.droneId || "").trim();
+  if (!id) return;
+  if (droneOptions.value.some((item) => item.value === id)) return;
+  droneOptions.value.unshift({
+    value: id,
+    label: String(form.droneName || "").trim() || id,
+  });
+}
+
+function buildDroneQuery() {
+  const params = { current: 1, pageSize: 1000 };
+  const orgId = authStore.effectiveOrgId;
+  if (orgId != null && orgId !== "") {
+    params.orgId = orgId;
+  }
+  return params;
+}
+
+async function loadDroneOptions() {
+  droneLoading.value = true;
+  try {
+    const data = await fetchDronePage(buildDroneQuery());
+    droneOptions.value = (data.records || [])
+      .map((item) => {
+        const value = String(item?.id ?? "").trim();
+        if (!value) return null;
+        return {
+          value,
+          label: String(item.name ?? "").trim() || value,
+        };
+      })
+      .filter(Boolean);
+    ensureCurrentDroneOption();
+  } catch {
+    droneOptions.value = [];
+    ensureCurrentDroneOption();
+  } finally {
+    droneLoading.value = false;
+  }
+}
+
 async function loadDetail() {
   if (!isEdit.value) return;
   const data = await fetchCheckpointDetail({ id: route.params.id });
@@ -120,7 +187,10 @@ async function loadDetail() {
     longitude: data.longitude != null ? String(data.longitude) : "",
     latitude: data.latitude != null ? String(data.latitude) : "",
     description: data.description ?? "",
+    droneId: data.droneId ? String(data.droneId) : "",
+    droneName: data.droneName ?? "",
   });
+  ensureCurrentDroneOption();
 }
 
 async function submit() {
@@ -148,7 +218,17 @@ function goBack() {
   router.push(`${INFRA_BASE}/checkpoints`);
 }
 
-onMounted(loadDetail);
+watch(
+  () => authStore.effectiveOrgId,
+  () => {
+    loadDroneOptions();
+  },
+);
+
+onMounted(() => {
+  loadDroneOptions();
+  loadDetail();
+});
 </script>
 
 <style scoped lang="scss">

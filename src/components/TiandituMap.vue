@@ -3113,6 +3113,7 @@ const {
   ensureCheckpointLayer,
   setCheckpointVisibility,
   clearLockdownMarkers,
+  clearLockdownLinks,
   lockdownEntities,
 } = useLockdown({
   getViewer: () => mainViewer,
@@ -3164,8 +3165,8 @@ const {
   targetLayerVisibility,
 });
 
-const triggerLockdown = async () => {
-  const result = await runLockdown();
+const triggerLockdown = async (payload) => {
+  const result = await runLockdown(payload);
   if (!result.ok) {
     ElMessage.error("获取封控点失败");
     return result;
@@ -3175,6 +3176,11 @@ const triggerLockdown = async () => {
     return result;
   }
   return result;
+};
+
+const releaseLockdown = () => {
+  setCheckpointVisibility(false);
+  clearLockdownLinks();
 };
 
 const recallDrone = async (device) => {
@@ -3208,6 +3214,7 @@ const recallDrone = async (device) => {
 
 defineExpose({
   triggerLockdown,
+  releaseLockdown,
   recallDrone,
   toggleLayerVisibility,
   lockEscortTargetOnImmersive,
@@ -3301,6 +3308,7 @@ onUnmounted(() => {
   robotManager.clearAll();
   shoulderLightManager.clearAll();
   clearLockdownMarkers();
+  clearLockdownLinks();
   clearDroneSelectionCircle();
   selectedTargetDeviceId = null;
   vehicleManager.selectedDeviceId = null;
