@@ -3,6 +3,7 @@ import { ref, computed } from "vue";
 import { TEST_POLICE_VEHICLES, TEST_DRONES } from "@/config/test-devices.js";
 import { AccompanyingFlyService } from "@/api";
 import { unwrapApiList } from "@/utils/request.js";
+import { getAuthSessionId } from "@/utils/auth-session.js";
 
 /**
  * @typedef {object} ApiDroneRecord
@@ -243,18 +244,33 @@ export const useDeviceStore = defineStore("device", () => {
     dronesLoadedFromApi.value = false;
   }
 
+  /** 退出 / 换账号时清空前台设备缓存，避免沿用上一用户列表 */
+  function resetSession() {
+    vehicles.value = [];
+    drones.value = [];
+    targets.value = [];
+    testActive.value = false;
+    dronesLoadedFromApi.value = false;
+    targetsLoadedFromApi.value = false;
+    dronesFetchError.value = null;
+    targetsFetchError.value = null;
+    justStoppedEscortDroneIds.value = [];
+  }
+
   /**
    * 请求后端无人机分页列表，写入 data.records
    * @param {Record<string, any>} [query] 分页等查询参数（与后端对齐）
    */
   async function fetchDroneList(query) {
     dronesFetchError.value = null;
+    const sessionId = getAuthSessionId();
     // 刷新前记录当前伴飞中的无人机 ID
     const prevEscortingIds = new Set(
       drones.value.filter((d) => d.isEscorting).map((d) => d.id),
     );
     try {
       const data = await AccompanyingFlyService.droneList(query);
+      if (sessionId !== getAuthSessionId()) return drones.value;
       const records = unwrapApiList(data);
       if (
         data != null &&
@@ -357,8 +373,10 @@ export const useDeviceStore = defineStore("device", () => {
    */
   async function fetchTargetList(query) {
     targetsFetchError.value = null;
+    const sessionId = getAuthSessionId();
     try {
       const data = await AccompanyingFlyService.targetList(query);
+      if (sessionId !== getAuthSessionId()) return targets.value;
       const records = unwrapApiList(data);
       // 测试：固定首条目标坐标（需改 records，且 longitude/latitude 优先级高于 lng/lat）
       // if (records[0]) {
@@ -505,6 +523,7 @@ export const useDeviceStore = defineStore("device", () => {
     justStoppedEscortDroneIds,
     initTestDevices,
     clearTestDevices,
+    resetSession,
     fetchDroneList,
     fetchTargetList,
     setDroneEscorting,

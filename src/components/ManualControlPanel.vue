@@ -40,53 +40,56 @@
         </div>
       </div>
 
-      <div class="control-column control-column--left">
-        <div class="control-title">前进</div>
-        <div class="cross-pad">
-          <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('move:forward') }" @click="onMoveControl('forward')"><el-icon><CaretTop /></el-icon></button>
-          <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('move:left') }" @click="onMoveControl('left')"><el-icon><CaretLeft /></el-icon></button>
-          <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('move:backward') }" @click="onMoveControl('backward')"><el-icon><CaretBottom /></el-icon></button>
-          <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('move:right') }" @click="onMoveControl('right')"><el-icon><CaretRight /></el-icon></button>
+      <div class="control-group">
+        <span class="control-group__tip">无人机姿态</span>
+        <div class="control-column control-column--left">
+          <div class="control-title">前进</div>
+          <div class="cross-pad">
+            <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('move:forward') }" @click="onMoveControl('forward')"><el-icon><CaretTop /></el-icon></button>
+            <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('move:left') }" @click="onMoveControl('left')"><el-icon><CaretLeft /></el-icon></button>
+            <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('move:backward') }" @click="onMoveControl('backward')"><el-icon><CaretBottom /></el-icon></button>
+            <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('move:right') }" @click="onMoveControl('right')"><el-icon><CaretRight /></el-icon></button>
+          </div>
+          <div class="direction-row">
+            <span>向左</span>
+            <span>后退</span>
+            <span>向右</span>
+          </div>
+          <div class="step-row">
+            <span>步幅:</span>
+            <el-input-number
+              v-model="moveStep"
+              class="step-input-number"
+              :min="DRONE_STEP_MIN"
+              controls-position="right"
+              @change="onMoveStepChange"
+            />
+          </div>
         </div>
-        <div class="direction-row">
-          <span>向左</span>
-          <span>后退</span>
-          <span>向右</span>
-        </div>
-        <div class="step-row">
-          <span>步幅:</span>
-          <el-input-number
-            v-model="moveStep"
-            class="step-input-number"
-            :min="DRONE_STEP_MIN"
-            controls-position="right"
-            @change="onMoveStepChange"
-          />
-        </div>
-      </div>
 
-      <div class="control-column control-column--left">
-        <div class="control-title">上升</div>
-        <div class="cross-pad">
-          <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('attitude:up') }" @click="onAttitudeControl('up')">↑</button>
-          <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('attitude:yawLeft') }" @click="onAttitudeControl('yawLeft')">↶</button>
-          <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('attitude:pitchDown') }" @click="onAttitudeControl('pitchDown')">↓</button>
-          <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('attitude:yawRight') }" @click="onAttitudeControl('yawRight')">↷</button>
-        </div>
-        <div class="direction-row">
-          <span>左旋</span>
-          <span>下俯</span>
-          <span>右旋</span>
-        </div>
-        <div class="step-row">
-          <span>步幅:</span>
-          <el-input-number
-            v-model="rotateStep"
-            class="step-input-number"
-            :min="DRONE_STEP_MIN"
-            controls-position="right"
-            @change="onRotateStepChange"
-          />
+        <div class="control-column control-column--left">
+          <div class="control-title">上升</div>
+          <div class="cross-pad">
+            <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('attitude:up') }" @click="onAttitudeControl('up')">↑</button>
+            <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('attitude:yawLeft') }" @click="onAttitudeControl('yawLeft')">↶</button>
+            <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('attitude:pitchDown') }" @click="onAttitudeControl('pitchDown')">↓</button>
+            <button type="button" class="ctrl-btn" :class="{ 'ctrl-btn--busy': isControlBusy('attitude:yawRight') }" @click="onAttitudeControl('yawRight')">↷</button>
+          </div>
+          <div class="direction-row">
+            <span>左旋</span>
+            <span>下俯</span>
+            <span>右旋</span>
+          </div>
+          <div class="step-row">
+            <span>步幅:</span>
+            <el-input-number
+              v-model="rotateStep"
+              class="step-input-number"
+              :min="DRONE_STEP_MIN"
+              controls-position="right"
+              @change="onRotateStepChange"
+            />
+          </div>
         </div>
       </div>
 
@@ -163,39 +166,42 @@
         </div>
       </div>
 
-      <div class="control-column control-column--left">
-        <div class="control-title">向上</div>
-        <div class="cross-pad">
-          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-side" :class="{ 'ctrl-btn--busy': isControlBusy('gimbal:up') }" @click="onCameraControl('up')">
-            <el-icon class="camera-main-icon"><CameraFilled /></el-icon>
-            <el-icon class="camera-dir-icon"><Top /></el-icon>
-          </button>
-          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-bottom" :class="{ 'ctrl-btn--busy': isControlBusy('gimbal:left') }" @click="onCameraControl('left')">
-            <el-icon class="camera-main-icon"><CameraFilled /></el-icon>
-            <el-icon class="camera-dir-icon"><Back /></el-icon>
-          </button>
-          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-side" :class="{ 'ctrl-btn--busy': isControlBusy('gimbal:down') }" @click="onCameraControl('down')">
-            <el-icon class="camera-main-icon"><CameraFilled /></el-icon>
-            <el-icon class="camera-dir-icon"><Bottom /></el-icon>
-          </button>
-          <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-bottom" :class="{ 'ctrl-btn--busy': isControlBusy('gimbal:right') }" @click="onCameraControl('right')">
-            <el-icon class="camera-main-icon"><CameraFilled /></el-icon>
-            <el-icon class="camera-dir-icon"><Right /></el-icon>
-          </button>
-        </div>
-        <div class="direction-row">
-          <span>向左</span>
-          <span>后下</span>
-          <span>向右</span>
-        </div>
-        <div class="step-row">
-          <span>角度:</span>
-          <el-input-number
-            v-model="angleStep"
-            class="step-input-number"
-            controls-position="right"
-            @change="onAngleStepChange"
-          />
+      <div class="control-group control-group--single">
+        <span class="control-group__tip">云台姿态</span>
+        <div class="control-column control-column--left">
+          <div class="control-title">向上</div>
+          <div class="cross-pad">
+            <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-side" :class="{ 'ctrl-btn--busy': isControlBusy('gimbal:up') }" @click="onCameraControl('up')">
+              <!-- <el-icon class="camera-main-icon"><CameraFilled /></el-icon> -->
+              <el-icon class="camera-dir-icon"><Top /></el-icon>
+            </button>
+            <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-bottom" :class="{ 'ctrl-btn--busy': isControlBusy('gimbal:left') }" @click="onCameraControl('left')">
+              <!-- <el-icon class="camera-main-icon"><CameraFilled /></el-icon> -->
+              <el-icon class="camera-dir-icon"><Back /></el-icon>
+            </button>
+            <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-side" :class="{ 'ctrl-btn--busy': isControlBusy('gimbal:down') }" @click="onCameraControl('down')">
+              <!-- <el-icon class="camera-main-icon"><CameraFilled /></el-icon> -->
+              <el-icon class="camera-dir-icon"><Bottom /></el-icon>
+            </button>
+            <button type="button" class="ctrl-btn ctrl-btn--camera ctrl-btn--camera-bottom" :class="{ 'ctrl-btn--busy': isControlBusy('gimbal:right') }" @click="onCameraControl('right')">
+              <!-- <el-icon class="camera-main-icon"><CameraFilled /></el-icon> -->
+              <el-icon class="camera-dir-icon"><Right /></el-icon>
+            </button>
+          </div>
+          <div class="direction-row">
+            <span>向左</span>
+            <span>后下</span>
+            <span>向右</span>
+          </div>
+          <div class="step-row">
+            <span>角度:</span>
+            <el-input-number
+              v-model="angleStep"
+              class="step-input-number"
+              controls-position="right"
+              @change="onAngleStepChange"
+            />
+          </div>
         </div>
       </div>
 
@@ -692,6 +698,33 @@ function onFocusNumberChange(value) {
   flex-direction: column;
   color: #9fd2ff;
   font-size: 14px;
+}
+
+.control-group {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  flex-shrink: 0;
+  padding-top: 16px;
+  box-sizing: border-box;
+}
+
+.control-group--single {
+  gap: 0;
+}
+
+.control-group__tip {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  color: rgba(159, 210, 255, 0.75);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .control-column--left {

@@ -7,6 +7,11 @@ import { setToken, clearToken, getToken } from "@/utils/auth-token.js";
 import { extractLoginPayload, normalizeAuthUser } from "@/utils/auth-user.js";
 import { encryptLoginPassword } from "@/utils/login-crypto.js";
 import { clearAuthSessionExpired } from "@/utils/handle-api-unauthorized.js";
+import {
+  rotateAuthSession,
+  clearClientSessionStores,
+  resetClientSession,
+} from "@/utils/auth-session.js";
 
 /** 强制改密独立页（不进入业务界面） */
 export const FORCE_CHANGE_PASSWORD_PATH = "/force-change-password";
@@ -47,6 +52,8 @@ export const useAuthStore = defineStore("auth", {
 
   actions: {
     async login(form) {
+      await resetClientSession();
+
       if (networkConfig.useMock) {
         await this.loginWithMock(form);
         return;
@@ -160,6 +167,7 @@ export const useAuthStore = defineStore("auth", {
         this.user = {
           ...(this.user || {}),
           ...normalized,
+          orgId: normalized.orgId ?? null,
         };
       } else if (!this.user) {
         this.user = {
@@ -195,9 +203,11 @@ export const useAuthStore = defineStore("auth", {
         }
       }
       this.resetAuth();
+      await clearClientSessionStores();
     },
 
     resetAuth() {
+      rotateAuthSession();
       this.token = "";
       this.user = null;
       this.currentOrgId = "all";
@@ -209,6 +219,7 @@ export const useAuthStore = defineStore("auth", {
           useMenuStore().resetMenu();
         })
         .catch(() => {});
+      void clearClientSessionStores();
     },
 
     setCurrentOrgId(orgId) {

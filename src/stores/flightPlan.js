@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { reactive, ref, computed } from "vue";
 import { FlightPlanService } from "@/api/plan";
 import { unwrapApiList } from "@/utils/request.js";
+import { getAuthSessionId } from "@/utils/auth-session.js";
 import {
   isPlanExecuting,
   isPlanUpcoming,
@@ -502,6 +503,18 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
     selectedPlanId.value = id || null;
   }
 
+  function resetSession() {
+    for (const key of Object.keys(plansByScenario)) {
+      plansByScenario[key].splice(0, plansByScenario[key].length);
+    }
+    plansLoadedFromApi.value = false;
+    plansFetchError.value = null;
+    planListTotal.value = 0;
+    selectedPlanId.value = null;
+    justCompletedPlanIds.value = [];
+    dismissedUpcomingAlertIds.value = [];
+  }
+
   /**
    * 分页查询飞行计划；带 type 时只刷新对应场景 Tab 的列表
    * @param {Record<string, any>} [query] type name current pageSize
@@ -560,10 +573,12 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
 
   async function fetchPlanList(query = {}) {
     plansFetchError.value = null;
+    const sessionId = getAuthSessionId();
     // 刷新前记录当前正在执行的任务 ID，用于对比是否已完成
     const prevExecutingIds = new Set(executingPlans.value.map((p) => p.id));
     try {
       const data = await FlightPlanService.planPageQuery(query);
+      if (sessionId !== getAuthSessionId()) return [];
       const records = unwrapApiList(data);
       const total = data?.total ?? records.length;
       planListTotal.value = total;
@@ -684,6 +699,7 @@ export const useFlightPlanStore = defineStore("flightPlan", () => {
     justCompletedPlanIds,
     fetchPlanList,
     fetchAllPlanList,
+    resetSession,
     dismissUpcomingAlert,
     startPlanTaskWatcher,
     stopPlanTaskWatcher,

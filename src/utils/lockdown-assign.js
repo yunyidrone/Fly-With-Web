@@ -4,9 +4,33 @@
 
 export const LOCKDOWN_LIST_QUERY_PARAMS = { current: 1, pageSize: 999 };
 
+/** 无人机状态：0离线 1就绪 2伴飞中 3返航中，仅就绪可勾选 */
+export const LOCKDOWN_DRONE_STATUS = {
+  OFFLINE: 0,
+  READY: 1,
+  ESCORTING: 2,
+  RETURNING: 3,
+};
+
+export const LOCKDOWN_DRONE_STATUS_LABELS = {
+  [LOCKDOWN_DRONE_STATUS.OFFLINE]: "离线",
+  [LOCKDOWN_DRONE_STATUS.READY]: "就绪",
+  [LOCKDOWN_DRONE_STATUS.ESCORTING]: "伴飞中",
+  [LOCKDOWN_DRONE_STATUS.RETURNING]: "返航中",
+};
+
 function toCoord(value) {
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
+}
+
+function toDroneStatus(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+export function isLockdownRowSelectable(row) {
+  return Number(row?.droneStatus) === LOCKDOWN_DRONE_STATUS.READY;
 }
 
 /**
@@ -24,11 +48,15 @@ export function normalizeLockdownCheckpointRows(list = []) {
     if (!checkpointId || !droneId || seen.has(checkpointId)) continue;
     seen.add(checkpointId);
 
+    const droneStatus = toDroneStatus(raw.droneStatus ?? raw.drone_status);
     rows.push({
       checkpointId,
       checkpointName: String(raw.name ?? "").trim() || "未命名卡点",
       droneId,
       droneName: String(raw.droneName ?? "").trim() || droneId,
+      droneStatus,
+      droneStatusLabel: LOCKDOWN_DRONE_STATUS_LABELS[droneStatus] || "",
+      selectable: droneStatus === LOCKDOWN_DRONE_STATUS.READY,
       checkpointLng: toCoord(raw.longitude ?? raw.lng),
       checkpointLat: toCoord(raw.latitude ?? raw.lat),
       droneLng: toCoord(raw.droneLongitude ?? raw.droneLng),
@@ -48,7 +76,7 @@ export function findDuplicateLockdownDrones(rows = []) {
   const grouped = new Map();
 
   for (const row of rows) {
-    if (!row?.checked) continue;
+    if (!row?.checked || !isLockdownRowSelectable(row)) continue;
     const droneId = String(row?.droneId ?? "").trim();
     if (!droneId) continue;
     const current = grouped.get(droneId) || {
@@ -82,7 +110,7 @@ export function buildLockdownDeployPayload(rows = []) {
   const links = [];
 
   for (const row of rows) {
-    if (!row?.checked) continue;
+    if (!row?.checked || !isLockdownRowSelectable(row)) continue;
     const droneId = String(row?.droneId ?? "").trim();
     const controlPointId = String(row?.checkpointId ?? "").trim();
     if (!droneId || !controlPointId) continue;

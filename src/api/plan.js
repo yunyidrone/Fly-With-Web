@@ -1,4 +1,5 @@
 import { requestData } from "@/utils/request.js";
+import { withLoginOrgId } from "@/utils/org-query.js";
 
 export class FlightPlanService {
   /**
@@ -6,11 +7,11 @@ export class FlightPlanService {
    * @param {Record<string, any>} query type: 1山林救援 2水上观察 3重点安保 | name | current | pageSize
    */
   static async planPageQuery(query = {}) {
-    const params = {
+    const params = withLoginOrgId({
       current: 1,
       pageSize: 9999,
       ...query,
-    };
+    });
     return requestData("/plan/pageQuery", { params }, "GET");
   }
 

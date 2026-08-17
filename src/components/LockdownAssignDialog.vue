@@ -15,7 +15,7 @@
 
         <div v-loading="loading" class="lockdown-assign__body">
           <p v-if="!loading && !rows.length" class="lockdown-assign__empty">
-            暂无已关联无人机的卡点，仍可开始封城
+            暂无已关联无人机的卡点
           </p>
           <template v-else>
             <div class="lockdown-assign__toolbar">
@@ -41,7 +41,11 @@
               v-for="row in rows"
               :key="row.checkpointId"
               class="lockdown-assign__row"
-              :class="{ 'is-disabled': submitting }"
+              :class="{
+                'is-disabled': submitting || !row.selectable,
+                'is-locked': !row.selectable,
+              }"
+              :title="row.selectable ? '' : `${row.droneName}当前${row.droneStatusLabel || '不可用'}，无法勾选`"
               @click="toggleRow(row)"
             >
               <span
@@ -49,6 +53,7 @@
                 :class="{ 'is-checked': row.checked }"
                 role="checkbox"
                 :aria-checked="row.checked"
+                :aria-disabled="!row.selectable"
                 :aria-label="row.checkpointName"
               >
                 <i
@@ -60,7 +65,10 @@
                 {{ row.checkpointName }}
               </div>
               <div class="lockdown-assign__drone" :title="row.droneName">
-                {{ row.droneName }}
+                <span>{{ row.droneName }}</span>
+                <span v-if="row.droneStatusLabel" class="lockdown-assign__status">
+                  {{ row.droneStatusLabel }}
+                </span>
               </div>
             </li>
             </ul>
@@ -79,7 +87,7 @@
           <button
             type="button"
             class="lockdown-assign__btn lockdown-assign__btn--confirm"
-            :disabled="loading || submitting"
+            :disabled="loading || submitting || !rows.length"
             @click="onConfirm"
           >
             开始封城
@@ -98,6 +106,7 @@ import { unwrapApiList } from "@/utils/request.js";
 import {
   buildLockdownDeployPayload,
   findDuplicateLockdownDrones,
+  isLockdownRowSelectable,
   LOCKDOWN_LIST_QUERY_PARAMS,
   normalizeLockdownCheckpointRows,
 } from "@/utils/lockdown-assign.js";
@@ -110,13 +119,17 @@ const submitting = ref(false);
 const rows = ref([]);
 
 function toggleRow(row) {
-  if (submitting.value) return;
+  if (submitting.value || !isLockdownRowSelectable(row)) return;
   row.checked = !row.checked;
 }
 
 function setAllChecked(checked) {
   if (submitting.value) return;
   rows.value.forEach((row) => {
+    if (!isLockdownRowSelectable(row)) {
+      row.checked = false;
+      return;
+    }
     row.checked = checked;
   });
 }
@@ -162,7 +175,7 @@ function duplicateDroneTip(duplicates) {
 }
 
 async function onConfirm() {
-  if (loading.value || submitting.value) return;
+  if (loading.value || submitting.value || !rows.value.length) return;
 
   const payload = buildLockdownDeployPayload(rows.value);
   if (rows.value.length && !payload.droneIds.length) {
@@ -382,6 +395,22 @@ watch(visible, (next) => {
 .lockdown-assign__drone {
   color: rgba(255, 255, 255, 0.85);
   text-align: right;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.lockdown-assign__status {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.lockdown-assign__row.is-locked {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .lockdown-assign__actions {

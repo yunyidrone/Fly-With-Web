@@ -1,4 +1,5 @@
 import { requestData, requestOk } from "@/utils/request.js";
+import { withLoginOrgId } from "@/utils/org-query.js";
 
 export class AccompanyingFlyService {
   /**
@@ -6,11 +7,11 @@ export class AccompanyingFlyService {
    * @param {Record<string, any>} [query] 可选查询参数；会与默认分页合并
    */
   static async droneList(query = {}) {
-    const params = {
+    const params = withLoginOrgId({
       current: 1, 
       pageSize: 999,
       ...query,
-    };
+    });
     return requestData("/drone/pageQuery", { params }, "GET");
   }
 
@@ -33,11 +34,11 @@ export class AccompanyingFlyService {
    * @param {Record<string, any>} [query]
    */
   static async targetList(query = {}) {
-    const params = {
+    const params = withLoginOrgId({
       current: 1,
       pageSize: 9999,
       ...query,
-    };
+    });
     return requestData("/target/pageQuery", { params }, "GET");
   }
   /**
