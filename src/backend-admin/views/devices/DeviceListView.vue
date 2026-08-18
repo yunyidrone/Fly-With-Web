@@ -15,9 +15,23 @@
         <div class="device-list__title">无人机管理</div>
         <div class="device-list__actions">
           <el-button
+            class="device-list__action-btn"
+            :disabled="!selectedRows.length"
+            @click="handleBatchSwitch(true)"
+          >
+            批量启用
+          </el-button>
+          <el-button
+            class="device-list__action-btn"
+            :disabled="!selectedRows.length"
+            @click="handleBatchSwitch(false)"
+          >
+            批量停用
+          </el-button>
+          <el-button
             type="primary"
             plain
-            class="device-list__create-btn"
+            class="device-list__action-btn"
             @click="goCreate"
           >
             创建无人机
@@ -32,7 +46,14 @@
     </div>
 
     <div class="device-list__section device-list__section--content">
-      <el-table v-loading="loading" :data="records" class="device-list__table" stripe>
+      <el-table
+        v-loading="loading"
+        :data="records"
+        class="device-list__table"
+        stripe
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="48" />
         <el-table-column prop="id" label="无人机ID" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="device-list__id">{{ row.id || "-" }}</span>
@@ -83,14 +104,13 @@
             {{ row.workStatusText }}
           </template>
         </el-table-column>
-        <el-table-column label="设备状态" width="90">
+        <el-table-column label="设备状态" width="90" align="center">
           <template #default="{ row }">
-            <span
-              class="device-list__device-status"
-              :class="{ 'device-list__device-status--disabled': !row.deviceEnabled }"
-            >
-              {{ row.deviceEnabled ? "启用" : "停用" }}
-            </span>
+            <el-switch
+              :model-value="isDroneEnabled(row)"
+              size="small"
+              @change="(enabled) => handleSwitchChange(row, enabled)"
+            />
           </template>
         </el-table-column>
         <el-table-column label="机场经纬度" min-width="140">
@@ -135,11 +155,11 @@
 </template>
 
 <script setup>
-import { onMounted, watch } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { deleteDrone, fetchDronePage } from "@backend/api/drone.js";
+import { deleteDrone, fetchDronePage, switchDrone } from "@backend/api/drone.js";
 import OrgCascader from "@backend/components/OrgCascader.vue";
 import { useOrgCascader } from "@backend/composables/useOrgCascader.js";
 import { useTableQuery } from "@backend/composables/useTableQuery.js";
@@ -163,6 +183,75 @@ const { loading, records, total, query, load, onPageChange, onSizeChange } = use
   fetchDronePage,
   { pageSize: 10, orgId: null },
 );
+
+const selectedRows = ref([]);
+
+function handleSelectionChange(rows) {
+  selectedRows.value = rows;
+}
+
+function isDroneEnabled(row) {
+  return row.switchStatus === 0;
+}
+
+function patchRecordsSwitchStatus(ids, enabled) {
+  const switchStatus = enabled ? 0 : 1;
+  const idSet = new Set(ids.map((id) => String(id || "").trim()).filter(Boolean));
+  records.value.forEach((row) => {
+    if (idSet.has(String(row.id))) {
+      row.switchStatus = switchStatus;
+      row.deviceEnabled = enabled;
+    }
+  });
+}
+
+async function changeDroneSwitch(ids, enabled, nameForConfirm) {
+  const action = enabled ? "启用" : "停用";
+  const validIds = [...new Set(ids.map((id) => String(id || "").trim()).filter(Boolean))];
+  if (!validIds.length) {
+    ElMessage.warning("缺少无人机 ID");
+    return;
+  }
+  const targetLabel = nameForConfirm
+    ? `无人机「${nameForConfirm}」`
+    : `选中的 ${validIds.length} 架无人机`;
+  await ElMessageBox.confirm(`确定${action}${targetLabel}吗？`, `${action}确认`, {
+    type: "warning",
+    confirmButtonText: `确认${action}`,
+    cancelButtonText: "取消",
+  });
+  await switchDrone({
+    ids: validIds,
+    switchStatus: enabled ? 0 : 1,
+  });
+  patchRecordsSwitchStatus(validIds, enabled);
+  ElMessage.success(`${action}成功`);
+}
+
+async function handleSwitchChange(row, enabled) {
+  const nextStatus = enabled ? 0 : 1;
+  if (nextStatus === row.switchStatus) return;
+  try {
+    await changeDroneSwitch([row.id], enabled, row.name || row.sn || row.id);
+  } catch {
+    /* 用户取消或接口失败 */
+  }
+}
+
+async function handleBatchSwitch(enabled) {
+  if (!selectedRows.value.length) {
+    ElMessage.warning("请先选择无人机");
+    return;
+  }
+  try {
+    await changeDroneSwitch(
+      selectedRows.value.map((row) => row.id),
+      enabled,
+    );
+  } catch {
+    /* 用户取消或接口失败 */
+  }
+}
 
 async function loadOrgOptions() {
   await initOrgCascader(authStore);
@@ -290,20 +379,9 @@ onMounted(async () => {
   gap: 8px;
 }
 
-.device-list__create-btn {
+.device-list__action-btn {
   min-width: 120px;
   height: 36px;
-  // border-style: solid;
-  // color: var(--el-color-primary);
-  // border-color: var(--el-color-primary);
-  // background: #fff;
-
-  // &:hover,
-  // &:focus {
-  //   color: var(--el-color-primary);
-  //   border-color: var(--el-color-primary);
-  //   background: var(--el-color-primary-light-9);
-  // }
 }
 
 .device-list__refresh-btn {
@@ -398,15 +476,6 @@ onMounted(async () => {
   .device-list__status-dot {
     background: #909399;
   }
-}
-
-.device-list__device-status {
-  color: var(--el-color-primary);
-  cursor: default;
-}
-
-.device-list__device-status--disabled {
-  color: #909399;
 }
 
 .device-list__coord {

@@ -44,8 +44,12 @@
 
           <Transition name="user-menu-fade">
             <div v-show="userMenuOpen" class="user-menu__panel">
-              <button type="button" class="user-menu__item" @click="handleEnterBackend">
+              <button type="button" class="user-menu__item" @click="handleOpenSettings">
                 <i class="ri-settings-3-line user-menu__item-icon" aria-hidden="true" />
+                <span>设置</span>
+              </button>
+              <button type="button" class="user-menu__item" @click="handleEnterBackend">
+                <i class="ri-dashboard-3-line user-menu__item-icon" aria-hidden="true" />
                 <span>后台管理</span>
               </button>
               <div class="user-menu__divider" aria-hidden="true" />
@@ -102,6 +106,11 @@ async function handleLogout() {
   closeUserMenu();
   await authStore.logout();
   router.push("/login");
+}
+
+function handleOpenSettings() {
+  closeUserMenu();
+  settingsVisible.value = true;
 }
 
 function handleEnterBackend() {
@@ -275,7 +284,7 @@ onUnmounted(() => {
   top: calc(100% + 10px);
   right: 0;
   z-index: 100;
-  min-width: 148px;
+  min-width: 160px;
   padding: 8px;
   border: 1px solid #30363b;
   border-radius: 6px;
@@ -293,7 +302,7 @@ onUnmounted(() => {
 .user-menu__item {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
   width: 100%;
   min-height: 40px;
@@ -306,7 +315,7 @@ onUnmounted(() => {
   font-size: 14px;
   font-weight: 500;
   line-height: 1.2;
-  text-align: center;
+  text-align: left;
   cursor: pointer;
   white-space: nowrap;
   box-sizing: border-box;
@@ -329,8 +338,11 @@ onUnmounted(() => {
 }
 
 .user-menu__item-icon {
+  width: 16px;
   font-size: 16px;
   flex-shrink: 0;
+  text-align: center;
+  line-height: 1;
 }
 
 .user-menu-fade-enter-active,

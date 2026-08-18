@@ -4,38 +4,31 @@ import { CommonService } from "@/api/common.js";
 import { unwrapApiList } from "@/utils/request.js";
 import { LOCKDOWN_LIST_QUERY_PARAMS } from "@/utils/lockdown-assign.js";
 
-// 封控点数据（由 ensureLockdownPointsFetched 从接口拉取填充，全局只请求一次）
+// 封控点数据（每次开启卡点 / 一键封城时重新从接口拉取）
 const DEFAULT_LOCKDOWN_POINTS = [];
-let lockdownPointsFetchPromise = null;
 
 /**
- * 拉取封控点列表（并发安全、成功后可复用，失败时允许重试）
+ * 拉取封控点列表
  * @returns {Promise<{ ok: boolean, count: number }>}
  */
 async function ensureLockdownPointsFetched() {
-  if (!lockdownPointsFetchPromise) {
-    lockdownPointsFetchPromise = (async () => {
-      try {
-        const data = await CommonService.controlPointListQuery(LOCKDOWN_LIST_QUERY_PARAMS);
-        const list = unwrapApiList(data);
-        const points = list
-          .map((item) => ({
-            id: item?.id ?? "",
-            lng: Number(item?.longitude),
-            lat: Number(item?.latitude),
-            name: item?.name ?? "",
-            address: item?.description ?? "",
-          }))
-          .filter((point) => Number.isFinite(point.lng) && Number.isFinite(point.lat));
-        DEFAULT_LOCKDOWN_POINTS.splice(0, DEFAULT_LOCKDOWN_POINTS.length, ...points);
-        return { ok: true, count: points.length };
-      } catch {
-        lockdownPointsFetchPromise = null;
-        return { ok: false, count: 0 };
-      }
-    })();
+  try {
+    const data = await CommonService.controlPointListQuery(LOCKDOWN_LIST_QUERY_PARAMS);
+    const list = unwrapApiList(data);
+    const points = list
+      .map((item) => ({
+        id: item?.id ?? "",
+        lng: Number(item?.longitude),
+        lat: Number(item?.latitude),
+        name: item?.name ?? "",
+        address: item?.description ?? "",
+      }))
+      .filter((point) => Number.isFinite(point.lng) && Number.isFinite(point.lat));
+    DEFAULT_LOCKDOWN_POINTS.splice(0, DEFAULT_LOCKDOWN_POINTS.length, ...points);
+    return { ok: true, count: points.length };
+  } catch {
+    return { ok: false, count: 0 };
   }
-  return lockdownPointsFetchPromise;
 }
 
 /** @deprecated 请使用 ensureLockdownPointsFetched */
@@ -245,18 +238,17 @@ export function useLockdown({
     getViewer?.()?.scene?.requestRender?.();
   };
 
-  /** 拉取封控点并创建 marker（不重复请求、不拉视角） */
+  /** 拉取封控点并创建 marker（每次开启都重新请求，不拉视角） */
   const ensureCheckpointLayer = async () => {
     const viewer = getViewer?.();
     if (!viewer) return { ok: false, hasPoints: false };
 
     const { ok, count } = await ensureLockdownPointsFetched();
     if (!ok) return { ok: false, hasPoints: false };
+    clearLockdownMarkers();
     if (count === 0) return { ok: true, hasPoints: false };
 
-    if (lockdownEntities.length === 0) {
-      addLockdownMarkers(viewer);
-    }
+    addLockdownMarkers(viewer);
     viewer.scene.requestRender();
     return { ok: true, hasPoints: true };
   };

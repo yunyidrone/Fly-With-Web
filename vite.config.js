@@ -6,6 +6,19 @@ import AutoImport from "unplugin-auto-import/vite";
 import Components from "unplugin-vue-components/vite";
 import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 
+function appVersionPlugin(version) {
+  return {
+    name: "app-version",
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "version.json",
+        source: `${JSON.stringify({ version }, null, 2)}\n`,
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode, command }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
   const apiBase = env.VITE_API_BASE_URL || "";
@@ -14,6 +27,7 @@ export default defineConfig(({ mode, command }) => {
     : "http://220.185.228.104:19949";
 
   const isBuild = command === "build";
+  const appVersion = env.VITE_APP_VERSION || new Date().toISOString();
 
   return {
     esbuild: {
@@ -23,6 +37,7 @@ export default defineConfig(({ mode, command }) => {
     plugins: [
       vue(),
       cesium(),
+      appVersionPlugin(appVersion),
       AutoImport({
         resolvers: [ElementPlusResolver()],
         imports: ["vue", "vue-router", "pinia"],
@@ -36,6 +51,7 @@ export default defineConfig(({ mode, command }) => {
     define: {
       // 解决 mqtt.js 在浏览器端报错 "process is not defined"
       "process.env": {},
+      __APP_VERSION__: JSON.stringify(appVersion),
     },
     resolve: {
       alias: {

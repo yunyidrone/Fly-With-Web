@@ -25,10 +25,13 @@ function resolveBattery(raw) {
   return Number.isFinite(num) ? num : null;
 }
 
-function resolveDeviceEnabled(raw) {
-  if (raw.enabled === false || raw.enabled === 0 || raw.deviceStatus === 0) return false;
-  if (raw.status === "disabled") return false;
-  return true;
+/** switchStatus：0 启用，1 停用 */
+export function parseSwitchStatus(raw) {
+  const value = raw?.switchStatus;
+  if (value === 1 || value === "1") return 1;
+  if (value === 0 || value === "0") return 0;
+  if (raw?.enabled === false || raw?.enabled === 0) return 1;
+  return 0;
 }
 
 function formatCoord(longitude, latitude) {
@@ -174,7 +177,8 @@ export function normalizeDroneRecord(raw) {
     battery: resolveBattery(raw),
     isOnline: Number.isFinite(statusNum) ? statusNum !== 0 : null,
     workStatusText: resolveDroneWorkStatusText(statusNum),
-    deviceEnabled: resolveDeviceEnabled(raw),
+    switchStatus: parseSwitchStatus(raw),
+    deviceEnabled: parseSwitchStatus(raw) === 0,
     droneTypeKind,
     droneTypeLabel: `${typeMeta.prefix}-${resolveDroneModel(raw)}`,
     droneTypeTagType: typeMeta.tagType,

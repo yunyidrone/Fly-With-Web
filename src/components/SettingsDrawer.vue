@@ -29,69 +29,10 @@
           </header>
 
           <div v-loading="loading" class="settings-drawer__body">
-            <!-- 低电量阈值 -->
-            <section class="settings-sec">
-              <div class="settings-sec__title-row">
-                <h3 class="settings-sec__title">请设置低电量阈值</h3>
-                <el-tooltip
-                  effect="dark"
-                  :content="BATTERY_THRESHOLD_TIP"
-                  placement="top"
-                  teleported
-                  popper-class="settings-tooltip-popper"
-                >
-                  <span class="settings-sec__info" tabindex="0" role="button" aria-label="说明">
-                    <i class="ri-information-line" />
-                  </span>
-                </el-tooltip>
-              </div>
-
-              <el-tabs v-model="thresholdTab" class="settings-el-tabs">
-                <el-tab-pane
-                  v-for="tab in SETTINGS_DEVICE_TABS"
-                  :key="`threshold-${tab.key}`"
-                  :label="tab.label"
-                  :name="tab.key"
-                >
-                  <div class="settings-threshold-list">
-                    <template v-if="thresholdForms[tab.key].length">
-                      <div
-                        v-for="item in thresholdForms[tab.key]"
-                        :key="item.modelId"
-                        class="settings-threshold-row"
-                      >
-                        <span class="settings-threshold-row__label">型号：{{ item.modelName }}</span>
-                        <el-input-number
-                          v-model="item.threshold"
-                          class="settings-threshold-input"
-                          :min="BATTERY_THRESHOLD_MIN"
-                          :max="BATTERY_THRESHOLD_MAX"
-                          :step="1"
-                          :controls="true"
-                          controls-position="right"
-                        />
-                        <span class="settings-threshold-row__hint">
-                          请输入{{ BATTERY_THRESHOLD_MIN }}~{{ BATTERY_THRESHOLD_MAX }}之间的数字
-                        </span>
-                      </div>
-                    </template>
-                    <div v-else class="settings-threshold-empty">
-                      <img
-                        :src="thresholdEmptyIcon[tab.key]"
-                        :alt="`${tab.label}空状态`"
-                        class="settings-threshold-empty__img"
-                      />
-                      <span class="settings-threshold-empty__title">空空如也</span>
-                      <span class="settings-threshold-empty__desc">暂无{{ tab.label }}型号数据</span>
-                    </div>
-                  </div>
-                </el-tab-pane>
-              </el-tabs>
-            </section>
-
-            <!-- 无人设备状态 -->
             <section class="settings-sec settings-sec--status">
-              <h3 class="settings-sec__title">请修改无人设备状态</h3>
+              <div class="settings-sec__title-row">
+                <h3 class="settings-sec__title">请修改无人设备参数修改</h3>
+              </div>
 
               <el-tabs v-model="statusTab" class="settings-el-tabs settings-el-tabs--status">
                 <el-tab-pane
@@ -100,37 +41,58 @@
                   :label="tab.label"
                   :name="tab.key"
                 >
-                  <div class="settings-status-toolbar">
-                    <button
-                      type="button"
-                      class="settings-status-btn settings-status-btn--primary"
-                      @click="confirmSetAllDeviceEnabled(true)"
-                    >
-                      全部启用
-                    </button>
-                    <button
-                      type="button"
-                      class="settings-status-btn settings-status-btn--ghost"
-                      @click="confirmSetAllDeviceEnabled(false)"
-                    >
-                      全部禁用
-                    </button>
-                  </div>
-
                   <div class="settings-table-wrap">
                     <el-table
                       :data="deviceForms[tab.key]"
                       class="settings-device-table"
                       empty-text="暂无设备"
+                      row-key="id"
+                      @selection-change="onDeviceSelectionChange"
                     >
-                      <el-table-column prop="sn" label="SN" min-width="120" show-overflow-tooltip />
-                      <el-table-column prop="id" label="ID" min-width="120" show-overflow-tooltip />
+                      <el-table-column type="selection" width="40" :selectable="isDroneRowSelectable" />
+                      <el-table-column prop="sn" label="SN" min-width="180">
+                        <template #default="{ row }">
+                          <el-tooltip
+                            :content="row.sn || '-'"
+                            placement="top"
+                            :popper-options="TABLE_TOOLTIP_POPPER_OPTIONS"
+                            :teleported="false"
+                            popper-class="settings-table-tooltip"
+                          >
+                            <span class="settings-table-ellipsis">{{ row.sn || "-" }}</span>
+                          </el-tooltip>
+                        </template>
+                      </el-table-column>
+                      <el-table-column prop="id" label="ID" min-width="100">
+                        <template #default="{ row }">
+                          <el-tooltip
+                            :content="row.id || '-'"
+                            placement="top"
+                            :popper-options="TABLE_TOOLTIP_POPPER_OPTIONS"
+                            :teleported="false"
+                            popper-class="settings-table-tooltip"
+                          >
+                            <span class="settings-table-ellipsis">{{ row.id || "-" }}</span>
+                          </el-tooltip>
+                        </template>
+                      </el-table-column>
                       <el-table-column
                         :label="tab.nameLabel"
                         prop="name"
                         min-width="100"
-                        show-overflow-tooltip
-                      />
+                      >
+                        <template #default="{ row }">
+                          <el-tooltip
+                            :content="row.name || '-'"
+                            placement="top"
+                            :popper-options="TABLE_TOOLTIP_POPPER_OPTIONS"
+                            :teleported="false"
+                            popper-class="settings-table-tooltip"
+                          >
+                            <span class="settings-table-ellipsis">{{ row.name || "-" }}</span>
+                          </el-tooltip>
+                        </template>
+                      </el-table-column>
                       <el-table-column label="状态" width="80" align="center">
                         <template #default="{ row }">
                           <span
@@ -141,35 +103,151 @@
                           </span>
                         </template>
                       </el-table-column>
+                      <el-table-column width="100" align="center">
+                        <template #header>
+                          <span class="settings-table-head-with-tip">
+                            电量设置
+                            <el-tooltip
+                              effect="dark"
+                              content="设备电量下降至当前阈值或不大于此阈值时不参与无人机任务"
+                              placement="top"
+                              teleported
+                              popper-class="settings-tooltip-popper"
+                            >
+                              <span class="settings-sec__info settings-sec__info--small" tabindex="0" role="button" aria-label="说明">
+                                <i class="ri-information-line" />
+                              </span>
+                            </el-tooltip>
+                          </span>
+                        </template>
+                        <template #default="{ row }">
+                          <el-input-number
+                            v-if="statusTab === 'drone'"
+                            v-model="row.batteryThreshold"
+                            class="settings-threshold-input"
+                            :min="BATTERY_THRESHOLD_MIN"
+                            :max="BATTERY_THRESHOLD_MAX"
+                            :step="1"
+                            :controls="true"
+                            controls-position="right"
+                            @change="() => handleRowBatteryThresholdChange(row)"
+                          />
+                          <span v-else class="settings-status-placeholder">—</span>
+                        </template>
+                      </el-table-column>
+                      <el-table-column label="算法配置" min-width="150" align="center">
+                        <template #default="{ row }">
+                          <el-tooltip
+                            v-if="statusTab === 'drone' && row.algorithmIds.length"
+                            effect="dark"
+                            :content="resolveAlgorithmTooltip(row.algorithmIds)"
+                            placement="top"
+                            teleported
+                            popper-class="settings-tooltip-popper"
+                          >
+                            <span class="settings-algorithm-display">
+                              <span class="settings-algorithm-display__main">
+                                {{ resolveAlgorithmLabel(row.algorithmIds[0]) }}
+                              </span>
+                              <span v-if="row.algorithmIds.length > 1" class="settings-algorithm-display__more">
+                                +{{ row.algorithmIds.length - 1 }}
+                              </span>
+                            </span>
+                          </el-tooltip>
+                          <span v-else-if="statusTab === 'drone'" class="settings-status-placeholder">—</span>
+                          <span v-else class="settings-status-placeholder">—</span>
+                        </template>
+                      </el-table-column>
                       <el-table-column label="操作" width="80" align="center">
                         <template #default="{ row }">
                           <el-switch
+                            v-if="statusTab === 'drone'"
                             v-model="row.enabled"
                             class="settings-device-switch"
                             inline-prompt
                             active-text="启用"
                             inactive-text="禁用"
+                            size="small"
                             :before-change="() => confirmDeviceEnabledChange(row)"
                           />
+                          <span v-else class="settings-status-placeholder">—</span>
                         </template>
                       </el-table-column>
                     </el-table>
+                  </div>
+                  <div v-if="statusTab === 'drone'" class="settings-batch-bar">
+                    <button
+                      type="button"
+                      class="settings-batch-btn"
+                      :disabled="!selectedDeviceRows.length"
+                      @click="applyBatchThreshold"
+                    >
+                      电量设置
+                    </button>
+                    <el-input-number
+                      v-model="batchThreshold"
+                      class="settings-threshold-input settings-threshold-input--batch"
+                      :min="BATTERY_THRESHOLD_MIN"
+                      :max="BATTERY_THRESHOLD_MAX"
+                      :step="1"
+                      :controls="true"
+                      controls-position="right"
+                      :disabled="!selectedDeviceRows.length"
+                      placeholder=""
+                      @change="batchBatteryTouched = true"
+                    />
+                    <button
+                      type="button"
+                      class="settings-batch-btn settings-batch-btn--primary"
+                      :disabled="!selectedDeviceRows.length"
+                      @click="confirmBatchDeviceEnabled(true)"
+                    >
+                      启用
+                    </button>
+                    <button
+                      type="button"
+                      class="settings-batch-btn"
+                      :disabled="!selectedDeviceRows.length"
+                      @click="confirmBatchDeviceEnabled(false)"
+                    >
+                      禁用
+                    </button>
+                    <span class="settings-batch-label">算法设置</span>
+                    <el-select
+                      v-model="batchAlgorithmIds"
+                      class="settings-batch-algorithm"
+                      multiple
+                      clearable
+                      collapse-tags
+                      collapse-tags-tooltip
+                      :max-collapse-tags="1"
+                      :loading="algorithmListLoading"
+                      :disabled="!selectedDeviceRows.length"
+                      placeholder="请设置无人机监测算法"
+                      popper-class="settings-algorithm-popper"
+                      @change="markBatchAlgorithmsChanged"
+                    >
+                      <el-option
+                        v-for="item in algorithmList"
+                        :key="item.algorithmId"
+                        :label="item.algorithmName || item.algorithmCode || item.algorithmId"
+                        :value="item.algorithmId"
+                      />
+                    </el-select>
+                    <button
+                      type="button"
+                      class="settings-save-btn"
+                      :disabled="saving"
+                      @click="onSave"
+                    >
+                      {{ saving ? "保存中…" : "保存" }}
+                    </button>
+                    <button type="button" class="settings-cancel-btn" @click="onClose">取消</button>
                   </div>
                 </el-tab-pane>
               </el-tabs>
             </section>
           </div>
-
-          <footer class="settings-drawer__foot">
-            <button
-              type="button"
-              class="settings-save-btn"
-              :disabled="saving"
-              @click="onSave"
-            >
-              {{ saving ? "保存中…" : "保存" }}
-            </button>
-          </footer>
         </aside>
       </div>
     </Transition>
@@ -179,94 +257,129 @@
 <script setup>
 import { reactive, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { SettingsService } from "@/api/settings.js";
+import { AlgorithmService } from "@/api/algorithm.js";
+import { AccompanyingFlyService } from "@/api/index.js";
 import { useDeviceStore } from "@/stores/device.js";
 import { unwrapApiList } from "@/utils/request.js";
 import {
   BATTERY_THRESHOLD_MAX,
   BATTERY_THRESHOLD_MIN,
-  BATTERY_THRESHOLD_TIP,
-  DEFAULT_BATTERY_THRESHOLDS,
   SETTINGS_DEVICE_TABS,
 } from "@/config/settings-defaults.js";
-import emptyPlanePng from "@/assets/images/empty_plane.png";
-import emptyBoatPng from "@/assets/images/empty_boat.png";
-import emptyDogPng from "@/assets/images/empty_dog.png";
 
 const visible = defineModel("visible", { type: Boolean, default: false });
-
-const thresholdEmptyIcon = {
-  drone: emptyPlanePng,
-  boat: emptyBoatPng,
-  dog: emptyDogPng,
-};
 
 const deviceStore = useDeviceStore();
 const loading = ref(false);
 const saving = ref(false);
-const thresholdTab = ref("drone");
 const statusTab = ref("drone");
+const algorithmList = ref([]);
+const algorithmListLoading = ref(false);
+const selectedDeviceRows = ref([]);
+const batchThreshold = ref(null);
+const batchAlgorithmIds = ref([]);
+const batchBatteryTouched = ref(false);
+const batchAlgorithmTouched = ref(false);
+const deviceBaselineMap = new Map();
+const TABLE_TOOLTIP_POPPER_OPTIONS = {
+  modifiers: [
+    { name: "flip", enabled: false },
+    { name: "preventOverflow", options: { boundary: "viewport", padding: 8 } },
+  ],
+};
 
-/** @type {Record<string, Array<{ modelId: string, modelName: string, threshold: number }>>} */
-const thresholdForms = reactive({
-  drone: [],
-  boat: [],
-  dog: [],
-});
-
-/** @type {Record<string, Array<{ id: string, sn: string, name: string, enabled: boolean, abnormal: boolean }>>} */
+/** @type {Record<string, Array<{ id: string, sn: string, name: string, modelId: string, batteryThreshold: number, algorithmIds: string[], switchStatus: 0|1, enabled: boolean }>>} */
 const deviceForms = reactive({
   drone: [],
   boat: [],
   dog: [],
 });
 
-function cloneThresholdDefaults() {
-  for (const tab of SETTINGS_DEVICE_TABS) {
-    thresholdForms[tab.key] = DEFAULT_BATTERY_THRESHOLDS[tab.key].map((item) => ({
-      ...item,
-    }));
-  }
-}
-
-function normalizeThresholdList(payload, deviceType) {
-  const list = unwrapApiList(payload);
-  if (!list.length) return null;
-  return list.map((item) => ({
-    modelId: String(item.modelId ?? item.id ?? item.model ?? "").trim(),
-    modelName: String(item.modelName ?? item.name ?? item.model ?? "未知型号").trim(),
-    threshold: clampThreshold(Number(item.threshold ?? item.value ?? 40)),
-  }));
-}
-
 function clampThreshold(value) {
   if (!Number.isFinite(value)) return 40;
   return Math.min(BATTERY_THRESHOLD_MAX, Math.max(BATTERY_THRESHOLD_MIN, Math.round(value)));
 }
 
+function parseSwitchStatus(raw) {
+  const value = raw?.switchStatus;
+  if (value === 1 || value === "1") return 1;
+  if (value === 0 || value === "0") return 0;
+  if (raw?.enabled === false || raw?.enabled === 0) return 1;
+  return 0;
+}
+
+function switchStatusFromEnabled(enabled) {
+  return enabled ? 0 : 1;
+}
+
+function normalizeAlgorithmItem(raw) {
+  const id = raw?.algorithmId ?? raw?.id;
+  if (id == null || id === "") return null;
+  return {
+    algorithmId: String(id),
+    algorithmCode: String(raw?.algorithmCode ?? "").trim(),
+    algorithmName: String(raw?.algorithmName ?? raw?.name ?? "").trim(),
+  };
+}
+
+async function loadAlgorithmList() {
+  if (algorithmListLoading.value) return;
+  algorithmListLoading.value = true;
+  try {
+    const data = await AlgorithmService.list();
+    algorithmList.value = unwrapApiList(data)
+      .map(normalizeAlgorithmItem)
+      .filter(Boolean);
+  } catch {
+    algorithmList.value = [];
+  } finally {
+    algorithmListLoading.value = false;
+  }
+}
+
+function parseAlgorithmIds(raw) {
+  const value = raw?.algorithmIds ?? raw?.algorithmIdList ?? raw?.algorithms ?? [];
+  if (typeof value === "string") {
+    return value.split(",").map((item) => item.trim()).filter(Boolean);
+  }
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (item == null) return "";
+      if (typeof item === "object") {
+        return String(item.algorithmId ?? item.id ?? "").trim();
+      }
+      return String(item).trim();
+    })
+    .filter(Boolean);
+}
+
+function serializeAlgorithmIds(ids) {
+  return Array.isArray(ids) ? ids.map((id) => String(id).trim()).filter(Boolean).join(",") : "";
+}
+
+function resolveDroneModelId(drone) {
+  return String(drone.modelId ?? drone.model ?? drone.modelName ?? drone.deviceModel ?? "").trim();
+}
+
+function resolveDroneThreshold(drone) {
+  return clampThreshold(
+    Number(drone.batteryThreshold ?? drone.threshold ?? drone.lowBatteryThreshold ?? 40),
+  );
+}
+
 function mapDroneToStatusRow(drone) {
-  const abnormal = drone.rawStatus === 0 || drone.status === "offline";
+  const switchStatus = parseSwitchStatus(drone);
+  const modelId = resolveDroneModelId(drone);
   return {
     id: String(drone.id || ""),
     sn: String(drone.sn || ""),
     name: String(drone.name || drone.sn || drone.id || ""),
-    enabled: drone.enabled !== false,
-    abnormal,
-  };
-}
-
-function mapApiDeviceRow(raw) {
-  const abnormal = raw.abnormal === true || Number(raw.healthStatus) === 2 || raw.status === "abnormal";
-  const enabled =
-    raw.enabled === true ||
-    raw.enabled === 1 ||
-    (raw.enabled !== false && raw.enabled !== 0 && raw.status !== "disabled");
-  return {
-    id: String(raw.id ?? raw.deviceId ?? ""),
-    sn: String(raw.sn ?? ""),
-    name: String(raw.name ?? raw.deviceName ?? raw.sn ?? raw.id ?? ""),
-    enabled,
-    abnormal,
+    modelId,
+    batteryThreshold: resolveDroneThreshold(drone),
+    algorithmIds: parseAlgorithmIds(drone),
+    switchStatus,
+    enabled: switchStatus === 0,
   };
 }
 
@@ -280,77 +393,119 @@ function resetDeviceForms() {
   deviceForms.dog = [];
 }
 
-async function loadThresholds() {
-  cloneThresholdDefaults();
-  await Promise.all(
-    SETTINGS_DEVICE_TABS.map(async (tab) => {
-      try {
-        const data = await SettingsService.getBatteryThresholdList(
-          { deviceType: tab.key },
-          { silent: true },
-        );
-        const normalized = normalizeThresholdList(data, tab.key);
-        if (normalized?.length) {
-          thresholdForms[tab.key] = normalized;
-        }
-      } catch (_) {
-        /* 使用默认型号 */
-      }
-    }),
-  );
-}
-
 async function loadDeviceStatus() {
   resetDeviceForms();
-  await Promise.all(
-    SETTINGS_DEVICE_TABS.map(async (tab) => {
-      try {
-        const data = await SettingsService.getDeviceStatusList(
-          { deviceType: tab.key },
-          { silent: true },
-        );
-        const list = unwrapApiList(data).map(mapApiDeviceRow);
-        if (list.length) {
-          deviceForms[tab.key] = list;
-        }
-      } catch (_) {
-        if (tab.key === "drone" && !deviceForms.drone.length) {
-          deviceForms.drone = buildDroneStatusFallback();
-        }
+  await deviceStore.fetchDroneList().catch(() => {});
+  deviceForms.drone = buildDroneStatusFallback();
+  resetDeviceBaseline();
+}
+
+function resetDeviceBaseline() {
+  deviceBaselineMap.clear();
+  deviceForms.drone.forEach((row) => {
+    deviceBaselineMap.set(row.id, {
+      batteryThreshold: clampThreshold(Number(row.batteryThreshold)),
+      algorithmIds: serializeAlgorithmIds(row.algorithmIds),
+    });
+  });
+}
+
+function patchDroneSwitchStatus(ids, enabled, { patchEnabled = true } = {}) {
+  const switchStatus = switchStatusFromEnabled(enabled);
+  const idSet = new Set(ids.map((id) => String(id || "").trim()).filter(Boolean));
+
+  deviceForms.drone.forEach((row) => {
+    if (idSet.has(String(row.id))) {
+      row.switchStatus = switchStatus;
+      if (patchEnabled) {
+        row.enabled = enabled;
       }
-    }),
-  );
+    }
+  });
+
+  deviceStore.drones.forEach((drone) => {
+    if (idSet.has(String(drone.id))) {
+      drone.switchStatus = switchStatus;
+    }
+  });
+}
+
+async function applyDroneSwitch(ids, enabled, options = {}) {
+  const validIds = [...new Set(ids.map((id) => String(id || "").trim()).filter(Boolean))];
+  if (!validIds.length) {
+    ElMessage.warning("缺少设备 ID");
+    throw new Error("missing drone id");
+  }
+  await AccompanyingFlyService.droneSwitch({
+    ids: validIds,
+    switchStatus: switchStatusFromEnabled(enabled),
+  });
+  patchDroneSwitchStatus(validIds, enabled, options);
 }
 
 async function loadSettings() {
   loading.value = true;
   try {
-    if (!deviceStore.drones.length) {
-      await deviceStore.fetchDroneList().catch(() => {});
-    }
-    await Promise.all([loadThresholds(), loadDeviceStatus()]);
+    await loadAlgorithmList();
+    await loadDeviceStatus();
   } finally {
     loading.value = false;
   }
 }
 
 function resolveStatusLabel(row) {
-  if (row.abnormal) return "异常";
-  return row.enabled ? "启用" : "禁用";
+  return row.switchStatus === 0 ? "启用" : "禁用";
 }
 
 function resolveStatusTagClass(row) {
-  if (row.abnormal) return "settings-status-tag--abnormal";
-  return row.enabled ? "settings-status-tag--enabled" : "settings-status-tag--disabled";
+  return row.switchStatus === 0
+    ? "settings-status-tag--enabled"
+    : "settings-status-tag--disabled";
+}
+
+function resolveAlgorithmLabel(id) {
+  const item = algorithmList.value.find((algorithm) => algorithm.algorithmId === id);
+  return item?.algorithmName || item?.algorithmCode || id || "-";
+}
+
+function resolveAlgorithmTooltip(ids) {
+  return ids.map(resolveAlgorithmLabel).join("、");
 }
 
 const SETTINGS_CONFIRM_Z_INDEX = 4000;
 
-function getStatusTabLabel(tabKey = statusTab.value) {
-  return SETTINGS_DEVICE_TABS.find((t) => t.key === tabKey)?.label || "设备";
+function isDroneRowSelectable() {
+  return statusTab.value === "drone";
+}
+
+function onDeviceSelectionChange(rows) {
+  selectedDeviceRows.value = statusTab.value === "drone" ? rows : [];
+}
+
+function applyBatchThreshold() {
+  if (!selectedDeviceRows.value.length) {
+    ElMessage.warning("请先选择设备");
+    return;
+  }
+  const value = Number(batchThreshold.value);
+  if (!Number.isFinite(value)) {
+    ElMessage.warning("请先输入电量阈值");
+    return;
+  }
+  batchThreshold.value = clampThreshold(value);
+  batchBatteryTouched.value = true;
+  ElMessage.success("电量设置已暂存，保存后生效");
+}
+
+function markBatchAlgorithmsChanged() {
+  batchAlgorithmTouched.value = true;
 }
 
 function confirmDeviceEnabledChange(row) {
+  if (statusTab.value !== "drone") {
+    ElMessage.warning("当前设备类型暂未接入");
+    return false;
+  }
   const nextEnabled = !row.enabled;
   const action = nextEnabled ? "启用" : "禁用";
   const deviceName = row.name || row.sn || row.id || "该设备";
@@ -364,22 +519,24 @@ function confirmDeviceEnabledChange(row) {
       zIndex: SETTINGS_CONFIRM_Z_INDEX,
     },
   )
-    .then(() => true)
+    .then(async () => {
+      await applyDroneSwitch([row.id], nextEnabled, { patchEnabled: false });
+      ElMessage.success(`${action}成功`);
+      return true;
+    })
     .catch(() => false);
 }
 
-async function confirmSetAllDeviceEnabled(enabled) {
-  const list = deviceForms[statusTab.value];
-  if (!list.length) {
-    ElMessage.warning("当前列表暂无设备");
+async function confirmBatchDeviceEnabled(enabled) {
+  if (!selectedDeviceRows.value.length) {
+    ElMessage.warning("请先选择设备");
     return;
   }
   const action = enabled ? "启用" : "禁用";
-  const tabLabel = getStatusTabLabel();
   try {
     await ElMessageBox.confirm(
-      `确定${action}当前${tabLabel}列表下的全部设备吗？`,
-      `全部${action}`,
+      `确定${action}选中的 ${selectedDeviceRows.value.length} 台设备吗？`,
+      `批量${action}`,
       {
         confirmButtonText: "确定",
         cancelButtonText: "取消",
@@ -387,67 +544,132 @@ async function confirmSetAllDeviceEnabled(enabled) {
         zIndex: SETTINGS_CONFIRM_Z_INDEX,
       },
     );
-    list.forEach((row) => {
-      row.enabled = enabled;
-    });
+    await applyDroneSwitch(
+      selectedDeviceRows.value.map((row) => row.id),
+      enabled,
+    );
+    ElMessage.success(`${action}成功`);
   } catch {
-    /* 用户取消 */
+    /* 用户取消或接口失败 */
   }
 }
 
-function validateThresholds() {
-  for (const tab of SETTINGS_DEVICE_TABS) {
-    for (const item of thresholdForms[tab.key]) {
-      const value = Number(item.threshold);
-      if (!Number.isFinite(value) || value < BATTERY_THRESHOLD_MIN || value > BATTERY_THRESHOLD_MAX) {
-        ElMessage.warning(
-          `${tab.label}「${item.modelName}」阈值需在 ${BATTERY_THRESHOLD_MIN}~${BATTERY_THRESHOLD_MAX} 之间`,
-        );
-        return false;
-      }
+async function handleRowBatteryThresholdChange(row) {
+  const id = String(row?.id || "").trim();
+  if (!id) {
+    ElMessage.warning("缺少设备 ID");
+    return;
+  }
+  const baseline = deviceBaselineMap.get(id);
+  const prevValue = baseline?.batteryThreshold;
+  const nextValue = clampThreshold(Number(row.batteryThreshold));
+  if (prevValue === nextValue) return;
+  try {
+    await AccompanyingFlyService.droneBatterySet({
+      ids: [id],
+      batteryThreshold: nextValue,
+    });
+    patchBatteryThreshold([id], nextValue);
+    ElMessage.success("电量设置已更新");
+  } catch (err) {
+    if (prevValue != null) {
+      row.batteryThreshold = prevValue;
     }
+    ElMessage.error(err?.message || "电量设置更新失败");
   }
-  return true;
 }
 
-function buildSavePayload() {
-  return {
-    thresholds: SETTINGS_DEVICE_TABS.map((tab) => ({
-      deviceType: tab.key,
-      items: thresholdForms[tab.key].map((item) => ({
-        modelId: item.modelId,
-        threshold: clampThreshold(Number(item.threshold)),
-      })),
-    })),
-    deviceStatus: SETTINGS_DEVICE_TABS.map((tab) => ({
-      deviceType: tab.key,
-      items: deviceForms[tab.key].map((row) => ({
-        id: row.id,
-        enabled: Boolean(row.enabled),
-      })),
-    })),
-  };
+function normalizeIds(rows) {
+  return [...new Set(rows.map((row) => String(row?.id || "").trim()).filter(Boolean))];
+}
+
+function patchBatteryThreshold(ids, batteryThreshold) {
+  const idSet = new Set(ids);
+  deviceForms.drone.forEach((row) => {
+    if (idSet.has(String(row.id))) {
+      row.batteryThreshold = batteryThreshold;
+      const baseline = deviceBaselineMap.get(row.id) || {};
+      deviceBaselineMap.set(row.id, {
+        ...baseline,
+        batteryThreshold,
+      });
+    }
+  });
+}
+
+function patchAlgorithmIds(ids, algorithmIds) {
+  const idSet = new Set(ids);
+  const nextIds = [...algorithmIds];
+  const serialized = serializeAlgorithmIds(nextIds);
+  deviceForms.drone.forEach((row) => {
+    if (idSet.has(String(row.id))) {
+      row.algorithmIds = [...nextIds];
+      const baseline = deviceBaselineMap.get(row.id) || {};
+      deviceBaselineMap.set(row.id, {
+        ...baseline,
+        algorithmIds: serialized,
+      });
+    }
+  });
+}
+
+async function saveBatchBatteryThreshold() {
+  if (!batchBatteryTouched.value) return 0;
+  const ids = normalizeIds(selectedDeviceRows.value);
+  if (!ids.length) {
+    ElMessage.warning("请先选择要设置电量的设备");
+    return 0;
+  }
+  const value = Number(batchThreshold.value);
+  if (!Number.isFinite(value)) {
+    ElMessage.warning("请先输入电量阈值");
+    return 0;
+  }
+  const batteryThreshold = clampThreshold(value);
+  await AccompanyingFlyService.droneBatterySet({
+    ids,
+    batteryThreshold,
+  });
+  patchBatteryThreshold(ids, batteryThreshold);
+  return 1;
+}
+
+async function saveAlgorithmChanges() {
+  if (!batchAlgorithmTouched.value) return 0;
+  const ids = normalizeIds(selectedDeviceRows.value);
+  if (!ids.length) {
+    ElMessage.warning("请先选择要配置算法的设备");
+    return 0;
+  }
+  const algorithmIds = Array.isArray(batchAlgorithmIds.value)
+    ? batchAlgorithmIds.value.map((id) => String(id).trim()).filter(Boolean)
+    : [];
+  await AccompanyingFlyService.droneAlgorithmSet({
+    ids,
+    algorithmIds: serializeAlgorithmIds(algorithmIds),
+  });
+  patchAlgorithmIds(ids, algorithmIds);
+  return 1;
 }
 
 async function onSave() {
-  if (!validateThresholds()) return;
   saving.value = true;
-  const payload = buildSavePayload();
   try {
-    await SettingsService.saveAll(payload);
-    ElMessage.success("设置已保存");
-    visible.value = false;
-  } catch (_) {
-    try {
-      await Promise.all([
-        ...payload.thresholds.map((block) => SettingsService.saveBatteryThreshold(block)),
-        ...payload.deviceStatus.map((block) => SettingsService.saveDeviceStatus(block)),
-      ]);
-      ElMessage.success("设置已保存");
-      visible.value = false;
-    } catch (err) {
-      ElMessage.error(err?.message || "保存失败，请稍后重试");
+    const [batteryCount, algorithmCount] = await Promise.all([
+      saveBatchBatteryThreshold(),
+      saveAlgorithmChanges(),
+    ]);
+    if (!batteryCount && !algorithmCount) {
+      ElMessage.warning("暂无需要保存的设置");
+      return;
     }
+    batchBatteryTouched.value = false;
+    batchAlgorithmTouched.value = false;
+    batchThreshold.value = null;
+    batchAlgorithmIds.value = [];
+    ElMessage.success("设置已保存");
+  } catch (err) {
+    ElMessage.error(err?.message || "保存失败，请稍后重试");
   } finally {
     saving.value = false;
   }
@@ -459,10 +681,22 @@ function onClose() {
 
 watch(visible, (open) => {
   if (open) {
-    thresholdTab.value = "drone";
     statusTab.value = "drone";
+    selectedDeviceRows.value = [];
+    batchThreshold.value = null;
+    batchAlgorithmIds.value = [];
+    batchBatteryTouched.value = false;
+    batchAlgorithmTouched.value = false;
     loadSettings();
   }
+});
+
+watch(statusTab, () => {
+  selectedDeviceRows.value = [];
+  batchThreshold.value = null;
+  batchAlgorithmIds.value = [];
+  batchBatteryTouched.value = false;
+  batchAlgorithmTouched.value = false;
 });
 </script>
 
@@ -472,21 +706,25 @@ watch(visible, (open) => {
   inset: 0;
   z-index: 3600;
   display: flex;
-  justify-content: flex-end;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  // background: rgba(0, 0, 0, 0.55);
+  // backdrop-filter: blur(4px);
+  box-sizing: border-box;
 }
 
 .settings-drawer {
-  width: min(680px, 100vw);
-  height: 100%;
+  width: min(1100px, calc(100vw - 48px));
+  max-height: min(82vh, 760px);
   display: flex;
   flex-direction: column;
-  border-left: 1px solid #30363b;
-  // background: #1c222a;
-  background: rgba(3, 6, 10, 0.65);
   color: #fff;
-  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.45);
+  border-radius: 6px;
+  background: rgba(3, 6, 10, 0.65);
+  border: 1px solid #30363b;
+  backdrop-filter: blur(0.375rem);
+  overflow: hidden;
 }
 
 .settings-drawer__head {
@@ -553,7 +791,7 @@ watch(visible, (open) => {
     min-height: 300px;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: visible;
     margin-bottom: 0;
   }
 }
@@ -586,6 +824,27 @@ watch(visible, (open) => {
   &:hover {
     color: #5a74d0;
   }
+
+  &--small {
+    width: 18px;
+    height: 18px;
+    font-size: 15px;
+  }
+}
+
+.settings-table-head-with-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.settings-table-ellipsis {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 :deep(.settings-el-tabs) {
@@ -647,7 +906,7 @@ watch(visible, (open) => {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: visible;
   }
 
   .el-tab-pane {
@@ -655,112 +914,15 @@ watch(visible, (open) => {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-  }
-}
-
-.settings-threshold-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.settings-threshold-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.settings-threshold-row__label {
-  flex-shrink: 0;
-  width: 120px;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.88);
-}
-
-.settings-threshold-row__hint {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.45);
-  white-space: nowrap;
-}
-
-.settings-threshold-empty {
-  padding: 20px 0 24px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  text-align: center;
-
-  &__img {
-    width: 86px;
-    height: 86px;
-    object-fit: contain;
-    display: block;
-    margin-bottom: 2px;
-    opacity: 0.9;
-  }
-
-  &__title {
-    color: rgba(255, 255, 255, 0.88);
-    font-size: 16px;
-    font-weight: 500;
-    line-height: 1.25;
-  }
-
-  &__desc {
-    color: rgba(255, 255, 255, 0.38);
-    font-size: 13px;
-    line-height: 1.3;
-  }
-}
-
-.settings-status-toolbar {
-  flex-shrink: 0;
-  display: flex;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.settings-status-btn {
-  min-width: 88px;
-  height: 32px;
-  padding: 0 16px;
-  border-radius: 4px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-
-  &--primary {
-    border: none;
-    background: #4965c9;
-    color: #fff;
-
-    &:hover {
-      background: #5a74d0;
-    }
-  }
-
-  &--ghost {
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    background: transparent;
-    color: rgba(255, 255, 255, 0.85);
-
-    &:hover {
-      border-color: rgba(255, 255, 255, 0.35);
-    }
+    overflow: visible;
   }
 }
 
 .settings-table-wrap {
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 4px;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
 }
@@ -777,29 +939,78 @@ watch(visible, (open) => {
     background: rgba(82, 196, 26, 0.12);
   }
 
-  &--abnormal {
-    color: #ff4d4f;
-    background: rgba(255, 77, 79, 0.12);
-  }
-
   &--disabled {
     color: rgba(255, 255, 255, 0.45);
     background: rgba(255, 255, 255, 0.06);
   }
 }
 
-.settings-drawer__foot {
-  flex-shrink: 0;
+.settings-status-placeholder {
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 13px;
+}
+
+.settings-batch-bar {
+  min-width: 0;
   display: flex;
-  justify-content: center;
-  padding: 16px 24px 24px;
-  border-top: 1px solid #30363b;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  background: rgba(3, 6, 10, 0.28);
+}
+
+.settings-batch-btn {
+  min-width: 72px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+
+  &:hover:not(:disabled) {
+    border-color: rgba(255, 255, 255, 0.35);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  &--primary {
+    border-color: #4965c9;
+    background: #4965c9;
+    color: #fff;
+
+    &:hover:not(:disabled) {
+      background: #5a74d0;
+    }
+  }
+}
+
+.settings-batch-label {
+  flex-shrink: 0;
+  margin-left: 8px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+}
+
+.settings-batch-algorithm {
+  width: 280px;
+  flex-shrink: 0;
 }
 
 .settings-save-btn {
-  min-width: 200px;
-  height: 40px;
-  padding: 0 32px;
+  min-width: 64px;
+  height: 36px;
+  padding: 0 20px;
   border: none;
   border-radius: 4px;
   background: #4965c9;
@@ -819,6 +1030,27 @@ watch(visible, (open) => {
   }
 }
 
+.settings-batch-bar .settings-save-btn {
+  margin-left: auto;
+}
+
+.settings-cancel-btn {
+  min-width: 64px;
+  height: 36px;
+  padding: 0 20px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+  cursor: pointer;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.35);
+    color: #fff;
+  }
+}
+
 .settings-drawer-fade-enter-active,
 .settings-drawer-fade-leave-active {
   transition: opacity 0.22s ease;
@@ -833,13 +1065,13 @@ watch(visible, (open) => {
   opacity: 0;
 
   .settings-drawer {
-    transform: translateX(100%);
+    transform: translateY(12px) scale(0.98);
   }
 }
 
 :deep(.settings-threshold-input.el-input-number.is-controls-right) {
   --el-input-number-control-height: 18px;
-  width: 132px;
+  width: 88px;
   height: 36px;
   flex-shrink: 0;
 
@@ -886,19 +1118,105 @@ watch(visible, (open) => {
   }
 }
 
+:deep(.settings-threshold-input--batch.el-input-number.is-controls-right) {
+  width: 92px;
+}
+
 :deep(.settings-device-table) {
-  --el-table-bg-color: #15191e;
-  --el-table-tr-bg-color: #15191e;
+  --el-table-bg-color: transprent;
+  --el-table-tr-bg-color: transprent;
   --el-table-header-bg-color: #1c222a;
   --el-table-row-hover-bg-color: rgba(255, 255, 255, 0.04);
   --el-table-border-color: rgba(255, 255, 255, 0.08);
   --el-table-text-color: rgba(255, 255, 255, 0.88);
   --el-table-header-text-color: rgba(255, 255, 255, 0.65);
   background: transparent;
-  height: 100%;
 
   .el-table__empty-text {
     color: rgba(255, 255, 255, 0.45);
+  }
+
+  .el-table__row {
+    position: relative;
+    z-index: 1;
+  }
+
+  .el-table__row:hover {
+    z-index: 20;
+  }
+
+  .el-table__cell,
+  .cell,
+  .el-table__inner-wrapper,
+  .el-table__header-wrapper,
+  .el-table__body,
+  .el-table__row,
+  .el-table__body-wrapper,
+  .el-scrollbar,
+  .el-scrollbar__wrap,
+  .el-scrollbar__view {
+    overflow: visible;
+  }
+}
+
+.settings-algorithm-display {
+  max-width: 160px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  cursor: default;
+}
+
+.settings-algorithm-display__main,
+.settings-algorithm-display__more {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid rgba(73, 101, 201, 0.45);
+  border-radius: 3px;
+  background: rgba(73, 101, 201, 0.16);
+  color: #dbe3ff;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.settings-algorithm-display__main {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-algorithm-display__more {
+  flex-shrink: 0;
+  color: #8fa4ff;
+}
+
+:deep(.settings-batch-algorithm) {
+  .el-select__wrapper {
+    min-height: 32px;
+    background: #03060a;
+    box-shadow: 0 0 0 1px rgba(73, 101, 201, 0.38) inset;
+
+    &.is-focused,
+    &:hover {
+      box-shadow: 0 0 0 1px #4965c9 inset;
+    }
+  }
+
+  .el-select__placeholder,
+  .el-select__selected-item,
+  .el-select__input {
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .el-tag {
+    border-color: rgba(73, 101, 201, 0.45);
+    background: rgba(73, 101, 201, 0.16);
+    color: #dbe3ff;
   }
 }
 
@@ -908,10 +1226,6 @@ watch(visible, (open) => {
 
   .el-switch__core {
     min-width: 52px;
-  }
-
-  .el-switch__inner .is-text {
-    font-size: 11px;
   }
 }
 
@@ -926,5 +1240,46 @@ watch(visible, (open) => {
   max-width: 280px;
   line-height: 1.5;
   font-size: 13px;
+}
+
+.settings-table-tooltip {
+  z-index: 5000 !important;
+  max-width: none !important;
+  white-space: nowrap !important;
+  pointer-events: none;
+}
+
+.settings-algorithm-popper {
+  z-index: 4000 !important;
+  border-color: rgba(73, 101, 201, 0.45) !important;
+  background: #03060a !important;
+
+  .el-select-dropdown {
+    background: #03060a;
+  }
+
+  .el-select-dropdown__item {
+    color: rgba(255, 255, 255, 0.78);
+
+    &.is-hovering,
+    &:hover {
+      background: rgba(73, 101, 201, 0.18);
+      color: #fff;
+    }
+
+    &.is-selected {
+      color: #8fa4ff;
+      font-weight: 600;
+    }
+  }
+
+  .el-select-dropdown__item.is-selected::after {
+    background-color: #4965c9;
+  }
+
+  .el-popper__arrow::before {
+    border-color: rgba(73, 101, 201, 0.45) !important;
+    background: #03060a !important;
+  }
 }
 </style>

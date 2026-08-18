@@ -55,6 +55,16 @@ export function normalizeDroneRecord(raw) {
   }
   const id = raw.id ?? raw.sn;
   const name = raw.name?.trim?.() ? raw.name : raw.sn || "无人机";
+  const switchStatus =
+    raw.switchStatus === 1 || raw.switchStatus === "1"
+      ? 1
+      : raw.switchStatus === 0 || raw.switchStatus === "0"
+        ? 0
+        : raw.enabled === false || raw.enabled === 0
+          ? 1
+          : 0;
+  const modelId = String(raw.modelId ?? raw.model ?? raw.modelName ?? raw.deviceModel ?? "").trim();
+  const algorithmIds = raw.algorithmIds ?? raw.algorithmIdList ?? raw.algorithms ?? [];
   const stableFallbackId =
     raw.sn != null && raw.sn !== ""
       ? `drone-${raw.sn}`
@@ -71,6 +81,10 @@ export function normalizeDroneRecord(raw) {
     streamUrl: raw.streamUrl,
     playUrl: raw.playUrl ?? raw.play_url ?? "",
     aiPlayUrl: raw.aiPlayUrl ?? raw.ai_play_url ?? "",
+    modelId,
+    model: raw.model ?? raw.modelName ?? raw.deviceModel ?? "",
+    batteryThreshold: raw.batteryThreshold ?? raw.threshold ?? raw.lowBatteryThreshold,
+    algorithmIds,
     thirdPartyId: String(raw.thirdPartyId ?? raw.third_party_id ?? "").trim() || undefined,
     longitude: raw.longitude,
     latitude: raw.latitude,
@@ -84,6 +98,7 @@ export function normalizeDroneRecord(raw) {
         // : 28.653,
     description: raw.description,
     createTime: raw.createTime,
+    switchStatus,
     rawStatus: Number.isFinite(statusNum) ? statusNum : undefined,
     active: !offline,
     commOk: !offline,
@@ -329,6 +344,11 @@ export const useDeviceStore = defineStore("device", () => {
           existing.streamUrl = n.streamUrl;
           existing.description = n.description;
           existing.createTime = n.createTime;
+          existing.switchStatus = n.switchStatus;
+          existing.modelId = n.modelId;
+          existing.model = n.model;
+          existing.batteryThreshold = n.batteryThreshold;
+          existing.algorithmIds = n.algorithmIds;
           existing.rawStatus = n.rawStatus;
           existing.active = n.active;
           existing.commOk = n.commOk;

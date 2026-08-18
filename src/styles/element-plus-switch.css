@@ -1,0 +1,30 @@
+/**
+ * el-switch 全局文案尺寸（需在 Element Plus 主题之后加载）
+ * EP 4.x inline-prompt 文案在 .el-switch__core .el-switch__inner-wrapper > span
+ */
+:root {
+  --el-switch-inner-font-size: 12px;
+  --el-switch-inner-font-size-small: 10px;
+}
+
+.el-switch .el-switch__core .el-switch__inner-wrapper,
+.el-switch .el-switch__core .el-switch__inner-wrapper > span,
+.el-table .cell .el-switch .el-switch__core .el-switch__inner-wrapper,
+.el-table .cell .el-switch .el-switch__core .el-switch__inner-wrapper > span {
+  font-size: var(--el-switch-inner-font-size) !important;
+  line-height: 1 !important;
+}
+
+.el-switch.el-switch--small .el-switch__core .el-switch__inner-wrapper,
+.el-switch.el-switch--small .el-switch__core .el-switch__inner-wrapper > span,
+.el-table .cell .el-switch.el-switch--small .el-switch__core .el-switch__inner-wrapper,
+.el-table .cell .el-switch.el-switch--small .el-switch__core .el-switch__inner-wrapper > span {
+  font-size: var(--el-switch-inner-font-size-small) !important;
+  line-height: 1 !important;
+}
+
+.el-switch .el-switch__label,
+.el-switch .el-switch__label * {
+  font-size: var(--el-font-size-small, 13px);
+  line-height: 1;
+}

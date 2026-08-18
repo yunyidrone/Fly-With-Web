@@ -37,3 +37,11 @@ export function assignDroneOrg(data) {
 export function fetchDroneHealthSummary(params) {
   return requestData("/drone/health/summary", { params }, "GET");
 }
+
+/**
+ * 无人机启停用
+ * @param {{ ids: Array<string|number>, switchStatus: 0|1 }} data switchStatus 0启用 1停用
+ */
+export function switchDrone(data) {
+  return requestData("/drone/switch", data, "POST");
+}

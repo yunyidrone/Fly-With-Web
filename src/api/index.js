@@ -29,6 +29,31 @@ export class AccompanyingFlyService {
   static async droneDetail(query) {
     return requestData("/drone/detail", { params: query }, "GET");
   }
+
+  /**
+   * 无人机启停用
+   * @param {{ ids: Array<string|number>, switchStatus: 0|1 }} body switchStatus 0启用 1禁用
+   */
+  static async droneSwitch(body, options = {}) {
+    return requestData("/drone/switch", body, "POST", "application/json", options);
+  }
+
+  /**
+   * 无人机电量阈值设置
+   * @param {{ ids: Array<string|number>, batteryThreshold: number }} body
+   */
+  static async droneBatterySet(body, options = {}) {
+    return requestData("/drone/batterySet", body, "POST", "application/json", options);
+  }
+
+  /**
+   * 无人机算法配置
+   * @param {{ ids: Array<string|number>, algorithmIds: string }} body algorithmIds 为逗号分隔 ID
+   */
+  static async droneAlgorithmSet(body, options = {}) {
+    return requestData("/drone/algorithmSet", body, "POST", "application/json", options);
+  }
+
   /**
    * 伴飞目标列表分页（数据多在 data.records，兼容 list / data 数组）
    * @param {Record<string, any>} [query]

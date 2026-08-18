@@ -117,6 +117,7 @@ const emit = defineEmits(["confirm", "cancel"]);
 const loading = ref(false);
 const submitting = ref(false);
 const rows = ref([]);
+let loadSeq = 0;
 
 function toggleRow(row) {
   if (submitting.value || !isLockdownRowSelectable(row)) return;
@@ -135,23 +136,29 @@ function setAllChecked(checked) {
 }
 
 function resetState() {
+  loadSeq += 1;
   rows.value = [];
   loading.value = false;
   submitting.value = false;
 }
 
 async function loadRows() {
+  const currentSeq = ++loadSeq;
   loading.value = true;
   try {
     const data = await CommonService.controlPointListQuery(LOCKDOWN_LIST_QUERY_PARAMS);
+    if (currentSeq !== loadSeq) return;
     rows.value = normalizeLockdownCheckpointRows(unwrapApiList(data)).map((row) => ({
       ...row,
       checked: false,
     }));
   } catch {
+    if (currentSeq !== loadSeq) return;
     rows.value = [];
   } finally {
-    loading.value = false;
+    if (currentSeq === loadSeq) {
+      loading.value = false;
+    }
   }
 }
 
