@@ -289,6 +289,34 @@ export function resolvePortraitWarningTypeLabel(type) {
   return String(type ?? "").trim();
 }
 
+/** 人像性别 gender：0 未填写 1 男性 2 女性 */
+export const PORTRAIT_GENDER = {
+  UNKNOWN: 0,
+  MALE: 1,
+  FEMALE: 2,
+};
+
+export const PORTRAIT_GENDER_LABELS = {
+  [PORTRAIT_GENDER.UNKNOWN]: "未知",
+  [PORTRAIT_GENDER.MALE]: "男性",
+  [PORTRAIT_GENDER.FEMALE]: "女性",
+};
+
+export const PORTRAIT_GENDER_OPTIONS = Object.entries(PORTRAIT_GENDER_LABELS).map(
+  ([value, label]) => ({
+    value: Number(value),
+    label,
+  }),
+);
+
+export function resolvePortraitGenderLabel(gender) {
+  const key = Number(gender);
+  if (Number.isFinite(key) && PORTRAIT_GENDER_LABELS[key]) {
+    return PORTRAIT_GENDER_LABELS[key];
+  }
+  return PORTRAIT_GENDER_LABELS[PORTRAIT_GENDER.UNKNOWN];
+}
+
 /** @deprecated 使用 PORTRAIT_WARNING_TYPE */
 export const PORTRAIT_WARN_TYPE = PORTRAIT_WARNING_TYPE;
 /** @deprecated 使用 PORTRAIT_WARNING_TYPE_LABELS */

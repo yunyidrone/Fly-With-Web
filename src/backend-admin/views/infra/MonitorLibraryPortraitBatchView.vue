@@ -105,10 +105,10 @@
           </div>
         </el-form-item>
 
-        <el-form-item label="请设置预警类型" prop="warningType" class="portrait-batch__warning-item">
-          <el-select v-model="form.warningType" placeholder="请选择预警类型" style="width: 100%">
+        <el-form-item label="请设置性别" prop="gender" class="portrait-batch__warning-item">
+          <el-select v-model="form.gender" placeholder="请选择性别" style="width: 100%">
             <el-option
-              v-for="option in warnTypeOptions"
+              v-for="option in genderOptions"
               :key="option.value"
               :label="option.label"
               :value="option.value"
@@ -134,14 +134,14 @@
 
 <script setup>
 import { computed, onUnmounted, reactive, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { ArrowLeft, Close, Plus } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { uploadFile, UPLOAD_PATH } from "@backend/api/common.js";
 import { createPortrait } from "@backend/api/monitor-library.js";
 import {
-  PORTRAIT_WARNING_TYPE,
-  PORTRAIT_WARNING_TYPE_OPTIONS,
+  PORTRAIT_GENDER,
+  PORTRAIT_GENDER_OPTIONS,
 } from "@backend/config/constants.js";
 import {
   buildPortraitPayload,
@@ -154,11 +154,12 @@ const ACCEPT_IMAGE_TYPES = ["image/jpeg", "image/png"];
 const ACCEPT_IMAGE_EXT = [".jpg", ".jpeg", ".png"];
 
 const router = useRouter();
+const route = useRoute();
 const formRef = ref();
 const submitting = ref(false);
 const items = ref([]);
 const maxCount = PORTRAIT_BATCH_MAX_COUNT;
-const warnTypeOptions = PORTRAIT_WARNING_TYPE_OPTIONS;
+const genderOptions = PORTRAIT_GENDER_OPTIONS;
 
 let nextId = 1;
 let exceedWarned = false;
@@ -168,7 +169,7 @@ const previewIndex = ref(0);
 const previewUrls = computed(() => items.value.map((item) => item.previewUrl));
 
 const form = reactive({
-  warningType: PORTRAIT_WARNING_TYPE.CONTROL,
+  gender: PORTRAIT_GENDER.UNKNOWN,
   portraits: [],
 });
 
@@ -182,7 +183,7 @@ function validatePortraits(_rule, _value, callback) {
 
 const rules = {
   portraits: [{ required: true, validator: validatePortraits, trigger: "change" }],
-  warningType: [{ required: true, message: "请选择预警类型", trigger: "change" }],
+  gender: [{ required: true, message: "请选择性别", trigger: "change" }],
 };
 
 function syncPortraitsField() {
@@ -197,6 +198,25 @@ function openPreview(index) {
 }
 
 function goBack() {
+  const source = String(route.query.source ?? "").trim();
+  const groupId = route.query.groupId;
+  if (source === "library") {
+    router.push({
+      path: `${INFRA_BASE}/library`,
+      query: { tab: "portrait" },
+    });
+    return;
+  }
+  if (groupId) {
+    router.push({
+      name: "BackendPortraitList",
+      params: { groupId },
+      query: route.query.groupName
+        ? { groupName: route.query.groupName, source: "group" }
+        : { source: "group" },
+    });
+    return;
+  }
   router.push({
     path: `${INFRA_BASE}/library`,
     query: { tab: "portrait" },
@@ -305,7 +325,8 @@ async function submit() {
           buildPortraitPayload({
             name: item.name,
             imageUrl,
-            warningType: form.warningType,
+            gender: form.gender,
+            groupId: route.query.groupId,
           }),
         );
         successCount += 1;

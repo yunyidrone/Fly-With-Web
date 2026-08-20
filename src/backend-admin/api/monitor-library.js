@@ -1,5 +1,7 @@
 import { requestData, unwrapApiList } from "@backend/utils/request.js";
 import {
+  normalizePersonGroupRecord,
+  normalizePersonGroupList,
   normalizePortraitList,
   normalizePortraitRecord,
   normalizeVehicleList,
@@ -13,19 +15,63 @@ function appendTimeParams(queryParams, params) {
   if (endTime) queryParams.endTime = endTime;
 }
 
+export async function fetchPersonGroupPage(params) {
+  const { keyword, id, groupName, current, pageSize } = params || {};
+  const queryParams = { current, pageSize };
+
+  const idValue = String(id ?? "").trim();
+  const nameValue = String(groupName ?? "").trim();
+  const keywordValue = String(keyword ?? "").trim();
+
+  if (idValue) {
+    queryParams.id = idValue;
+  } else if (nameValue) {
+    queryParams.groupName = nameValue;
+  } else if (keywordValue) {
+    if (/[\u4e00-\u9fa5]/.test(keywordValue)) {
+      queryParams.groupName = keywordValue;
+    } else {
+      queryParams.id = keywordValue;
+    }
+  }
+
+  const data = await requestData("/personGroup/pageQuery", { params: queryParams }, "GET");
+  if (data && Array.isArray(data.records)) {
+    return { ...data, records: normalizePersonGroupList(data.records) };
+  }
+  return { records: normalizePersonGroupList(unwrapApiList(data)), total: unwrapApiList(data).length };
+}
+
+export function createPersonGroup(data) {
+  return requestData("/personGroup/add", data, "POST");
+}
+
+export function updatePersonGroup(data) {
+  return requestData("/personGroup/update", data, "POST");
+}
+
+export function deletePersonGroup(data) {
+  return requestData("/personGroup/delete", data, "POST");
+}
+
+export async function fetchPersonGroupDetail(params) {
+  const data = await requestData("/personGroup/detail", { params }, "GET");
+  return normalizePersonGroupRecord(data);
+}
+
 export async function fetchPortraitPage(params) {
-  const { orgId, name, warningType, warnType, dateRange, startTime, endTime, ...rest } = params || {};
+  const { orgId, groupId, name, dateRange, startTime, endTime, ...rest } = params || {};
   const queryParams = { ...rest };
   if (orgId != null && orgId !== "") {
     queryParams.orgId = orgId;
   }
+  const groupIdValue = String(groupId ?? "").trim();
+  queryParams.groupId = groupIdValue;
+  if (!groupIdValue) {
+    return { records: [], total: 0 };
+  }
   const nameTrim = String(name ?? "").trim();
   if (nameTrim) queryParams.name = nameTrim;
-
-  const typeValue = warningType ?? warnType;
-  if (typeValue !== "" && typeValue != null) {
-    queryParams.warningType = typeValue;
-  }
 
   appendTimeParams(queryParams, { dateRange, startTime, endTime });
 

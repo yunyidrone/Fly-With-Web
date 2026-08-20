@@ -302,7 +302,37 @@ export const backendRoutes = [
             },
           },
           {
-            path: "portraits/new",
+            path: "person-groups/new",
+            name: "BackendPersonGroupCreate",
+            component: () => import("@backend/views/infra/MonitorLibraryGroupFormView.vue"),
+            meta: {
+              title: "新增人脸库",
+              activeMenu: `${INFRA_BASE}/library`,
+              roles: ["super_admin", "org_admin"],
+            },
+          },
+          {
+            path: "person-groups/:id",
+            name: "BackendPersonGroupEdit",
+            component: () => import("@backend/views/infra/MonitorLibraryGroupFormView.vue"),
+            meta: {
+              title: "编辑人脸库",
+              activeMenu: `${INFRA_BASE}/library`,
+              roles: ["super_admin", "org_admin"],
+            },
+          },
+          {
+            path: "groups/:groupId",
+            name: "BackendPortraitList",
+            component: () => import("@backend/views/infra/MonitorLibraryPortraitListView.vue"),
+            meta: {
+              title: "人脸管理",
+              activeMenu: `${INFRA_BASE}/library`,
+              roles: ["super_admin", "org_admin"],
+            },
+          },
+          {
+            path: "groups/:groupId/portraits/new",
             name: "BackendPortraitCreate",
             component: () => import("@backend/views/infra/MonitorLibraryPortraitFormView.vue"),
             meta: {
@@ -312,7 +342,7 @@ export const backendRoutes = [
             },
           },
           {
-            path: "portraits/:id",
+            path: "groups/:groupId/portraits/:id",
             name: "BackendPortraitEdit",
             component: () => import("@backend/views/infra/MonitorLibraryPortraitFormView.vue"),
             meta: {

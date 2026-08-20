@@ -87,6 +87,9 @@
               'device-card--clickable': panel.key === 'drone',
               'device-card--stream-active':
                 streamActiveDeviceId && streamActiveDeviceId === device.id,
+              'device-card--disabled':
+                isDroneResource(panel.key, panel.emptyResourceName) &&
+                !isDroneEnabled(device),
             }"
             @click="handleDeviceCardClick(panel, device)"
           >
@@ -105,7 +108,12 @@
                   </span>
                 </div>
                 <div class="device-card__meta">
-                  <span>{{ device.commOk ? "在线" : "离线" }}</span>
+                  <span
+                    class="device-card__online"
+                    :class="{ 'device-card__online--ok': device.commOk }"
+                  >
+                    {{ device.commOk ? "在线" : "离线" }}
+                  </span>
                   <span class="device-card__meta-sep">|</span>
                   <span>SN：{{ device.sn || "—" }}</span>
                   <span class="device-card__meta-sep">|</span>
@@ -117,8 +125,28 @@
                 </div>
               </div>
             </div>
-            <div v-if="device.isEscorting" class="device-card__recall-row">
+            <div
+              v-if="
+                isDroneResource(panel.key, panel.emptyResourceName) ||
+                device.isEscorting
+              "
+              class="device-card__actions"
+            >
               <button
+                v-if="isDroneResource(panel.key, panel.emptyResourceName)"
+                type="button"
+                class="action-btn switch-btn"
+                :class="
+                  isDroneEnabled(device)
+                    ? 'switch-btn--disable'
+                    : 'switch-btn--enable'
+                "
+                @click.stop="handleDroneSwitchClick(device)"
+              >
+                {{ isDroneEnabled(device) ? "停用" : "启用" }}
+              </button>
+              <button
+                v-if="device.isEscorting"
                 type="button"
                 class="action-btn recall-btn"
                 @click.stop="handleRecall(device)"
@@ -142,6 +170,7 @@
 
 <script setup>
 import { ref, computed, reactive, onMounted } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { useDeviceStore } from "@/stores/device.js";
 import { AccompanyingFlyService } from "@/api";
 import { unwrapApiList } from "@/utils/request.js";
@@ -335,6 +364,56 @@ function deviceCardStatusLabel(device) {
   if (device.isEscorting) return "伴飞中";
   if (device.status === "returning") return device.statusText || "返航中";
   return device.statusText || "就绪";
+}
+
+function isDroneEnabled(device) {
+  return device?.switchStatus !== 1;
+}
+
+const RESOURCE_CONFIRM_Z_INDEX = 5000;
+
+async function handleDroneSwitchClick(device) {
+  const enabled = isDroneEnabled(device);
+  const nextEnabled = !enabled;
+
+  if (!nextEnabled && device?.isEscorting) {
+    ElMessage.warning("当前设备正在执行伴飞任务，不可禁用！");
+    return;
+  }
+
+  if (!nextEnabled) {
+    try {
+      await ElMessageBox.confirm(
+        "是否快捷禁用该设备？不慎禁用可在设置内打开",
+        "停用设备",
+        {
+          confirmButtonText: "确定",
+          cancelButtonText: "取消",
+          type: "warning",
+          zIndex: RESOURCE_CONFIRM_Z_INDEX,
+        },
+      );
+    } catch {
+      return;
+    }
+  }
+
+  const id = String(device?.id || "").trim();
+  if (!id) {
+    ElMessage.warning("缺少设备 ID");
+    return;
+  }
+
+  try {
+    await AccompanyingFlyService.droneSwitch({
+      ids: [id],
+      switchStatus: nextEnabled ? 0 : 1,
+    });
+    device.switchStatus = nextEnabled ? 0 : 1;
+    ElMessage.success(nextEnabled ? "启用成功" : "停用成功");
+  } catch (error) {
+    ElMessage.error(error?.message || "操作失败");
+  }
 }
 </script>
 
@@ -681,7 +760,7 @@ function deviceCardStatusLabel(device) {
     flex-direction: row;
     align-items: center;
     gap: 16px;
-    padding: 12px;
+    padding: 12px 12px 0 12px;
     min-width: 0;
   }
 
@@ -749,6 +828,22 @@ function deviceCardStatusLabel(device) {
     user-select: none;
   }
 
+  &__online {
+    color: rgba(255, 255, 255, 0.42);
+
+    &--ok {
+      color: #52c41a;
+    }
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 0 12px 10px;
+  }
+
   &__status {
     flex-shrink: 0;
     font-size: 14px;
@@ -772,12 +867,6 @@ function deviceCardStatusLabel(device) {
     &--returning {
       color: #e6c35c;
     }
-  }
-
-  &__recall-row {
-    padding: 0 12px 10px;
-    display: flex;
-    justify-content: flex-end;
   }
 
   &--clickable {
@@ -807,10 +896,18 @@ function deviceCardStatusLabel(device) {
       background: rgba(255, 255, 255, 0.10);
     }
   }
+
+  &--disabled {
+    opacity: 0.72;
+
+    .device-card__name {
+      color: rgba(255, 255, 255, 0.62);
+    }
+  }
 }
 
 .action-btn {
-  padding: 8px 16px;
+  padding: 4px 16px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
@@ -832,6 +929,24 @@ function deviceCardStatusLabel(device) {
     background: rgba(73, 101, 201, 0.2);
     border-color: #5b74d8;
     color: #fff;
+  }
+}
+
+.switch-btn {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.88);
+
+  &--disable:hover:not(:disabled) {
+    background: rgba(234, 55, 95, 0.12);
+    border-color: rgba(234, 55, 95, 0.55);
+    color: #ff8fab;
+  }
+
+  &--enable:hover:not(:disabled) {
+    background: rgba(82, 196, 26, 0.12);
+    border-color: rgba(82, 196, 26, 0.55);
+    color: #95de64;
   }
 }
 

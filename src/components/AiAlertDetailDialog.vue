@@ -1,5 +1,5 @@
 <!--
- * @Description: AI 识别事件详情弹窗（MQTT 推送 + alertCheck 通过后展示）
+ * @Description: AI 识别事件详情弹窗（alertCheck 返回 2000 时展示，识别结果取自接口 data）
 -->
 <template>
   <Teleport to="body">
@@ -101,7 +101,7 @@ const coordText = computed(() => formatAiAlertCoord(props.detail));
 
 const previewImage = computed(() => {
   const d = props.detail;
-  return String(d?.imageUrl ?? d?.image ?? "").trim();
+  return String(d?.imageUrl ?? d?.originalImageUrl ?? d?.image ?? "").trim();
 });
 </script>
 

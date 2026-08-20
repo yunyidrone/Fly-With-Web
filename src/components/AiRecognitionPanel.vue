@@ -63,7 +63,7 @@
 
         <span class="ai-row__result">{{ event.result }}</span>
 
-        <span class="ai-row__coord">{{ event.coord || "经纬度" }}</span>
+        <span class="ai-row__coord">{{ event.coord }}</span>
 
         <!-- <div class="ai-row__ops">
 

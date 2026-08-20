@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import { TaskService } from "@/api/task.js";
+import { PersonGroupService } from "@/api/personGroup.js";
 import { normalizeWarnDataToFlatEvents } from "@/utils/plan-algorithm-data.js";
 import { mqttService } from "@/utils/mqtt-service.js";
 import {
@@ -11,6 +12,52 @@ import {
 
 /** TODO: 联调完成后改为 false，仅 MQTT 推送触发弹窗 */
 const TEST_ALERT_WITH_FIRST_HISTORY_ITEM = false;
+
+/** @type {string[] | null} */
+let cachedPersonGroupIds = null;
+/** @type {Promise<string[]> | null} */
+let personGroupIdsPromise = null;
+
+function resetPersonGroupIdsCache() {
+  cachedPersonGroupIds = null;
+  personGroupIdsPromise = null;
+}
+
+async function resolvePersonGroupIds() {
+  if (cachedPersonGroupIds) return cachedPersonGroupIds;
+
+  if (!personGroupIdsPromise) {
+    personGroupIdsPromise = PersonGroupService.getIds()
+      .then((ids) => {
+        cachedPersonGroupIds = ids;
+        return ids;
+      })
+      .catch((error) => {
+        personGroupIdsPromise = null;
+        throw error;
+      });
+  }
+
+  return personGroupIdsPromise;
+}
+
+/** @param {unknown} data alertCheck 返回的 data，仅用作弹窗识别结果 */
+function resolveAlertCheckAiResult(data) {
+  if (data == null) return "";
+  if (typeof data === "string" || typeof data === "number") {
+    return String(data).trim();
+  }
+  if (typeof data === "object") {
+    const row = /** @type {Record<string, unknown>} */ (data);
+    const text =
+      row.aiResult ??
+      row.recognizeResult ??
+      row.recognitionResult ??
+      row.result;
+    return String(text ?? "").trim();
+  }
+  return "";
+}
 
 async function showAlertDetail(ev, alertDetail, alertDetailVisible) {
   if (!ev) return;
@@ -61,15 +108,41 @@ export function useDroneAiRecognition(options = {}) {
     aiEvents.value = [item, ...aiEvents.value];
   }
 
+  function patchAiEventRecognitionResult(eventKey, aiResult) {
+    const text = String(aiResult ?? "").trim();
+    const key = String(eventKey ?? "").trim();
+    if (!key || !text) return;
+
+    aiEvents.value = aiEvents.value.map((row) =>
+      row.key === key ? { ...row, result: text } : row,
+    );
+  }
+
   async function tryShowAlertDetail(ev) {
     const aiResult = String(ev?.aiResult ?? "").trim();
     if (!aiResult) return;
 
     try {
-      const shouldAlert = await TaskService.alertCheck({ aiResult });
-      if (shouldAlert === true) {
-        await showAlertDetail(ev, alertDetail, alertDetailVisible);
-      }
+      const groupIds = await resolvePersonGroupIds();
+      const alertData = await TaskService.alertCheck({
+        aiResult,
+        name: String(ev?.name ?? ev?.warnType ?? ev?.type ?? "").trim(),
+        originalImageUrl: String(
+          ev?.originalImageUrl ?? ev?.imageUrl ?? ev?.image ?? "",
+        ).trim(),
+        groupIds,
+      });
+      const checkedAiResult = resolveAlertCheckAiResult(alertData);
+      const finalAiResult = checkedAiResult || aiResult;
+      patchAiEventRecognitionResult(ev?.id, finalAiResult);
+      await showAlertDetail(
+        {
+          ...ev,
+          aiResult: finalAiResult,
+        },
+        alertDetail,
+        alertDetailVisible,
+      );
     } catch (error) {
       console.warn("[AI识别] alertCheck 失败", error);
     }
@@ -120,8 +193,11 @@ export function useDroneAiRecognition(options = {}) {
       clearSubscription();
       waitingThirdPartyId = false;
 
-      let historyEvents = [];
-      try {
+      void resolvePersonGroupIds().catch((error) => {
+        console.warn("[AI识别] 人脸库 ID 加载失败", error);
+      });
+
+      let historyEvents = [];      try {
         historyEvents = await loadWarningHistory(thirdPartyId);
       } catch (error) {
         console.warn("[AI识别] 告警历史加载失败", error);
@@ -212,8 +288,8 @@ export function useDroneAiRecognition(options = {}) {
     clearSubscription();
     resetEvents();
     closeAlertDetail();
+    resetPersonGroupIdsCache();
   }
-
   return {
     aiEvents,
     alertDetail,

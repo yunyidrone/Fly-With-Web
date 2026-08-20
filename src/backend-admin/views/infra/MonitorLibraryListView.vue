@@ -26,58 +26,36 @@
     <div class="infra-page__section infra-page__section--content">
       <div class="monitor-library__toolbar">
         <el-tabs v-model="activeTab" class="monitor-library__tabs" @tab-change="handleTabChange">
-          <el-tab-pane label="人像管理" name="portrait" />
+          <el-tab-pane label="人脸库" name="portrait" />
           <el-tab-pane label="车辆管理" name="vehicle" />
         </el-tabs>
 
         <div class="monitor-library__actions">
-          <el-button class="infra-page__create-btn" @click="goBatchCreate">
-            批量新建
-          </el-button>
-          <el-button class="infra-page__create-btn" @click="goCreate">
-            {{ createButtonLabel }}
+          <template v-if="activeTab === 'portrait'">
+            <el-button class="infra-page__create-btn" @click="openCreateGroup">
+              新增人脸库
+            </el-button>
+          </template>
+          <el-button v-else class="infra-page__create-btn" @click="goCreate">
+            新建车辆
           </el-button>
         </div>
       </div>
 
       <div v-if="activeTab === 'portrait'" class="infra-page__filters">
         <el-input
-          v-model="portraitQuery.name"
-          class="infra-page__filter-item infra-page__filter-item--name"
-          placeholder="人像名称"
+          v-model="personGroupQuery.keyword"
+          class="infra-page__filter-item infra-page__filter-item--group"
+          placeholder="输入ID或名称进行模糊搜索"
           clearable
-          @keyup.enter="searchPortrait"
-          @clear="searchPortrait"
+          @keyup.enter="searchPersonGroup"
+          @clear="searchPersonGroup"
         />
-        <el-select
-          v-model="portraitQuery.warningType"
-          class="infra-page__filter-item infra-page__filter-item--warning-type"
-          placeholder="全部预警类型"
-          clearable
-          @change="searchPortrait"
-          @clear="searchPortrait"
-        >
-          <el-option
-            v-for="item in warningTypeOptions"
-            :key="item.value"
-            :label="item.label"
-            :value="item.value"
-          />
-        </el-select>
-        <!-- <el-date-picker
-          v-model="portraitQuery.dateRange"
-          class="infra-page__filter-item infra-page__filter-item--date-range"
-          type="daterange"
-          range-separator="-"
-          start-placeholder="开始时间"
-          end-placeholder="结束时间"
-          value-format="YYYY-MM-DD"
-          format="YYYY-MM-DD"
-          clearable
-          @change="handlePortraitDateChange"
-        /> -->
-        <el-button type="primary" @click="searchPortrait">查询</el-button>
-        <el-button @click="resetPortraitFilters">重置</el-button>
+        <el-button type="primary" @click="searchPersonGroup">
+          <el-icon class="monitor-library__search-icon"><Search /></el-icon>
+          查询
+        </el-button>
+        <el-button @click="resetPersonGroupFilters">重置</el-button>
       </div>
 
       <div v-if="activeTab === 'vehicle'" class="infra-page__filters">
@@ -104,63 +82,72 @@
             :value="item.value"
           />
         </el-select>
-        <!-- <el-date-picker
-          v-model="vehicleQuery.dateRange"
-          class="infra-page__filter-item infra-page__filter-item--date-range"
-          type="daterange"
-          range-separator="-"
-          start-placeholder="开始时间"
-          end-placeholder="结束时间"
-          value-format="YYYY-MM-DD"
-          format="YYYY-MM-DD""
-          clearable
-          @change="handleVehicleDateChange"
-        /> -->
         <el-button type="primary" @click="searchVehicle">查询</el-button>
         <el-button @click="resetVehicleFilters">重置</el-button>
       </div>
 
-      <el-table v-if="activeTab === 'portrait'" v-loading="portraitLoading" :data="portraitRecords" stripe class="monitor-library__table">
-        <el-table-column label="图像" width="120">
-          <template #default="{ row }">
-            <el-image
-              v-if="row.imageUrl"
-              :src="row.imageUrl"
-              :preview-src-list="[row.imageUrl]"
-              :preview-z-index="3000"
-              fit="contain"
-              preview-teleported
-              class="monitor-library__image"
-            />
-            <div v-else class="monitor-library__image monitor-library__image--placeholder">
-              <el-icon :size="28"><Picture /></el-icon>
+      <div v-if="activeTab === 'portrait'" v-loading="personGroupLoading" class="face-library">
+        <div v-if="personGroupRecords.length" class="face-library__grid">
+          <div v-for="row in personGroupRecords" :key="row.id" class="face-library-card">
+            <div class="face-library-card__header">
+              <div class="face-library-card__name">
+                <el-icon class="face-library-card__icon"><FolderOpened /></el-icon>
+                <span class="face-library-card__title" :title="row.groupName">{{ row.groupName }}</span>
+              </div>
+              <el-button class="face-library-card__add-btn" @click="goCreatePortrait(row)">
+                新增人脸
+              </el-button>
             </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="id" label="ID" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="name" label="姓名" min-width="120" show-overflow-tooltip />
-        <el-table-column label="预警类型" min-width="120" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ row.warningTypeLabel || "-" }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="createTime" label="创建时间" min-width="170" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ row.createTime || "-" }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="goEdit(row.id)">编辑</el-button>
-            <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
-          </template>
-        </el-table-column>
-        <template #empty>
-          <div class="monitor-library__empty">暂无数据</div>
-        </template>
-      </el-table>
 
-      <el-table v-else v-loading="vehicleLoading" :data="vehicleRecords" stripe class="monitor-library__table">
+            <div class="face-library-card__body">
+              <div class="face-library-card__row">
+                <span>ID:</span>
+                <span class="face-library-card__value">{{ row.id }}</span>
+              </div>
+              <div class="face-library-card__row">
+                <span class="face-library-card__label">人员数量:</span>
+                <span class="face-library-card__value">{{ row.personCount ?? 0 }}</span>
+              </div>
+              <div class="face-library-card__row">
+                <span class="face-library-card__label">备注:</span>
+                <span class="face-library-card__value">{{ row.tag || "-" }}</span>
+              </div>
+              <div class="face-library-card__row">
+                <span class="face-library-card__label">描述:</span>
+                <span class="face-library-card__value">{{ row.description || "暂无描述" }}</span>
+              </div>
+              <div class="face-library-card__view-wrap">
+                <el-button link type="primary" class="face-library-card__view-btn" @click="goPortraitList(row)">
+                  查看
+                  <el-icon><ArrowRight /></el-icon>
+                </el-button>
+              </div>
+            </div>
+
+            <div class="face-library-card__footer">
+              <button type="button" class="face-library-card__footer-btn" @click="openEditGroup(row)">
+                编辑
+              </button>
+              <button
+                type="button"
+                class="face-library-card__footer-btn face-library-card__footer-btn--danger"
+                @click="handleDeleteGroup(row)"
+              >
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
+        <div v-else class="monitor-library__empty">暂无人脸库</div>
+      </div>
+
+      <el-table
+        v-else
+        v-loading="vehicleLoading"
+        :data="vehicleRecords"
+        stripe
+        class="monitor-library__table"
+      >
         <el-table-column label="车牌号" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
             {{ formatPlateNumberDisplay(row.plateNo || row.plateNumber) || "-" }}
@@ -209,36 +196,31 @@
         />
       </div>
     </div>
+
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { Picture, Refresh } from "@element-plus/icons-vue";
+import { ArrowRight, FolderOpened, Refresh, Search } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
-  deletePortrait,
+  deletePersonGroup,
   deleteVehicle,
-  fetchPortraitPage,
+  fetchPersonGroupPage,
   fetchVehiclePage,
 } from "@backend/api/monitor-library.js";
 import OrgCascader from "@backend/components/OrgCascader.vue";
 import { useOrgCascader } from "@backend/composables/useOrgCascader.js";
 import { useTableQuery } from "@backend/composables/useTableQuery.js";
-import {
-  PORTRAIT_WARNING_TYPE_OPTIONS,
-  VEHICLE_POWER_TYPE,
-  VEHICLE_POWER_TYPE_OPTIONS,
-} from "@backend/config/constants.js";
-import { INFRA_BASE } from "@backend/router/routes.js";
+import { VEHICLE_POWER_TYPE, VEHICLE_POWER_TYPE_OPTIONS } from "@backend/config/constants.js";
 import { useAuthStore } from "@/stores/auth.js";
 import { formatPlateNumberDisplay } from "@backend/utils/monitor-library.js";
 
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
-const warningTypeOptions = PORTRAIT_WARNING_TYPE_OPTIONS;
 const powerTypeOptions = VEHICLE_POWER_TYPE_OPTIONS;
 
 function resolveLibraryTab(value) {
@@ -256,20 +238,17 @@ const {
 } = useOrgCascader({ autoSelectFirst: false });
 
 const {
-  loading: portraitLoading,
-  records: portraitRecords,
-  total: portraitTotal,
-  query: portraitQuery,
-  load: loadPortrait,
-  search: searchPortrait,
-  onPageChange: onPortraitPageChange,
-  onSizeChange: onPortraitSizeChange,
-} = useTableQuery(fetchPortraitPage, {
+  loading: personGroupLoading,
+  records: personGroupRecords,
+  total: personGroupTotal,
+  query: personGroupQuery,
+  load: loadPersonGroup,
+  search: searchPersonGroup,
+  onPageChange: onPersonGroupPageChange,
+  onSizeChange: onPersonGroupSizeChange,
+} = useTableQuery(fetchPersonGroupPage, {
   pageSize: 10,
-  orgId: null,
-  name: "",
-  warningType: "",
-  dateRange: null,
+  keyword: "",
 });
 
 const {
@@ -289,24 +268,19 @@ const {
   dateRange: null,
 });
 
-const createButtonLabel = computed(() =>
-  activeTab.value === "portrait" ? "新建人像" : "新建车辆",
-);
-
 const currentLoading = computed(() =>
-  activeTab.value === "portrait" ? portraitLoading.value : vehicleLoading.value,
+  activeTab.value === "portrait" ? personGroupLoading.value : vehicleLoading.value,
 );
 const currentTotal = computed(() =>
-  activeTab.value === "portrait" ? portraitTotal.value : vehicleTotal.value,
+  activeTab.value === "portrait" ? personGroupTotal.value : vehicleTotal.value,
 );
 const currentQuery = computed(() =>
-  activeTab.value === "portrait" ? portraitQuery : vehicleQuery,
+  activeTab.value === "portrait" ? personGroupQuery : vehicleQuery,
 );
 
 function syncOrgQuery() {
   const orgId =
     selectedOrgId.value != null && selectedOrgId.value !== "" ? selectedOrgId.value : null;
-  portraitQuery.orgId = orgId;
   vehicleQuery.orgId = orgId;
 }
 
@@ -315,7 +289,7 @@ async function loadOrgOptions() {
 }
 
 function reloadCurrent() {
-  return activeTab.value === "portrait" ? loadPortrait() : loadVehicle();
+  return activeTab.value === "portrait" ? loadPersonGroup() : loadVehicle();
 }
 
 function handleTabChange(name) {
@@ -329,31 +303,14 @@ function handleTabChange(name) {
 
 function onPageChange(page) {
   return activeTab.value === "portrait"
-    ? onPortraitPageChange(page)
+    ? onPersonGroupPageChange(page)
     : onVehiclePageChange(page);
 }
 
 function onSizeChange(size) {
   return activeTab.value === "portrait"
-    ? onPortraitSizeChange(size)
+    ? onPersonGroupSizeChange(size)
     : onVehicleSizeChange(size);
-}
-
-function handlePortraitDateChange(value) {
-  portraitQuery.dateRange = value ?? null;
-  searchPortrait();
-}
-
-function handleVehicleDateChange(value) {
-  vehicleQuery.dateRange = value ?? null;
-  searchVehicle();
-}
-
-function resetPortraitFilters() {
-  portraitQuery.name = "";
-  portraitQuery.warningType = "";
-  portraitQuery.dateRange = null;
-  searchPortrait();
 }
 
 function resetVehicleFilters() {
@@ -363,65 +320,85 @@ function resetVehicleFilters() {
   searchVehicle();
 }
 
+function resetPersonGroupFilters() {
+  personGroupQuery.keyword = "";
+  searchPersonGroup();
+}
+
 function handleOrgChange(orgId) {
   selectedOrgId.value = orgId;
   if (authStore.isSuperAdmin) {
     authStore.setCurrentOrgId(orgId);
   }
   syncOrgQuery();
-  searchPortrait();
+  searchPersonGroup();
   searchVehicle();
 }
 
-function goCreate() {
-  if (activeTab.value === "portrait") {
-    router.push({ name: "BackendPortraitCreate", query: { tab: "portrait" } });
-    return;
-  }
-  router.push({ name: "BackendMonitorVehicleCreate", query: { tab: "vehicle" } });
+function portraitListQuery(row, source = "") {
+  const query = {};
+  if (row.groupName) query.groupName = row.groupName;
+  if (source) query.source = source;
+  return query;
 }
 
-function goBatchCreate() {
-  if (activeTab.value === "portrait") {
-    router.push({
-      path: `${INFRA_BASE}/library/portrait-batch`,
-      query: { tab: "portrait" },
-    });
-    return;
-  }
+function goPortraitList(row) {
   router.push({
-    path: `${INFRA_BASE}/library/vehicle-batch`,
-    query: { tab: "vehicle" },
+    name: "BackendPortraitList",
+    params: { groupId: row.id },
+    query: portraitListQuery(row, "group"),
   });
 }
 
+function goCreatePortrait(row) {
+  router.push({
+    name: "BackendPortraitCreate",
+    params: { groupId: row.id },
+    query: portraitListQuery(row, "library"),
+  });
+}
+
+function goCreate() {
+  router.push({ name: "BackendMonitorVehicleCreate", query: { tab: "vehicle" } });
+}
+
 function goEdit(id) {
-  if (activeTab.value === "portrait") {
-    router.push({ name: "BackendPortraitEdit", params: { id }, query: { tab: "portrait" } });
-    return;
-  }
   router.push({ name: "BackendMonitorVehicleEdit", params: { id }, query: { tab: "vehicle" } });
 }
 
-async function handleDelete(row) {
-  const isPortrait = activeTab.value === "portrait";
-  const name = isPortrait
-    ? row.name
-    : formatPlateNumberDisplay(row.plateNo || row.plateNumber);
-  const label = isPortrait ? "人像管理" : "车辆管理";
+function openCreateGroup() {
+  router.push({ name: "BackendPersonGroupCreate" });
+}
 
-  await ElMessageBox.confirm(`确定删除${label}「${name || row.id}」吗？`, "删除确认", {
+function openEditGroup(row) {
+  router.push({ name: "BackendPersonGroupEdit", params: { id: row.id } });
+}
+
+async function handleDeleteGroup(row) {
+  await ElMessageBox.confirm(
+    `确定删除人脸库「${row.groupName || row.id}」吗？删除后将同时删除库内所有人员数据，且不可恢复。`,
+    "删除确认",
+    {
+      type: "warning",
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
+    },
+  );
+
+  await deletePersonGroup({ id: row.id });
+  ElMessage.success("删除成功");
+  await loadPersonGroup();
+}
+
+async function handleDelete(row) {
+  const name = formatPlateNumberDisplay(row.plateNo || row.plateNumber);
+  await ElMessageBox.confirm(`确定删除车辆管理「${name || row.id}」吗？`, "删除确认", {
     type: "warning",
     confirmButtonText: "删除",
     cancelButtonText: "取消",
   });
 
-  if (isPortrait) {
-    await deletePortrait({ id: row.id });
-  } else {
-    await deleteVehicle({ id: row.id });
-  }
-
+  await deleteVehicle({ id: row.id });
   ElMessage.success("删除成功");
   await reloadCurrent();
 }
@@ -433,7 +410,7 @@ watch(
     if (String(selectedOrgId.value) !== String(value)) {
       syncSelectedOrgId(value);
       syncOrgQuery();
-      searchPortrait();
+      searchPersonGroup();
       searchVehicle();
     }
   },
@@ -463,33 +440,16 @@ onMounted(async () => {
   }
 }
 
-.infra-page__filter-item--name {
-  width: 200px;
-}
-
-.infra-page__filter-item--warning-type {
-  width: 180px;
-}
-
 .infra-page__filter-item--plate {
   width: 200px;
 }
 
-.infra-page__filter-item--power-type {
-  width: 180px;
+.infra-page__filter-item--group {
+  width: 240px;
 }
 
-.infra-page__filter-item--date-range {
-  width: 220px;
-
-  :deep(.el-range-input) {
-    font-size: 13px;
-  }
-
-  :deep(.el-range-separator) {
-    padding: 0 4px;
-    flex: none;
-  }
+.infra-page__filter-item--power-type {
+  width: 180px;
 }
 
 .monitor-library__toolbar {
@@ -544,6 +504,10 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
+.monitor-library__search-icon {
+  margin-right: 4px;
+}
+
 .monitor-library__table {
   :deep(.el-table__empty-block) {
     min-height: 360px;
@@ -559,24 +523,128 @@ onMounted(async () => {
   font-size: 14px;
 }
 
-.monitor-library__image {
-  width: 72px;
-  height: 72px;
-  border-radius: 4px;
-  border: 1px solid #ebeef5;
-  background: #f5f7fa;
+.face-library {
+  min-height: 360px;
+}
 
-  :deep(.el-image__inner) {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
+.face-library__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.face-library-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.face-library-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 16px 8px;
+}
+
+.face-library-card__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.face-library-card__icon {
+  flex-shrink: 0;
+  color: var(--el-color-primary);
+}
+
+.face-library-card__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.face-library-card__add-btn {
+  --el-button-text-color: #d87533;
+  --el-button-border-color: #d87533;
+  --el-button-hover-text-color: #d87533;
+  --el-button-hover-border-color: #d87533;
+  --el-button-hover-bg-color: #fdf6f0;
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.face-library-card__body {
+  flex: 1;
+  padding: 4px 16px 12px;
+}
+
+.face-library-card__row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.face-library-card__label {
+  width: 64px;
+  flex-shrink: 0;
+  text-align: right;
+  color: #909399;
+}
+
+.face-library-card__value {
+  min-width: 0;
+  color: #606266;
+  word-break: break-all;
+}
+
+.face-library-card__view-wrap {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.face-library-card__view-btn {
+  :deep(.el-icon) {
+    margin-left: 2px;
   }
 }
 
-.monitor-library__image--placeholder {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #c0c4cc;
+.face-library-card__footer {
+  display: flex;
+  border-top: 1px solid #ebeef5;
+}
+
+.face-library-card__footer-btn {
+  flex: 1;
+  height: 40px;
+  border: none;
+  background: transparent;
+  color: #606266;
+  font-size: 14px;
+  cursor: pointer;
+
+  & + & {
+    border-left: 1px solid #ebeef5;
+  }
+
+  &:hover {
+    color: var(--el-color-primary);
+    background: #f5f7fa;
+  }
+}
+
+.face-library-card__footer-btn--danger:hover {
+  color: var(--el-color-danger);
 }
 </style>

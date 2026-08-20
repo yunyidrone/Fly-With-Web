@@ -71,7 +71,7 @@ export function toAiRecognitionEvent(ev) {
 
   const lng = ev.longitude;
   const lat = ev.latitude;
-  let coord = "经纬度";
+  let coord = "";
   if (
     lng != null &&
     lat != null &&

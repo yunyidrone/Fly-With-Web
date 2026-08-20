@@ -61,10 +61,10 @@
           <el-input v-model="form.name" maxlength="32" placeholder="请输入人像姓名" />
         </el-form-item>
 
-        <el-form-item label="设置预警类型" prop="warningType">
-          <el-select v-model="form.warningType" placeholder="请选择预警类型" style="width: 100%">
+        <el-form-item label="性别" prop="gender">
+          <el-select v-model="form.gender" placeholder="请选择性别" style="width: 100%">
             <el-option
-              v-for="item in warnTypeOptions"
+              v-for="item in genderOptions"
               :key="item.value"
               :label="item.label"
               :value="item.value"
@@ -95,8 +95,8 @@ import {
   updatePortrait,
 } from "@backend/api/monitor-library.js";
 import {
-  PORTRAIT_WARNING_TYPE,
-  PORTRAIT_WARNING_TYPE_OPTIONS,
+  PORTRAIT_GENDER,
+  PORTRAIT_GENDER_OPTIONS,
 } from "@backend/config/constants.js";
 import { buildPortraitPayload } from "@backend/utils/monitor-library.js";
 import { INFRA_BASE } from "@backend/router/routes.js";
@@ -106,7 +106,7 @@ const ACCEPT_IMAGE_EXT = [".jpg", ".jpeg", ".png"];
 
 const route = useRoute();
 const router = useRouter();
-const warnTypeOptions = PORTRAIT_WARNING_TYPE_OPTIONS;
+const genderOptions = PORTRAIT_GENDER_OPTIONS;
 const formRef = ref();
 const submitting = ref(false);
 const pendingFile = ref(null);
@@ -117,7 +117,7 @@ const isEdit = computed(() => Boolean(route.params.id) && route.params.id !== "n
 
 const form = reactive({
   name: "",
-  warningType: PORTRAIT_WARNING_TYPE.CONTROL,
+  gender: PORTRAIT_GENDER.UNKNOWN,
   imageUrl: "",
 });
 
@@ -136,7 +136,7 @@ function validateImage(_rule, _value, callback) {
 const rules = {
   imageUrl: [{ required: true, validator: validateImage, trigger: ["change", "blur"] }],
   name: [{ required: true, message: "请输入人像姓名", trigger: "blur" }],
-  warningType: [{ required: true, message: "请选择预警类型", trigger: "change" }],
+  gender: [{ required: true, message: "请选择性别", trigger: "change" }],
 };
 
 function isAcceptedImage(file) {
@@ -187,7 +187,9 @@ async function loadDetail() {
   const data = await fetchPortraitDetail({ id: route.params.id });
   Object.assign(form, {
     name: data.name,
-    warningType: data.warningType || data.warnType || PORTRAIT_WARNING_TYPE.CONTROL,
+    gender: Number.isFinite(Number(data.gender))
+      ? Number(data.gender)
+      : PORTRAIT_GENDER.UNKNOWN,
     imageUrl: data.imageUrl,
   });
   imagePreview.value = data.imageUrl || "";
@@ -212,7 +214,10 @@ async function submit() {
 
     const payload = buildPortraitPayload(
       { ...form, imageUrl },
-      isEdit.value ? { id: route.params.id } : {},
+      {
+        ...(isEdit.value ? { id: route.params.id } : {}),
+        groupId: route.params.groupId,
+      },
     );
 
     if (isEdit.value) {
@@ -229,6 +234,25 @@ async function submit() {
 }
 
 function goBack() {
+  const source = String(route.query.source ?? "").trim();
+  const groupId = route.params.groupId;
+  if (source === "library") {
+    router.push({
+      path: `${INFRA_BASE}/library`,
+      query: { tab: "portrait" },
+    });
+    return;
+  }
+  if (groupId) {
+    router.push({
+      name: "BackendPortraitList",
+      params: { groupId },
+      query: route.query.groupName
+        ? { groupName: route.query.groupName, source: "group" }
+        : { source: "group" },
+    });
+    return;
+  }
   router.push({
     path: `${INFRA_BASE}/library`,
     query: { tab: "portrait" },

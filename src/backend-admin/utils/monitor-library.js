@@ -3,7 +3,8 @@ import {
   VEHICLE_POWER_TYPE,
   VEHICLE_POWER_TYPE_LABELS,
   resolveVehiclePowerTypeLabel,
-  resolvePortraitWarningTypeLabel,
+  PORTRAIT_GENDER,
+  resolvePortraitGenderLabel,
 } from "@backend/config/constants.js";
 
 function pickString(...values) {
@@ -13,36 +14,72 @@ function pickString(...values) {
   }
   return "";
 }
+
+export function normalizePersonGroupRecord(raw) {
+  if (!raw || typeof raw !== "object") {
+    return {
+      id: "",
+      groupId: "",
+      groupName: "",
+      personCount: 0,
+      tag: "",
+      createTime: "",
+      updateTime: "",
+      description: "",
+    };
+  }
+
+  return {
+    id: raw.id,
+    groupId: raw.groupId,
+    groupName: raw.groupName,
+    personCount: raw.personCount,
+    tag: raw.tag,
+    createTime: raw.createTime,
+    updateTime: raw.updateTime,
+    description: raw.description,
+  };
+}
+
+export function normalizePersonGroupList(list) {
+  return (Array.isArray(list) ? list : []).map(normalizePersonGroupRecord);
+}
+
+export function buildPersonGroupPayload(form, extra = {}) {
+  const payload = {
+    groupName: String(form.groupName ?? "").trim(),
+    tag: String(form.tag ?? "").trim(),
+    description: String(form.description ?? "").trim(),
+  };
+
+  if (extra.id != null && extra.id !== "") {
+    payload.id = extra.id;
+  }
+
+  return payload;
+}
+
 export function normalizePortraitRecord(raw) {
   if (!raw || typeof raw !== "object") {
     return {
       id: "",
       name: "",
       imageUrl: "",
-      warningType: "",
-      warningTypeLabel: "",
+      gender: PORTRAIT_GENDER.UNKNOWN,
+      genderLabel: resolvePortraitGenderLabel(PORTRAIT_GENDER.UNKNOWN),
       createTime: "",
     };
   }
-
-  const warningType = raw.warningType ?? raw.warnType ?? raw.alertType ?? raw.alarmType ?? "";
-  const warningTypeLabel = pickString(
-    raw.warningTypeLabel,
-    raw.warnTypeLabel,
-    raw.warnTypeName,
-    raw.alertTypeName,
-    resolvePortraitWarningTypeLabel(warningType),
-  );
+  const gender = Number(raw.gender);
+  const safeGender = Number.isFinite(gender) ? gender : PORTRAIT_GENDER.UNKNOWN;
 
   return {
     id: raw.id ?? raw.portraitId ?? "",
     name: pickString(raw.name, raw.personName),
     imageUrl: pickString(raw.imageUrl, raw.image, raw.photoUrl, raw.avatar),
-    warningType,
-    warningTypeLabel,
+    gender: safeGender,
+    genderLabel: resolvePortraitGenderLabel(safeGender),
     createTime: pickString(raw.createTime, raw.createdAt, raw.gmtCreate),
-    warnType: warningType,
-    warnTypeLabel: warningTypeLabel,
   };
 }
 
@@ -78,11 +115,18 @@ export function buildPortraitPayload(form, extra = {}) {
   const payload = {
     name: String(form.name ?? "").trim(),
     imageUrl: String(form.imageUrl ?? "").trim(),
-    warningType: form.warningType ?? form.warnType,
+    gender: Number.isFinite(Number(form.gender))
+      ? Number(form.gender)
+      : PORTRAIT_GENDER.UNKNOWN,
   };
 
   if (extra.id != null && extra.id !== "") {
     payload.id = extra.id;
+  }
+
+  const groupId = extra.groupId ?? form.groupId;
+  if (groupId != null && groupId !== "") {
+    payload.groupId = groupId;
   }
 
   return payload;
