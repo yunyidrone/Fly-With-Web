@@ -155,7 +155,7 @@ export function useDroneAiRecognition(options = {}) {
 
   async function loadWarningHistory(thirdPartyId) {
     const data = await TaskService.taskWarningPageQuery({
-      uuid: thirdPartyId,
+      thirdPartyId,
       current: 1,
       pageSize: 999,
     });
@@ -197,7 +197,8 @@ export function useDroneAiRecognition(options = {}) {
         console.warn("[AI识别] 人脸库 ID 加载失败", error);
       });
 
-      let historyEvents = [];      try {
+      let historyEvents = [];
+      try {
         historyEvents = await loadWarningHistory(thirdPartyId);
       } catch (error) {
         console.warn("[AI识别] 告警历史加载失败", error);
@@ -260,25 +261,23 @@ export function useDroneAiRecognition(options = {}) {
   }
 
   /**
-   * 无人机列表/详情刷新后同步 thirdPartyId（缺失时继续等待）
+   * 无人机列表/详情刷新后同步 thirdPartyId（仅补全「等待 thirdPartyId」场景）
    * @param {Record<string, any> | null | undefined} drone
    */
   async function syncDroneStream(drone) {
-    if (starting) return;
+    if (starting || !waitingThirdPartyId) return;
 
-    const thirdPartyId = resolveDroneThirdPartyId(drone);
-    if (!thirdPartyId) {
-      waitingThirdPartyId = true;
-      return;
+    let currentDrone = drone;
+    let thirdPartyId = resolveDroneThirdPartyId(currentDrone);
+
+    if (!thirdPartyId && refreshDroneFromList) {
+      currentDrone = (await refreshDroneFromList(currentDrone)) || currentDrone;
+      thirdPartyId = resolveDroneThirdPartyId(currentDrone);
     }
 
-    if (activeTopic && activeThirdPartyId === thirdPartyId) {
-      return;
-    }
+    if (!thirdPartyId) return;
 
-    if (waitingThirdPartyId || !activeTopic) {
-      await activateWithThirdPartyId(thirdPartyId, sessionId);
-    }
+    await activateWithThirdPartyId(thirdPartyId, sessionId);
   }
 
   /** 关闭视频弹窗：取消 MQTT 订阅并清空列表 */

@@ -205,6 +205,7 @@ import { MAP_CONFIG } from "@/config/app-config.js";
 import { DEFAULT_ROBOT_ID, DEFAULT_COMMUNITY_ID } from "@/api/robot.js";
 import { ensureDroneOsdMqtt } from "@/composables/useDroneOsdMqtt.js";
 import { useDroneAiRecognition } from "@/composables/useDroneAiRecognition.js";
+import { resolveDroneThirdPartyId } from "@/utils/drone-ai-result.js";
 import { useDeviceStore } from "@/stores/device.js";
 import { useFlightPlanStore } from "@/stores/flightPlan.js";
 import { AccompanyingFlyService } from "@/api";
@@ -537,10 +538,10 @@ function onMapAreaClick() {
 const streamDroneLive = computed(() => mergeStreamDroneWithLive(streamDrone.value));
 
 watch(
-  () => streamDroneLive.value,
-  (drone) => {
-    if (!droneStreamVisible.value || !drone) return;
-    void syncStreamAiRecognition(drone);
+  () => resolveDroneThirdPartyId(streamDroneLive.value),
+  (thirdPartyId) => {
+    if (!droneStreamVisible.value || !thirdPartyId) return;
+    void syncStreamAiRecognition(streamDroneLive.value);
   },
 );
 

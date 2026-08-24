@@ -84,7 +84,7 @@ const emit = defineEmits(["close"]);
 
 const eventName = computed(() => {
   const d = props.detail;
-  return String(d?.warnType ?? d?.type ?? "—").trim() || "—";
+  return String(d?.warnType ?? d?.name ?? d?.type ?? "—").trim() || "—";
 });
 
 const recognitionResult = computed(() => {
@@ -101,7 +101,16 @@ const coordText = computed(() => formatAiAlertCoord(props.detail));
 
 const previewImage = computed(() => {
   const d = props.detail;
-  return String(d?.imageUrl ?? d?.originalImageUrl ?? d?.image ?? "").trim();
+  if (!d) return "";
+
+  const name = String(d?.warnType ?? d?.name ?? d?.type ?? "").trim();
+  const isFaceEvent = name === "人脸" || name.includes("人脸");
+
+  if (isFaceEvent) {
+    return String(d?.originalImageUrl ?? d?.imageUrl ?? d?.image ?? "").trim();
+  }
+
+  return String(d?.imageUrl ?? d?.image ?? "").trim();
 });
 </script>
 

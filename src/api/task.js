@@ -11,7 +11,7 @@ export class TaskService {
 
   /**
    * 伴飞任务告警分页
-   * @param {{ uuid: string, current?: number, pageSize?: number }} params
+   * @param {{ thirdPartyId: string, current?: number, pageSize?: number }} params
    */
   static taskWarningPageQuery(params = {}) {
     return requestData("/task/warning/pageQuery", { params }, "GET");

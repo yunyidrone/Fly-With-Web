@@ -8,7 +8,12 @@ export function resolveDroneSn(drone) {
 /** @param {Record<string, any> | null | undefined} drone */
 export function resolveDroneThirdPartyId(drone) {
   return String(
-    drone?.thirdPartyId ?? drone?.third_party_id ?? "",
+    drone?.thirdPartyId ??
+      drone?.third_party_id ??
+      drone?.uuid ??
+      drone?.taskUuid ??
+      drone?.task_uuid ??
+      "",
   ).trim();
 }
 
@@ -59,7 +64,7 @@ export function parseDroneAiResultMessage(msg) {
       : raw.payload && typeof raw.payload === "object"
         ? raw.payload
         : raw;
-
+  console.log("AI智能识别", payload);
   return normalizeWarnEvent(payload);
 }
 

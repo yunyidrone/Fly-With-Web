@@ -85,7 +85,7 @@ export function normalizeDroneRecord(raw) {
     model: raw.model ?? raw.modelName ?? raw.deviceModel ?? "",
     batteryThreshold: raw.batteryThreshold ?? raw.threshold ?? raw.lowBatteryThreshold,
     algorithmIds,
-    thirdPartyId: String(raw.thirdPartyId ?? raw.third_party_id ?? "").trim() || undefined,
+    thirdPartyId: String(raw.thirdPartyId ?? raw.third_party_id ?? raw.uuid ?? raw.taskUuid ?? raw.task_uuid ?? "").trim() || undefined,
     longitude: raw.longitude,
     latitude: raw.latitude,
     lng:
@@ -349,6 +349,15 @@ export const useDeviceStore = defineStore("device", () => {
           existing.model = n.model;
           existing.batteryThreshold = n.batteryThreshold;
           existing.algorithmIds = n.algorithmIds;
+          if (n.thirdPartyId) {
+            existing.thirdPartyId = n.thirdPartyId;
+          }
+          if (n.playUrl) {
+            existing.playUrl = n.playUrl;
+          }
+          if (n.aiPlayUrl) {
+            existing.aiPlayUrl = n.aiPlayUrl;
+          }
           existing.rawStatus = n.rawStatus;
           existing.active = n.active;
           existing.commOk = n.commOk;
