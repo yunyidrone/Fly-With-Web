@@ -19,7 +19,7 @@
         ref="formRef"
         :model="form"
         :rules="rules"
-        label-width="120px"
+        label-width="150px"
         class="device-form__body"
       >
         <el-form-item label="无人机名称" prop="name">

@@ -19,7 +19,7 @@
         ref="formRef"
         :model="form"
         :rules="rules"
-        label-width="140px"
+        label-width="175px"
         class="target-form__body"
       >
         <el-form-item label="目标设备名称" prop="name">

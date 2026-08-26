@@ -69,9 +69,22 @@
       </el-header>
 
       <el-main class="admin-layout__content">
-        <router-view v-slot="{ Component }">
+        <router-view v-slot="{ Component, route: viewRoute }">
           <transition name="fade-transform" mode="out-in">
-            <component :is="Component" />
+            <keep-alive>
+              <component
+                :is="Component"
+                v-if="viewRoute.meta.keepAlive"
+                :key="viewRoute.name"
+              />
+            </keep-alive>
+          </transition>
+          <transition name="fade-transform" mode="out-in">
+            <component
+              :is="Component"
+              v-if="!viewRoute.meta.keepAlive"
+              :key="viewRoute.name"
+            />
           </transition>
         </router-view>
       </el-main>

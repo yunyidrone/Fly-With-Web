@@ -104,7 +104,7 @@
             {{ row.workStatusText }}
           </template>
         </el-table-column>
-        <el-table-column label="设备状态" width="90" align="center">
+        <el-table-column label="设备状态" width="100" align="center">
           <template #default="{ row }">
             <el-switch
               :model-value="isDroneEnabled(row)"

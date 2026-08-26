@@ -53,7 +53,7 @@
           <div class="user-list__toolbar-right">
             <el-input
               v-model="query.userName"
-              placeholder="根据用户账号搜索账户"
+              placeholder="根据账户昵称搜索账户"
               clearable
               class="user-list__keyword"
               @keyup.enter="search"
@@ -88,7 +88,7 @@
               <span class="user-list__id">{{ row.id }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="userName" label="用户账号" min-width="160">
+          <el-table-column prop="userName" label="账户昵称" min-width="160">
             <template #default="{ row }">
               <span class="text-primary">{{ row.userName || "-" }}</span>
               <el-tag
@@ -271,7 +271,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onActivated, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
   Delete,
@@ -660,7 +660,19 @@ watch(
   },
 );
 
-onMounted(async () => {
+const pageInitialized = ref(false);
+
+function restoreOrgTreeSelection() {
+  if (selectedOrg.value?.id == null) return;
+  nextTick(() => {
+    orgTreeRef.value?.setCurrentKey(selectedOrg.value.id);
+    if (orgFilterText.value) {
+      orgTreeRef.value?.filter(orgFilterText.value);
+    }
+  });
+}
+
+async function bootstrapPage() {
   await loadOrgTree();
 
   let initialOrg = null;
@@ -672,6 +684,15 @@ onMounted(async () => {
   }
   if (initialOrg) {
     selectOrgNode(initialOrg);
+  }
+}
+
+onActivated(async () => {
+  if (!pageInitialized.value) {
+    await bootstrapPage();
+    pageInitialized.value = true;
+  } else {
+    restoreOrgTreeSelection();
   }
   await load();
 });

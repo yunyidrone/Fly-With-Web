@@ -10,12 +10,14 @@ export const BACKEND_BASE = "/backend";
  * - 一级：MonitoringCenter / UnitManage / AccountManage / SystemSettings
  * - 二级：MonitoringData / DroneManage / BoatManage / HoundManage
  *        PointSettings / TargetDeviceManage / KeyPointManage / MonitorLibraryManage
+ *        LoginLog
  */
 const MENU_COMPONENT_ROUTE_PATH_MAP = new Map([
   // 一级菜单
   ["MonitoringCenter", "/backend/monitor"],
   ["UnitManage", "/backend/orgs"],
   ["AccountManage", "/backend/users"],
+  ["LoginLog", "/backend/users/login-logs"],
   ["SystemSettings", "/backend/infra/checkpoints"],
 
   // 监控中心二级

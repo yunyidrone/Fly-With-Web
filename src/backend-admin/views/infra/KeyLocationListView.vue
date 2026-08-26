@@ -101,7 +101,7 @@
         <el-table-column
           prop="orgName"
           label="所属单位"
-          min-width="140"
+          min-width="120"
           show-overflow-tooltip
         >
           <template #default="{ row }">
@@ -109,7 +109,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="coord" label="经纬度/半径" min-width="180">
+        <el-table-column prop="coord" label="经纬度/半径" min-width="160">
           <template #default="{ row }">
             <span class="infra-page__coord">({{ row.coord }})</span>
           </template>
@@ -118,7 +118,7 @@
         <el-table-column
           prop="description"
           label="描述"
-          min-width="160"
+          min-width="200"
           show-overflow-tooltip
         >
           <template #default="{ row }">

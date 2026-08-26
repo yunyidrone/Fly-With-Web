@@ -27,10 +27,10 @@
       >
         <div class="user-form__columns">
           <div class="user-form__column">
-            <el-form-item label="用户账号" prop="userName" required>
+            <el-form-item label="账户昵称" prop="userName" required>
               <el-input
                 v-model="form.userName"
-                placeholder="请输入用户账号"
+                placeholder="请输入账户昵称"
                 :disabled="isEdit"
                 maxlength="64"
               />
@@ -145,7 +145,7 @@ const contextText = computed(() => {
 
 const rules = {
   userName: [
-    { required: true, message: "请输入用户账号", trigger: "blur" },
+    { required: true, message: "请输入账户昵称", trigger: "blur" },
     { min: 2, max: 64, message: "账号长度为 2-64 个字符", trigger: "blur" },
   ],
   phone: [

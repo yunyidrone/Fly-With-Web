@@ -161,6 +161,7 @@ export const backendRoutes = [
           menu: true,
           roles: ["super_admin", "org_admin"],
           hideForGrassroots: true,
+          keepAlive: true,
         },
       },
       {
@@ -170,6 +171,17 @@ export const backendRoutes = [
         meta: {
           title: "新增账户",
           activeMenu: `${BACKEND_BASE}/users`,
+          roles: ["super_admin", "org_admin"],
+          hideForGrassroots: true,
+        },
+      },
+      {
+        path: "users/login-logs",
+        name: "BackendLoginLogList",
+        component: () => import("@backend/views/users/LoginLogListView.vue"),
+        meta: {
+          title: "登录日志",
+          menu: true,
           roles: ["super_admin", "org_admin"],
           hideForGrassroots: true,
         },

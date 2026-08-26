@@ -32,7 +32,7 @@
             <el-tag size="small" effect="light">{{ row.typeLabel }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="设定无人机" min-width="140" show-overflow-tooltip>
+        <el-table-column label="设定无人机" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             {{ resolveDroneDisplayName(row) }}
           </template>
@@ -42,7 +42,7 @@
             <span class="infra-page__coord">({{ row.coord || "-" }})</span>
           </template>
         </el-table-column>
-        <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip>
+        <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.description || "-" }}
           </template>

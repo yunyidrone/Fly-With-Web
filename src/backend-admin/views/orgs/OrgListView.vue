@@ -55,7 +55,7 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="所属账户数" width="110">
+        <el-table-column label="所属账户数" min-width="110">
           <template #default="{ row }">
             <span class="text-primary">{{ row.accountCount ?? 0 }}</span>
           </template>
