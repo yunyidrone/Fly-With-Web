@@ -273,16 +273,6 @@
                     <div v-for="r in resourceRowsBaseline" :key="r.key" class="plan-res-row">
                       <span class="plan-res-row__label">
                         {{ r.label }}
-                        <el-tooltip
-                          v-if="r.key === 'drone'"
-                          content="当前模式最多选择无人机上限为2"
-                          placement="top"
-                          effect="dark"
-                          teleported
-                          popper-class="plan-editor-tooltip"
-                        >
-                          <i class="ri-information-line plan-res-row__hint" />
-                        </el-tooltip>
                       </span>
                       <div class="plan-res-counter">
                         <button
@@ -298,7 +288,6 @@
                         <button
                           type="button"
                           class="plan-res-counter__btn"
-                          :disabled="r.key === 'drone' && (addForm.resourceCounts[r.key] || 0) >= 2"
                           aria-label="增加"
                           @click="bumpResource(r.key, 1)"
                         >
@@ -331,14 +320,14 @@
                 >
                   取消任务
                 </button>
-                <!-- <button
+                <button
                   type="button"
                   class="plan-editor-btn plan-editor-btn--ghost"
                   :disabled="detailActionSubmitting"
                   @click="switchToEditMode"
                 >
                   编辑
-                </button> -->
+                </button>
                 <button
                   type="button"
                   class="plan-editor-btn plan-editor-btn--danger"
@@ -467,7 +456,7 @@ onMounted(() => {
 });
 
 const planDialogVisible = ref(false);
-/** @type {import('vue').Ref<'add' | 'view'>} */
+/** @type {import('vue').Ref<'add' | 'view' | 'edit'>} */
 const planDialogMode = ref("add");
 const viewingPlanId = ref(null);
 
@@ -684,7 +673,7 @@ function bumpResource(key, delta) {
   if (isViewMode.value) return;
   const n = Number(addForm.resourceCounts[key]) || 0;
   const next = n + delta;
-  if (delta > 0 && key === "drone" && next > 2) return;
+  // if (delta > 0 && key === "drone" && next > 2) return;
   addForm.resourceCounts[key] = Math.max(0, next);
 }
 
@@ -970,6 +959,18 @@ function onDetailDelete() {
       }
     })
     .catch(() => {});
+}
+
+function switchToEditMode() {
+  if (!viewingPlanId.value) {
+    ElMessage.warning("未找到该计划");
+    return;
+  }
+  if (detailActionSubmitting.value) return;
+  planDialogMode.value = "edit";
+  nextTick(() => {
+    locationTreeRef.value?.setCheckedKeys(addForm.locationCheckedKeys, false);
+  });
 }
 
 async function submitPlan() {

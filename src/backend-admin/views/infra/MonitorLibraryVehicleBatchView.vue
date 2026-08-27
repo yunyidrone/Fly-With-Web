@@ -12,14 +12,15 @@
     <div class="vehicle-batch__section vehicle-batch__section--title">
       <div class="vehicle-batch__title-row">
         <div class="vehicle-batch__title">新建车牌</div>
-        <a
+        <button
+          type="button"
           class="vehicle-batch__template-btn"
-          :href="templateHref"
-          :download="templateDownloadName"
+          :disabled="downloadingTemplate"
+          @click="downloadTemplate"
         >
           <el-icon><Download /></el-icon>
           下载模板
-        </a>
+        </button>
       </div>
     </div>
 
@@ -30,7 +31,6 @@
         :auto-upload="false"
         :show-file-list="false"
         accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-        :disabled="importing"
         :on-change="handleFileChange"
       >
         <div class="vehicle-batch__drop">
@@ -48,52 +48,70 @@
         </div>
       </el-upload>
 
-      <div v-if="uploadFile" class="vehicle-batch__file">
-        <el-icon class="vehicle-batch__file-icon"><Document /></el-icon>
-        <div class="vehicle-batch__file-main">
-          <div class="vehicle-batch__file-name" :title="uploadFile.name">{{ uploadFile.name }}</div>
-          <el-progress
-            :percentage="progress"
-            :stroke-width="8"
-            :show-text="false"
-            color="#3d6fe8"
-          />
+      <div v-if="importTasks.length" class="vehicle-batch__files">
+        <div v-for="task in importTasks" :key="task.id" class="vehicle-batch__file">
+          <el-icon
+            class="vehicle-batch__file-icon"
+            :class="{ 'vehicle-batch__file-icon--error': task.status === 'error' }"
+          >
+            <Document />
+          </el-icon>
+          <div class="vehicle-batch__file-main">
+            <div class="vehicle-batch__file-name" :title="task.name">{{ task.name }}</div>
+            <div class="vehicle-batch__progress-row">
+              <el-progress
+                class="vehicle-batch__progress"
+                :percentage="task.progress"
+                :stroke-width="8"
+                :show-text="false"
+                :color="task.status === 'error' ? '#f56c6c' : '#3d6fe8'"
+              />
+              <span
+                v-if="task.status === 'error' && task.errorMessage"
+                class="vehicle-batch__file-error"
+                :title="task.errorMessage"
+              >
+                {{ task.errorMessage }}
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="vehicle-batch__file-remove"
+            :disabled="task.status === 'importing'"
+            aria-label="移除文件"
+            @click="removeTask(task.id)"
+          >
+            <el-icon><Close /></el-icon>
+          </button>
         </div>
-        <button
-          type="button"
-          class="vehicle-batch__file-remove"
-          :disabled="importing"
-          aria-label="移除文件"
-          @click="clearFile"
-        >
-          <el-icon><Close /></el-icon>
-        </button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { nextTick, reactive, ref } from "vue";
+import { useRouter } from "vue-router";
 import { ArrowLeft, Close, Document, Download } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
-import { createVehicle } from "@backend/api/monitor-library.js";
-import { INFRA_BASE } from "@backend/router/routes.js";
 import {
-  parseVehicleBatchFile,
-  VEHICLE_BATCH_TEMPLATE_NAME,
-} from "@backend/utils/monitor-library.js";
+  downloadVehicleTemplate,
+  importVehicles,
+} from "@backend/api/monitor-library.js";
+import { INFRA_BASE } from "@backend/router/routes.js";
 
 const ACCEPT_EXT = [".xlsx", ".xls"];
-const templateHref = `${String(import.meta.env.BASE_URL || "/").replace(/\/?$/, "/")}templates/vehicle-batch-template.xlsx`;
-const templateDownloadName = VEHICLE_BATCH_TEMPLATE_NAME;
+const PROGRESS_CAP = 90;
+const PROGRESS_INTERVAL_MS = 100;
+const PROGRESS_STEP = 3;
 
-const route = useRoute();
 const router = useRouter();
-const uploadFile = ref(null);
-const progress = ref(0);
-const importing = ref(false);
+const importTasks = ref([]);
+const downloadingTemplate = ref(false);
+const progressTimers = new Map();
+
+let importTaskId = 0;
 
 function goBack() {
   router.push({
@@ -107,10 +125,62 @@ function isExcelFile(file) {
   return ACCEPT_EXT.some((ext) => name.endsWith(ext));
 }
 
-function clearFile() {
-  if (importing.value) return;
-  uploadFile.value = null;
-  progress.value = 0;
+function removeTask(id) {
+  const index = importTasks.value.findIndex((task) => task.id === id);
+  if (index === -1) return;
+  if (importTasks.value[index].status === "importing") return;
+  stopProgressRunner(id);
+  importTasks.value.splice(index, 1);
+}
+
+function startProgressRunner(task) {
+  stopProgressRunner(task.id);
+  const timer = window.setInterval(() => {
+    if (task.progress >= PROGRESS_CAP) return;
+    task.progress = Math.min(PROGRESS_CAP, task.progress + PROGRESS_STEP);
+  }, PROGRESS_INTERVAL_MS);
+  progressTimers.set(task.id, timer);
+}
+
+function stopProgressRunner(taskId) {
+  const timer = progressTimers.get(taskId);
+  if (timer == null) return;
+  window.clearInterval(timer);
+  progressTimers.delete(taskId);
+}
+
+function createImportTask(name) {
+  const task = reactive({
+    id: ++importTaskId,
+    name,
+    progress: 0,
+    status: "importing",
+    errorMessage: "",
+  });
+  importTasks.value.push(task);
+  return task;
+}
+
+async function downloadTemplate() {
+  if (downloadingTemplate.value) return;
+  downloadingTemplate.value = true;
+  try {
+    await downloadVehicleTemplate();
+  } catch (error) {
+    ElMessage.error(error?.message || "模板下载失败");
+  } finally {
+    downloadingTemplate.value = false;
+  }
+}
+
+function resolveImportCount(result) {
+  if (result == null) return null;
+  if (typeof result === "number") return result;
+  if (typeof result !== "object") return null;
+
+  const count = result.successCount ?? result.count ?? result.total ?? result.importCount;
+  const num = Number(count);
+  return Number.isFinite(num) ? num : null;
 }
 
 async function handleFileChange(file) {
@@ -121,34 +191,23 @@ async function handleFileChange(file) {
     return;
   }
 
-  uploadFile.value = raw;
-  progress.value = 20;
-  importing.value = true;
+  const task = createImportTask(raw.name);
 
   try {
-    const { payloads, errors } = await parseVehicleBatchFile(raw);
-    progress.value = 55;
+    await nextTick();
+    startProgressRunner(task);
+    const result = await importVehicles(raw);
+    stopProgressRunner(task.id);
+    task.progress = 100;
+    task.status = "success";
 
-    if (errors.length) {
-      ElMessage.error(errors.slice(0, 3).join("；") + (errors.length > 3 ? "…" : ""));
-      progress.value = 0;
-      return;
-    }
-
-    let successCount = 0;
-    for (let index = 0; index < payloads.length; index += 1) {
-      await createVehicle(payloads[index]);
-      successCount += 1;
-      progress.value = 55 + Math.round(((index + 1) / payloads.length) * 45);
-    }
-
-    progress.value = 100;
-    ElMessage.success(`成功导入 ${successCount} 条车辆`);
+    const count = resolveImportCount(result);
+    ElMessage.success(count != null ? `成功导入 ${count} 条车辆` : "导入成功");
   } catch (error) {
-    progress.value = 0;
-    ElMessage.error(error?.message || "导入失败");
-  } finally {
-    importing.value = false;
+    stopProgressRunner(task.id);
+    task.progress = 100;
+    task.status = "error";
+    task.errorMessage = error?.message || "导入失败";
   }
 }
 </script>
@@ -214,16 +273,22 @@ async function handleFileChange(file) {
   min-width: 120px;
   height: 32px;
   padding: 0 16px;
+  border: none;
   border-radius: 4px;
   background: var(--el-color-primary);
   color: #fff;
   font-size: 14px;
-  text-decoration: none;
+  cursor: pointer;
   box-sizing: border-box;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: var(--el-color-primary-light-3);
     color: #fff;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
   }
 }
 
@@ -265,11 +330,17 @@ async function handleFileChange(file) {
   font-size: 14px;
 }
 
+.vehicle-batch__files {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 16px;
+}
+
 .vehicle-batch__file {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
-  margin-top: 16px;
   padding: 10px 4px;
 }
 
@@ -277,9 +348,25 @@ async function handleFileChange(file) {
   font-size: 22px;
   color: #3d6fe8;
   flex-shrink: 0;
+  margin-top: 2px;
+
+  &--error {
+    color: #f56c6c;
+  }
 }
 
 .vehicle-batch__file-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.vehicle-batch__progress-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.vehicle-batch__progress {
   flex: 1;
   min-width: 0;
 }
@@ -288,6 +375,17 @@ async function handleFileChange(file) {
   margin-bottom: 8px;
   color: #303133;
   font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vehicle-batch__file-error {
+  flex-shrink: 0;
+  max-width: 40%;
+  color: #f56c6c;
+  font-size: 12px;
+  line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

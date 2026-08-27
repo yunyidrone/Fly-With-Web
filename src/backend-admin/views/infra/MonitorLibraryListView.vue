@@ -36,9 +36,14 @@
               新增人脸库
             </el-button>
           </template>
-          <el-button v-else class="infra-page__create-btn" @click="goCreate">
-            新建车辆
-          </el-button>
+          <template v-else>
+            <el-button class="infra-page__create-btn" @click="goCreate">
+              新建车辆
+            </el-button>
+            <el-button class="infra-page__create-btn" @click="goBatchCreate">
+              批量上传
+            </el-button>
+          </template>
         </div>
       </div>
 
@@ -360,6 +365,10 @@ function goCreatePortrait(row) {
 
 function goCreate() {
   router.push({ name: "BackendMonitorVehicleCreate", query: { tab: "vehicle" } });
+}
+
+function goBatchCreate() {
+  router.push({ name: "BackendMonitorVehicleBatchCreate", query: { tab: "vehicle" } });
 }
 
 function goEdit(id) {

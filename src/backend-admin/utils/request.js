@@ -108,6 +108,10 @@ client.interceptors.request.use(
 
 client.interceptors.response.use(
   (response) => {
+    if (response.config?.responseType === "blob") {
+      return response;
+    }
+
     const { status } = response;
     const payload = response.data;
 

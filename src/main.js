@@ -17,6 +17,7 @@ import { createPinia } from "pinia";
 import piniaPluginPersistedstate from "pinia-plugin-persistedstate";
 import { setupPermissionDirective } from "@/directives/permission.js";
 import { startAppVersionChecker } from "@/utils/app-version.js";
+import { syncAppRemRoot } from "@/utils/app-rem-root.js";
 
 const app = createApp(App);
 
@@ -25,6 +26,14 @@ pinia.use(piniaPluginPersistedstate);
 
 app.use(pinia);
 app.use(router);
+
+router.afterEach((to) => {
+  syncAppRemRoot(to.path);
+});
+
+router.isReady().then(() => {
+  syncAppRemRoot(router.currentRoute.value.path);
+});
 app.use(ElementPlus, {
   locale: zhCn,
 });
