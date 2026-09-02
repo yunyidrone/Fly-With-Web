@@ -71,20 +71,9 @@
       <el-main class="admin-layout__content">
         <router-view v-slot="{ Component, route: viewRoute }">
           <transition name="fade-transform" mode="out-in">
-            <keep-alive>
-              <component
-                :is="Component"
-                v-if="viewRoute.meta.keepAlive"
-                :key="viewRoute.name"
-              />
+            <keep-alive :include="keepAliveIncludes">
+              <component :is="Component" :key="viewRoute.name" />
             </keep-alive>
-          </transition>
-          <transition name="fade-transform" mode="out-in">
-            <component
-              :is="Component"
-              v-if="!viewRoute.meta.keepAlive"
-              :key="viewRoute.name"
-            />
           </transition>
         </router-view>
       </el-main>
@@ -111,6 +100,13 @@ const authStore = useAuthStore();
 const menuStore = useMenuStore();
 
 const appTitle = appConfig.title;
+
+const keepAliveIncludes = computed(() =>
+  router
+    .getRoutes()
+    .filter((item) => item.meta?.keepAlive && item.name)
+    .map((item) => String(item.name)),
+);
 
 const asideWidth = computed(() =>
   appStore.sidebarCollapsed ? "64px" : "220px",
@@ -351,6 +347,7 @@ async function handleCommand(command) {
 }
 
 .admin-layout__content {
+  position: relative;
   background: $page-bg;
   padding: $content-padding;
   overflow: auto;
@@ -359,6 +356,13 @@ async function handleCommand(command) {
 .fade-transform-enter-active,
 .fade-transform-leave-active {
   transition: all 0.2s ease;
+}
+
+.fade-transform-leave-active {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
 }
 
 .fade-transform-enter-from {

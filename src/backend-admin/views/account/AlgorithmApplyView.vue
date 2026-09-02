@@ -1,10 +1,10 @@
 <template>
-  <div class="page-card algorithm-apply">
-    <div class="page-toolbar">
-      <div class="page-toolbar__title">算法申请</div>
+  <div class="algorithm-apply">
+    <div class="algorithm-apply__section algorithm-apply__section--title">
+      <div class="algorithm-apply__title">算法申请</div>
     </div>
 
-    <div class="algorithm-apply__body">
+    <div class="algorithm-apply__section algorithm-apply__section--content">
       <el-button class="algorithm-apply__records-btn" round @click="goRecords">
         <el-icon><Tickets /></el-icon>
         申请记录
@@ -21,7 +21,7 @@
             <el-checkbox
               v-for="item in ownedOptions"
               :key="`owned-${item.value}`"
-              :label="item.value"
+              :value="item.value"
             >
               {{ item.label }}
             </el-checkbox>
@@ -34,7 +34,7 @@
             <el-checkbox
               v-for="item in pendingOptions"
               :key="`pending-${item.value}`"
-              :label="item.value"
+              :value="item.value"
             >
               {{ item.label }}
             </el-checkbox>
@@ -56,7 +56,7 @@
             <el-checkbox
               v-for="item in typeOptions"
               :key="item.value"
-              :label="item.value"
+              :value="item.value"
               :disabled="formLocked || isCodeDisabled(item.value)"
             >
               {{ item.label }}
@@ -143,6 +143,8 @@ import {
   resolveAlgorithmCodesFromPassList,
 } from "@backend/config/algorithm-apply.js";
 import { BACKEND_BASE } from "@backend/router/routes.js";
+
+defineOptions({ name: "BackendAlgorithmApply" });
 
 const ACCEPT_IMAGE_TYPES = ["image/jpeg", "image/png"];
 const ACCEPT_IMAGE_EXT = [".jpg", ".jpeg", ".png"];
@@ -325,15 +327,37 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-.algorithm-apply__body {
+.algorithm-apply {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.algorithm-apply__section {
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+}
+
+.algorithm-apply__section--title {
+  padding: 14px 16px;
+}
+
+.algorithm-apply__section--content {
   position: relative;
-  padding-top: 8px;
+  padding: 20px 16px 24px;
+}
+
+.algorithm-apply__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
 }
 
 .algorithm-apply__records-btn {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: 20px;
+  right: 16px;
   height: 36px;
   padding: 0 16px;
   color: var(--el-color-primary);

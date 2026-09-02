@@ -304,6 +304,8 @@ import { BACKEND_BASE } from "@backend/router/routes.js";
 import { useAuthStore } from "@/stores/auth.js";
 import { useTableQuery } from "@backend/composables/useTableQuery.js";
 
+defineOptions({ name: "BackendUserList" });
+
 const router = useRouter();
 const authStore = useAuthStore();
 

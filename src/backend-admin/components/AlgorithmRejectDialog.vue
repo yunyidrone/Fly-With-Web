@@ -14,7 +14,7 @@
           <el-checkbox
             v-for="item in presetOptions"
             :key="item"
-            :label="item"
+            :value="item"
           >
             {{ item }}
           </el-checkbox>

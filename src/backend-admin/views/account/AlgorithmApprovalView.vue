@@ -273,6 +273,8 @@ import {
 import { buildDateRangeTime } from "@backend/utils/login-log.js";
 import { useAuthStore } from "@/stores/auth.js";
 
+defineOptions({ name: "BackendAlgorithmApproval" });
+
 const authStore = useAuthStore();
 const { state } = useAlgorithmApply();
 

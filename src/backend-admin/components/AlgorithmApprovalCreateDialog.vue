@@ -37,7 +37,7 @@
           <el-checkbox
             v-for="item in typeOptions"
             :key="item.value"
-            :label="item.value"
+            :value="item.value"
           >
             {{ item.label }}
           </el-checkbox>
