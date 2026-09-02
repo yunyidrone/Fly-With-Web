@@ -8,21 +8,20 @@
         </span>
       </div>
 
-      <el-scrollbar class="admin-layout__menu-scroll">
-        <el-menu
-          v-loading="menuStore.loading"
-          :default-active="activeMenu"
-          :default-openeds="defaultOpeneds"
-          :collapse="appStore.sidebarCollapsed"
-          :collapse-transition="false"
-          background-color="#001529"
-          text-color="rgba(255,255,255,0.75)"
-          active-text-color="#fff"
-          router
-        >
-          <AdminMenuTree :nodes="visibleMenuTree" :title-route-path-map="titleRoutePathMap" />
-        </el-menu>
-      </el-scrollbar>
+      <el-menu
+        class="admin-layout__menu"
+        v-loading="menuStore.loading"
+        :default-active="activeMenu"
+        :default-openeds="defaultOpeneds"
+        :collapse="appStore.sidebarCollapsed"
+        :collapse-transition="false"
+        background-color="#001529"
+        text-color="rgba(255,255,255,0.75)"
+        active-text-color="#fff"
+        router
+      >
+        <AdminMenuTree :nodes="visibleMenuTree" :title-route-path-map="titleRoutePathMap" />
+      </el-menu>
     </el-aside>
 
     <el-container class="admin-layout__main-wrap">
@@ -189,12 +188,14 @@ async function handleCommand(command) {
 .admin-layout__aside {
   display: flex;
   flex-direction: column;
+  height: 100%;
   background: $sidebar-bg;
   transition: width 0.2s;
   overflow: hidden;
 }
 
 .admin-layout__logo {
+  flex: 0 0 $header-height;
   height: $header-height;
   display: flex;
   align-items: center;
@@ -221,13 +222,16 @@ async function handleCommand(command) {
   flex-shrink: 0;
 }
 
-.admin-layout__menu-scroll {
-  padding: 30px 0;
+.admin-layout__menu {
   flex: 1;
-}
-
-.admin-layout__aside :deep(.el-menu) {
+  min-height: 0;
+  height: calc(100vh - #{$header-height});
+  max-height: calc(100vh - #{$header-height});
+  padding: 30px 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   border-right: none;
+  box-sizing: border-box;
 }
 
 .admin-layout__aside :deep(.el-menu-item.is-active) {
@@ -236,9 +240,11 @@ async function handleCommand(command) {
 
 .admin-layout__main-wrap {
   min-width: 0;
+  min-height: 0;
 }
 
 .admin-layout__header {
+  flex-shrink: 0;
   height: $header-height;
   background: #fff;
   border-bottom: 1px solid #ebeef5;
@@ -373,5 +379,48 @@ async function handleCommand(command) {
 .fade-transform-leave-to {
   opacity: 0;
   transform: translateX(-12px);
+}
+</style>
+
+<style lang="scss">
+/* 必须非 scoped：Vue scoped 的 [data-v] 会让 ::-webkit-scrollbar 失效；
+   也不写 scrollbar-width，否则 Chrome 会走带箭头的 Windows 原生滚动条。 */
+.backend-admin-root .admin-layout__menu::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.backend-admin-root .admin-layout__menu::-webkit-scrollbar-button,
+.backend-admin-root .admin-layout__menu::-webkit-scrollbar-button:vertical:start:decrement,
+.backend-admin-root .admin-layout__menu::-webkit-scrollbar-button:vertical:end:increment,
+.backend-admin-root .admin-layout__menu::-webkit-scrollbar-button:vertical:start:increment,
+.backend-admin-root .admin-layout__menu::-webkit-scrollbar-button:vertical:end:decrement {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.backend-admin-root .admin-layout__menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.backend-admin-root .admin-layout__menu::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+}
+
+.backend-admin-root .admin-layout__menu::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.backend-admin-root .admin-layout__menu::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .backend-admin-root .admin-layout__menu {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+  }
 }
 </style>

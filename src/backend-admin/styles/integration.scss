@@ -44,7 +44,7 @@ html:has(.backend-admin-root) {
   box-sizing: border-box;
 }
 
-.backend-admin-root :not(i):not(.el-icon) {
+.backend-admin-root :not(i):not(.el-icon):not(svg):not(svg *) {
   font-family: "PingFang SC", "PingFang SC", sans-serif;
 }
 
