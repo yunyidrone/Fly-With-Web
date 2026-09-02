@@ -10,7 +10,7 @@ export const BACKEND_BASE = "/backend";
  * - 一级：MonitoringCenter / UnitManage / AccountManage / SystemSettings
  * - 二级：MonitoringData / DroneManage / BoatManage / HoundManage
  *        PointSettings / TargetDeviceManage / KeyPointManage / MonitorLibraryManage
- *        LoginLog
+ *        LoginLog / AlgorithmApply / AlgorithmApproval
  */
 const MENU_COMPONENT_ROUTE_PATH_MAP = new Map([
   // 一级菜单
@@ -31,6 +31,8 @@ const MENU_COMPONENT_ROUTE_PATH_MAP = new Map([
   ["TargetDeviceManage", "/backend/infra/targets"],
   ["KeyPointManage", "/backend/infra/locations"],
   ["MonitorLibraryManage", "/backend/infra/library"],
+  ["AlgorithmApply", "/backend/algorithm-apply"],
+  ["AlgorithmApproval", "/backend/algorithm-approval"],
 ]);
 
 export function resolveStaticRoutePath(path) {
@@ -122,6 +124,8 @@ const TOP_MENU_COMPONENT_ICON_MAP = new Map([
   ["MonitoringCenter", "Monitor"],
   ["UnitManage", "OfficeBuilding"],
   ["AccountManage", "User"],
+  ["AlgorithmApply", "DocumentAdd"],
+  ["AlgorithmApproval", "DocumentChecked"],
   ["SystemSettings", "Setting"],
 ]);
 

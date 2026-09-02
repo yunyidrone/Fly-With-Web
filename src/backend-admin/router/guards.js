@@ -23,6 +23,12 @@ const whiteList = [BACKEND_LOGIN_PATH, BACKEND_FORBIDDEN_PATH];
 /** 登录即可访问，跳过菜单 / 角色校验 */
 const authPassList = [BACKEND_ACCOUNT_PATH];
 
+function isAuthPassPath(path) {
+  return authPassList.some(
+    (item) => path === item || path.startsWith(`${item}/`),
+  );
+}
+
 function isBackendLandingPath(path) {
   return (
     path === BACKEND_BASE ||
@@ -118,8 +124,8 @@ export function setupBackendRouterGuards(router) {
       return;
     }
 
-    // 个人中心等：登录即可进，不校验菜单 / 角色
-    if (authPassList.includes(to.path)) {
+    // 个人中心：登录即可进，不校验菜单 / 角色
+    if (isAuthPassPath(to.path)) {
       next();
       return;
     }

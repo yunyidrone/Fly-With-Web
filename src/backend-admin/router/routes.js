@@ -206,6 +206,33 @@ export const backendRoutes = [
         },
       },
       {
+        path: "algorithm-apply",
+        name: "BackendAlgorithmApply",
+        component: () => import("@backend/views/account/AlgorithmApplyView.vue"),
+        meta: {
+          title: "算法申请",
+          keepAlive: true,
+        },
+      },
+      {
+        path: "algorithm-apply/records",
+        name: "BackendAlgorithmApplyRecords",
+        component: () => import("@backend/views/account/AlgorithmApplyRecordView.vue"),
+        meta: {
+          title: "算法申请记录",
+          activeMenu: `${BACKEND_BASE}/algorithm-apply`,
+        },
+      },
+      {
+        path: "algorithm-approval",
+        name: "BackendAlgorithmApproval",
+        component: () => import("@backend/views/account/AlgorithmApprovalView.vue"),
+        meta: {
+          title: "算法审批",
+          keepAlive: true,
+        },
+      },
+      {
         path: "infra/checkpoints",
         name: "BackendCheckpointList",
         component: () => import("@backend/views/infra/CheckpointListView.vue"),
