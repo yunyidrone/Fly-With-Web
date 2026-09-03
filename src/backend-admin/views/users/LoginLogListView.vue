@@ -19,6 +19,19 @@
           </template>
         </el-input>
 
+        <el-input
+          v-model="query.ipAddress"
+          placeholder="根据IP进行查询"
+          clearable
+          class="login-log__filter-item login-log__ip"
+          @keyup.enter="search"
+          @clear="search"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+
         <div class="login-log__daterange-wrap">
           <el-date-picker
             v-model="dateRange"
@@ -127,6 +140,7 @@ const { loading, records, total, query, load, search, reset, onPageChange, onSiz
   useTableQuery(fetchLoginLogPage, {
     pageSize: 10,
     userName: "",
+    ipAddress: "",
     startTime: "",
     endTime: "",
     isAsc: false,
@@ -172,6 +186,7 @@ function resetFilters() {
   reset({
     pageSize: query.pageSize,
     userName: "",
+    ipAddress: "",
     startTime: query.startTime,
     endTime: query.endTime,
     isAsc: false,
@@ -199,6 +214,13 @@ async function handleDelete(row) {
 
 watch(
   () => query.userName,
+  (value, oldValue) => {
+    if (value === "" && oldValue !== "") search();
+  },
+);
+
+watch(
+  () => query.ipAddress,
   (value, oldValue) => {
     if (value === "" && oldValue !== "") search();
   },
@@ -286,6 +308,10 @@ onMounted(() => {
 
 .login-log__keyword {
   width: 240px;
+}
+
+.login-log__ip {
+  width: 200px;
 }
 
 .login-log__quick-range {

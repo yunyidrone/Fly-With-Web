@@ -223,12 +223,7 @@ async function handleCommand(command) {
 }
 
 .admin-layout__menu {
-  flex: 1;
-  min-height: 0;
-  height: calc(100vh - #{$header-height});
   max-height: calc(100vh - #{$header-height});
-  padding: 30px 0;
-  overflow-x: hidden;
   overflow-y: auto;
   border-right: none;
   box-sizing: border-box;

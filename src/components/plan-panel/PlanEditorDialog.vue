@@ -19,28 +19,31 @@
 
             <div class="plan-editor-scroll">
               <div class="plan-editor-tabs" role="tablist" aria-label="计划场景">
-                <button
-                  v-for="s in scenarios"
-                  :key="s.key"
-                  type="button"
-                  role="tab"
-                  class="plan-editor-tabs__item"
-                  :class="{ 'plan-editor-tabs__item--active': addForm.scenarioKey === s.key }"
-                  :disabled="isViewMode"
-                  @click="addForm.scenarioKey = s.key"
-                >
-                  <span v-if="s.key === 'mountain'" class="plan-editor-tabs__icon" aria-hidden="true">
-                    <MountainRescueIcon :width="16" :height="16" />
-                  </span>
-                  <span v-else-if="s.key === 'water'" class="plan-editor-tabs__icon" aria-hidden="true">
-                    <WaterObservationIcon :width="16" :height="16" />
-                  </span>
-                  <span v-else-if="s.key === 'security'" class="plan-editor-tabs__icon" aria-hidden="true">
-                    <SecurityProtectionIcon :width="16" :height="16" />
-                  </span>
-                  <i v-else :class="s.icon" class="plan-editor-tabs__icon" aria-hidden="true" />
-                  <span>{{ s.title }}</span>
-                </button>
+                <template v-for="s in scenarios" :key="s.key">
+                  <button
+                    v-if="!isViewMode || addForm.scenarioKey === s.key"
+                    type="button"
+                    role="tab"
+                    class="plan-editor-tabs__item"
+                    :class="{
+                      'plan-editor-tabs__item--active': addForm.scenarioKey === s.key,
+                      'plan-editor-tabs__item--solo': isViewMode,
+                    }"
+                    @click="addForm.scenarioKey = s.key"
+                  >
+                    <span v-if="s.key === 'mountain'" class="plan-editor-tabs__icon" aria-hidden="true">
+                      <MountainRescueIcon :width="16" :height="16" />
+                    </span>
+                    <span v-else-if="s.key === 'water'" class="plan-editor-tabs__icon" aria-hidden="true">
+                      <WaterObservationIcon :width="16" :height="16" />
+                    </span>
+                    <span v-else-if="s.key === 'security'" class="plan-editor-tabs__icon" aria-hidden="true">
+                      <SecurityProtectionIcon :width="16" :height="16" />
+                    </span>
+                    <i v-else :class="s.icon" class="plan-editor-tabs__icon" aria-hidden="true" />
+                    <span>{{ s.title }}</span>
+                  </button>
+                </template>
               </div>
 
               <section class="plan-sec">
@@ -1218,6 +1221,11 @@ background: #1C222A;
   .plan-editor-tabs__icon {
     color: #1a1a1a;
   }
+}
+
+.plan-editor-tabs__item--solo {
+  flex: 0 0 33.3333%;
+  // margin: 0 auto;
 }
 
 .plan-editor-tabs__icon {

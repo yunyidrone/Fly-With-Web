@@ -4,6 +4,7 @@ import { authRequestData } from "@backend/utils/auth-request.js";
  * 登录日志分页（auth：GET /auth/loginLog/pageQuery）
  * @param {{
  *   userName?: string,
+ *   ipAddress?: string,
  *   current?: number,
  *   pageSize?: number,
  *   startTime?: string,
@@ -13,7 +14,7 @@ import { authRequestData } from "@backend/utils/auth-request.js";
  * @param {import('@/utils/request.js').RequestOptions} [options]
  */
 export function fetchLoginLogPage(params, options = {}) {
-  const { userName, current, pageSize, startTime, endTime, isAsc, ...rest } = params || {};
+  const { userName, ipAddress, current, pageSize, startTime, endTime, isAsc, ...rest } = params || {};
   const query = {
     current,
     pageSize,
@@ -21,6 +22,8 @@ export function fetchLoginLogPage(params, options = {}) {
   };
   const name = String(userName ?? "").trim();
   if (name) query.userName = name;
+  const ip = String(ipAddress ?? "").trim();
+  if (ip) query.ipAddress = ip;
   if (startTime) query.startTime = startTime;
   if (endTime) query.endTime = endTime;
   if (isAsc != null) query.isAsc = isAsc;
