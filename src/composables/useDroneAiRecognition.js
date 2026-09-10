@@ -5,7 +5,11 @@ import { normalizeWarnDataToFlatEvents } from "@/utils/plan-algorithm-data.js";
 import { mqttService } from "@/utils/mqtt-service.js";
 import {
   buildDroneAiResultTopic,
+  buildDroneAiResultYxTopic,
+  isYxDrone,
   parseDroneAiResultMessage,
+  parseDroneAiResultYxMessage,
+  resolveDroneSn,
   resolveDroneThirdPartyId,
   toAiRecognitionEvent,
 } from "@/utils/drone-ai-result.js";
@@ -76,6 +80,8 @@ export function useDroneAiRecognition(options = {}) {
 
   /** @type {string | null} */
   let activeTopic = null;
+  /** @type {string | null} */
+  let activeYxTopic = null;
   /** @type {string} */
   let activeThirdPartyId = "";
   let waitingThirdPartyId = false;
@@ -86,6 +92,10 @@ export function useDroneAiRecognition(options = {}) {
     if (activeTopic) {
       mqttService.unsubscribe(activeTopic);
       activeTopic = null;
+    }
+    if (activeYxTopic) {
+      mqttService.unsubscribe(activeYxTopic);
+      activeYxTopic = null;
     }
     activeThirdPartyId = "";
     waitingThirdPartyId = false;
@@ -180,12 +190,52 @@ export function useDroneAiRecognition(options = {}) {
     activeThirdPartyId = thirdPartyId;
   }
 
+  function subscribeYxAiResult(drone, currentSession) {
+    if (!isYxDrone(drone) || currentSession !== sessionId) return;
+
+    const sn = resolveDroneSn(drone);
+    if (!sn) return;
+
+    const topic = buildDroneAiResultYxTopic(sn);
+    if (activeYxTopic === topic) return;
+
+    if (activeYxTopic) {
+      mqttService.unsubscribe(activeYxTopic);
+    }
+
+    mqttService.subscribe(topic, (_actualTopic, data) => {
+      if (currentSession !== sessionId) return;
+      const ev = parseDroneAiResultYxMessage(data, { droneName: drone?.name });
+      if (!ev) return;
+      void handleMqttEvent(ev);
+    });
+    activeYxTopic = topic;
+  }
+
+  async function ensureMqttReady(currentSession) {
+    await mqttService.ensureConnected();
+    return currentSession === sessionId;
+  }
+
+  async function activateYxStream(drone, currentSession) {
+    if (!isYxDrone(drone) || currentSession !== sessionId) return;
+
+    void resolvePersonGroupIds().catch((error) => {
+      console.warn("[AI识别] 人脸库 ID 加载失败", error);
+    });
+
+    if (!(await ensureMqttReady(currentSession))) return;
+
+    subscribeYxAiResult(drone, currentSession);
+  }
+
   /**
    * 有 thirdPartyId 时：先拉告警列表，再订阅 MQTT
    * @param {string} thirdPartyId
    * @param {number} currentSession
+   * @param {Record<string, any> | null | undefined} [drone]
    */
-  async function activateWithThirdPartyId(thirdPartyId, currentSession) {
+  async function activateWithThirdPartyId(thirdPartyId, currentSession, drone) {
     if (!thirdPartyId || currentSession !== sessionId) return;
 
     starting = true;
@@ -213,10 +263,23 @@ export function useDroneAiRecognition(options = {}) {
 
       if (currentSession !== sessionId) return;
 
-      await mqttService.ensureConnected();
-      if (currentSession !== sessionId) return;
+      if (!(await ensureMqttReady(currentSession))) return;
 
       subscribeAiResult(thirdPartyId, currentSession);
+      subscribeYxAiResult(drone, currentSession);
+    } finally {
+      starting = false;
+    }
+  }
+
+  async function activateYxOnlyStream(drone, currentSession) {
+    if (!isYxDrone(drone) || currentSession !== sessionId) return;
+
+    starting = true;
+    try {
+      clearSubscription();
+      waitingThirdPartyId = false;
+      await activateYxStream(drone, currentSession);
     } finally {
       starting = false;
     }
@@ -248,16 +311,20 @@ export function useDroneAiRecognition(options = {}) {
     resetEvents();
     closeAlertDetail();
 
-    const { thirdPartyId } = await resolveDroneWithThirdPartyId(drone, {
+    const { drone: currentDrone, thirdPartyId } = await resolveDroneWithThirdPartyId(drone, {
       tryRefreshList: true,
     });
 
     if (!thirdPartyId) {
+      if (isYxDrone(currentDrone)) {
+        await activateYxOnlyStream(currentDrone, currentSession);
+        return;
+      }
       waitingThirdPartyId = true;
       return;
     }
 
-    await activateWithThirdPartyId(thirdPartyId, currentSession);
+    await activateWithThirdPartyId(thirdPartyId, currentSession, currentDrone);
   }
 
   /**
@@ -275,9 +342,21 @@ export function useDroneAiRecognition(options = {}) {
       thirdPartyId = resolveDroneThirdPartyId(currentDrone);
     }
 
-    if (!thirdPartyId) return;
+    if (!thirdPartyId) {
+      if (isYxDrone(currentDrone)) {
+        await activateYxOnlyStream(currentDrone, sessionId);
+      }
+      return;
+    }
 
-    await activateWithThirdPartyId(thirdPartyId, sessionId);
+    if (waitingThirdPartyId || !activeTopic) {
+      await activateWithThirdPartyId(thirdPartyId, sessionId, currentDrone);
+      return;
+    }
+
+    if (isYxDrone(currentDrone) && !activeYxTopic) {
+      await activateYxStream(currentDrone, sessionId);
+    }
   }
 
   /** 关闭视频弹窗：取消 MQTT 订阅并清空列表 */
