@@ -74,7 +74,7 @@ function parseMqttPayload(msg) {
 
 function formatPlateNumbers(value) {
   if (Array.isArray(value)) {
-    return value.map((item) => String(item ?? "").trim()).filter(Boolean).join("、");
+    return value.map((item) => String(item ?? "").trim()).filter(Boolean).join(",");
   }
   return String(value ?? "").trim();
 }

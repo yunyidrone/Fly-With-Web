@@ -8,43 +8,10 @@
   <LockdownAssignDialog
     v-model:visible="showLockdownConfirm"
     @confirm="confirmLockdown"
+    @release="confirmReleaseFromDialog"
+    @echo="onLockdownEcho"
     @cancel="cancelLockdown"
   />
-
-  <Teleport to="body">
-    <Transition name="lockdown-release-fade">
-      <div
-        v-if="showUnlockdownConfirm"
-        class="lockdown-release"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="lockdown-release-title"
-      >
-        <div id="lockdown-release-title" class="lockdown-release__title">
-          <i class="ri-send-plane-2-fill lockdown-release__title-icon" aria-hidden="true" />
-          <span>请确认无误后点击解除封城</span>
-        </div>
-        <div class="lockdown-release__actions">
-          <button
-            type="button"
-            class="lockdown-release__btn lockdown-release__btn--cancel"
-            :disabled="undeploying"
-            @click="cancelUnlockdown"
-          >
-            取消
-          </button>
-          <button
-            type="button"
-            class="lockdown-release__btn lockdown-release__btn--confirm"
-            :disabled="undeploying"
-            @click="releaseLockdown"
-          >
-            解除封城
-          </button>
-        </div>
-      </div>
-    </Transition>
-  </Teleport>
 
   <div class="map-legend-wrapper" @click.stop>
     <div class="legend-toolbar">
@@ -106,13 +73,13 @@
       </div>
 
       <div class="legend-panel legend-panel--lockdown">
-        <button class="lockdown-btn" :disabled="undeploying" @click="handleLockdown">
+        <button class="lockdown-btn" @click="handleLockdown">
           <span class="legend-ring-outer legend-ring-outer--danger">
             <span class="legend-ring-inner legend-ring-inner--danger">
-              <img :src="lockdownItem.iconSrc" :alt="lockdownLabel" class="legend-icon-img" />
+              <img :src="lockdownItem.iconSrc" alt="一键封城" class="legend-icon-img" />
             </span>
           </span>
-          <span class="legend-label">{{ lockdownLabel }}</span>
+          <span class="legend-label">一键封城</span>
         </button>
       </div>
       </div>
@@ -121,10 +88,9 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from "vue";
+import { ref, onMounted } from "vue";
 import { ElMessage } from "element-plus";
 import { AccompanyingFlyService } from "@/api";
-import { CommonService } from "@/api/common.js";
 import { unwrapApiList } from "@/utils/request.js";
 import LockdownAssignDialog from "@/components/LockdownAssignDialog.vue";
 import dbWrjPng from "@/assets/images/db_wrj.png";
@@ -173,11 +139,6 @@ const STATIC_LEGEND_EXTRA_ITEMS = [
 const legendItems = ref(STATIC_LEGEND_ITEMS.map((item) => ({ ...item })));
 const lockdownItem = { iconSrc: dbYjfcPng, label: "一键封城" };
 const showLockdownConfirm = ref(false);
-const showUnlockdownConfirm = ref(false);
-const isLockdownActive = ref(false);
-const undeploying = ref(false);
-const deployedPayload = ref({ droneIds: [], controlPointIds: [], links: [] });
-const lockdownLabel = computed(() => (isLockdownActive.value ? "解除封城" : "一键封城"));
 
 const emit = defineEmits(["lockdown", "unlockdown", "toggle"]);
 
@@ -314,11 +275,6 @@ const toggleItem = (item) => {
 };
 
 const handleLockdown = () => {
-  if (undeploying.value) return;
-  if (isLockdownActive.value) {
-    showUnlockdownConfirm.value = true;
-    return;
-  }
   showLockdownConfirm.value = true;
 };
 
@@ -327,37 +283,15 @@ const cancelLockdown = () => {
 };
 
 const confirmLockdown = (payload) => {
-  deployedPayload.value = {
-    droneIds: Array.isArray(payload?.droneIds) ? [...payload.droneIds] : [],
-    controlPointIds: Array.isArray(payload?.controlPointIds) ? [...payload.controlPointIds] : [],
-    links: Array.isArray(payload?.links) ? payload.links.map((item) => ({ ...item })) : [],
-  };
-  isLockdownActive.value = true;
-  emit("lockdown", deployedPayload.value);
+  emit("lockdown", payload);
 };
 
-const cancelUnlockdown = () => {
-  if (undeploying.value) return;
-  showUnlockdownConfirm.value = false;
-};
+function onLockdownEcho(payload) {
+  emit("lockdown", payload);
+}
 
-async function releaseLockdown() {
-  if (undeploying.value) return;
-  undeploying.value = true;
-  try {
-    await CommonService.controlPointUnDeploy({
-      droneIds: deployedPayload.value.droneIds,
-      controlPointIds: deployedPayload.value.controlPointIds,
-    });
-    isLockdownActive.value = false;
-    deployedPayload.value = { droneIds: [], controlPointIds: [], links: [] };
-    showUnlockdownConfirm.value = false;
-    emit("unlockdown");
-  } catch {
-    // 错误提示由请求层处理，弹窗保持打开便于重试
-  } finally {
-    undeploying.value = false;
-  }
+function confirmReleaseFromDialog() {
+  emit("unlockdown");
 }
 
 function setItemActive(key, active) {
@@ -606,92 +540,5 @@ function clearAllSelection() {
   box-shadow:
     4px -1px 4px 0 rgba(201, 69, 71, 0.25) inset,
     -5px 0 4px 0 rgba(201, 69, 71, 0.25) inset;
-}
-
-.lockdown-release {
-  position: fixed;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 3000;
-  display: flex;
-  min-width: 420px;
-  max-width: calc(100vw - 32px);
-  padding: 20px 24px;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 24px;
-  border-radius: 6px;
-  background: rgba(3, 6, 10, 0.65);
-  border: 1px solid #30363b;
-  backdrop-filter: blur(0.375rem);
-  box-sizing: border-box;
-}
-
-.lockdown-release__title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--Grey-palette-White, #4965c9);
-  font-feature-settings:
-    "liga" off,
-    "clig" off;
-  font-family: "Segoe UI";
-  font-size: 20px;
-  font-style: normal;
-  font-weight: 600;
-  line-height: 28px;
-}
-
-.lockdown-release__title-icon {
-  font-size: 22px;
-  line-height: 1;
-  color: #4965c9;
-  flex-shrink: 0;
-}
-
-.lockdown-release__actions {
-  width: 100%;
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.lockdown-release__btn {
-  border-radius: 999px;
-  color: #fff;
-  font-family: "Segoe UI";
-  font-size: 16px;
-  font-style: normal;
-  font-weight: 400;
-  line-height: 1.2;
-  padding: 6px 20px;
-  cursor: pointer;
-  border: 0;
-  background: transparent;
-
-  &:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-}
-
-.lockdown-release__btn--cancel {
-  border: 1px solid #4965c9;
-  background: transparent;
-}
-
-.lockdown-release__btn--confirm {
-  background: #ff4d4f;
-}
-
-.lockdown-release-fade-enter-active,
-.lockdown-release-fade-leave-active {
-  transition: opacity 0.18s ease;
-}
-
-.lockdown-release-fade-enter-from,
-.lockdown-release-fade-leave-to {
-  opacity: 0;
 }
 </style>

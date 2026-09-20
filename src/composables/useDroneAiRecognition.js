@@ -141,6 +141,8 @@ export function useDroneAiRecognition(options = {}) {
           ev?.originalImageUrl ?? ev?.imageUrl ?? ev?.image ?? "",
         ).trim(),
         groupIds,
+        longitude: ev?.longitude ?? ev?.lng ?? null,
+        latitude: ev?.latitude ?? ev?.lat ?? null,
       });
       const checkedAiResult = resolveAlertCheckAiResult(alertData);
       const finalAiResult = checkedAiResult || aiResult;

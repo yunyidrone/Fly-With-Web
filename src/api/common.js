@@ -4,8 +4,8 @@ export class CommonService {
   /**
    * 封控点列表
    */
-  static async controlPointListQuery(params = {}) {
-    return requestData("/control/point/listQuery", { params }, "GET");
+  static async controlPointListQuery(params = {}, options = {}) {
+    return requestData("/control/point/listQuery", { params }, "GET", undefined, options);
   }
 
   /**

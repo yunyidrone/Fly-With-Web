@@ -19,6 +19,11 @@ export const LOCKDOWN_DRONE_STATUS_LABELS = {
   [LOCKDOWN_DRONE_STATUS.RETURNING]: "返航中",
 };
 
+/** 无人机任务类型：1 正在执行一键封城 */
+export const LOCKDOWN_DRONE_TASK_TYPE = {
+  LOCKDOWN: 1,
+};
+
 function toCoord(value) {
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
@@ -31,6 +36,14 @@ function toDroneStatus(value) {
 
 export function isLockdownRowSelectable(row) {
   return Number(row?.droneStatus) === LOCKDOWN_DRONE_STATUS.READY;
+}
+
+export function isLockdownTaskExecuting(row) {
+  return Number(row?.droneTaskType) === LOCKDOWN_DRONE_TASK_TYPE.LOCKDOWN;
+}
+
+export function hasExecutingLockdown(rows = []) {
+  return rows.some((row) => isLockdownTaskExecuting(row));
 }
 
 /**
@@ -49,6 +62,8 @@ export function normalizeLockdownCheckpointRows(list = []) {
     seen.add(checkpointId);
 
     const droneStatus = toDroneStatus(raw.droneStatus ?? raw.drone_status);
+    const droneTaskType = toDroneStatus(raw.droneTaskType ?? raw.drone_task_type);
+    const executing = droneTaskType === LOCKDOWN_DRONE_TASK_TYPE.LOCKDOWN;
     rows.push({
       checkpointId,
       checkpointName: String(raw.name ?? "").trim() || "未命名卡点",
@@ -56,6 +71,8 @@ export function normalizeLockdownCheckpointRows(list = []) {
       droneName: String(raw.droneName ?? "").trim() || droneId,
       droneStatus,
       droneStatusLabel: LOCKDOWN_DRONE_STATUS_LABELS[droneStatus] || "",
+      droneTaskType,
+      executing,
       selectable: droneStatus === LOCKDOWN_DRONE_STATUS.READY,
       checkpointLng: toCoord(raw.longitude ?? raw.lng),
       checkpointLat: toCoord(raw.latitude ?? raw.lat),
@@ -100,33 +117,50 @@ function hasLinkCoords(row) {
   );
 }
 
+function appendLockdownPayloadRow(row, acc) {
+  const droneId = String(row?.droneId ?? "").trim();
+  const controlPointId = String(row?.checkpointId ?? "").trim();
+  if (!droneId || !controlPointId) return;
+  acc.droneIds.push(droneId);
+  acc.controlPointIds.push(controlPointId);
+  if (hasLinkCoords(row)) {
+    acc.links.push({
+      checkpointId: controlPointId,
+      droneId,
+      checkpointLng: row.checkpointLng,
+      checkpointLat: row.checkpointLat,
+      droneLng: row.droneLng,
+      droneLat: row.droneLat,
+    });
+  }
+}
+
+function createEmptyLockdownPayload() {
+  return { droneIds: [], controlPointIds: [], links: [] };
+}
+
 /**
  * 只组装已勾选卡点，droneIds[i] 对应 controlPointIds[i]
  * @param {Array<Record<string, any>>} rows
  */
 export function buildLockdownDeployPayload(rows = []) {
-  const droneIds = [];
-  const controlPointIds = [];
-  const links = [];
-
+  const payload = createEmptyLockdownPayload();
   for (const row of rows) {
     if (!row?.checked || !isLockdownRowSelectable(row)) continue;
-    const droneId = String(row?.droneId ?? "").trim();
-    const controlPointId = String(row?.checkpointId ?? "").trim();
-    if (!droneId || !controlPointId) continue;
-    droneIds.push(droneId);
-    controlPointIds.push(controlPointId);
-    if (hasLinkCoords(row)) {
-      links.push({
-        checkpointId: controlPointId,
-        droneId,
-        checkpointLng: row.checkpointLng,
-        checkpointLat: row.checkpointLat,
-        droneLng: row.droneLng,
-        droneLat: row.droneLat,
-      });
-    }
+    appendLockdownPayloadRow(row, payload);
   }
+  return payload;
+}
 
-  return { droneIds, controlPointIds, links };
+/**
+ * 正在执行一键封城的卡点，供回显、解除和对端同步。
+ * @param {Array<Record<string, any>>} rows
+ */
+export function buildLockdownUndeployPayload(rows = []) {
+  const payload = createEmptyLockdownPayload();
+  for (const row of rows) {
+    if (!isLockdownTaskExecuting(row)) continue;
+    appendLockdownPayloadRow(row, payload);
+  }
+  return payload;
 }

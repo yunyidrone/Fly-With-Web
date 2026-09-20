@@ -19,7 +19,7 @@ export class TaskService {
 
   /**
    * 识别结果是否弹窗提示
-   * @param {{ aiResult: string, name?: string, originalImageUrl?: string, groupIds?: string[] }} data
+   * @param {{ aiResult: string, name?: string, originalImageUrl?: string, groupIds?: string[], longitude?: number|string, latitude?: number|string }} data
    * @param {{ silent?: boolean }} [options] 默认 silent，非 2000 时不弹全局错误提示
    * @returns {Promise<unknown>} code 2000 时返回 data，仅用于替换弹窗「识别结果」
    */

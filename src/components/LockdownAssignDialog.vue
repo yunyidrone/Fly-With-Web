@@ -10,7 +10,7 @@
       >
         <div id="lockdown-assign-title" class="lockdown-assign__title">
           <i class="ri-send-plane-2-fill lockdown-assign__title-icon" aria-hidden="true" />
-          <span>请确认无误后点击开始封城</span>
+          <span>一键封城</span>
         </div>
 
         <div v-loading="loading" class="lockdown-assign__body">
@@ -18,60 +18,104 @@
             暂无已关联无人机的卡点
           </p>
           <template v-else>
-            <div class="lockdown-assign__toolbar">
-              <button
-                type="button"
-                class="lockdown-assign__tool-btn"
-                :disabled="submitting || !rows.length"
-                @click="setAllChecked(true)"
-              >
-                一键全选
-              </button>
-              <button
-                type="button"
-                class="lockdown-assign__tool-btn"
-                :disabled="submitting || !rows.length"
-                @click="setAllChecked(false)"
-              >
-                一键全不选
-              </button>
-            </div>
-            <ul class="lockdown-assign__list">
-            <li
-              v-for="row in rows"
-              :key="row.checkpointId"
-              class="lockdown-assign__row"
-              :class="{
-                'is-disabled': submitting || !row.selectable,
-                'is-locked': !row.selectable,
-              }"
-              :title="row.selectable ? '' : `${row.droneName}当前${row.droneStatusLabel || '不可用'}，无法勾选`"
-              @click="toggleRow(row)"
-            >
-              <span
-                class="lockdown-assign__check"
-                :class="{ 'is-checked': row.checked }"
-                role="checkbox"
-                :aria-checked="row.checked"
-                :aria-disabled="!row.selectable"
-                :aria-label="row.checkpointName"
-              >
-                <i
-                  :class="row.checked ? 'ri-checkbox-fill' : 'ri-checkbox-blank-line'"
-                  aria-hidden="true"
-                />
-              </span>
-              <div class="lockdown-assign__point" :title="row.checkpointName">
-                {{ row.checkpointName }}
+            <!-- 封控中：每行带单独解除按钮 -->
+            <template v-if="executingRows.length">
+              <div class="lockdown-assign__section-header">
+                <span class="lockdown-assign__section-title">封控中</span>
+                <button
+                  type="button"
+                  class="lockdown-assign__release-all-btn"
+                  :disabled="releasing"
+                  @click.stop="releaseAll"
+                >
+                  全部解除
+                </button>
               </div>
-              <div class="lockdown-assign__drone" :title="row.droneName">
-                <span>{{ row.droneName }}</span>
-                <span v-if="row.droneStatusLabel" class="lockdown-assign__status">
-                  {{ row.droneStatusLabel }}
-                </span>
+              <ul class="lockdown-assign__list lockdown-assign__list--executing">
+                <li
+                  v-for="row in executingRows"
+                  :key="row.checkpointId"
+                  class="lockdown-assign__row is-executing"
+                >
+                  <div class="lockdown-assign__point" :title="row.checkpointName">
+                    {{ row.checkpointName }}
+                  </div>
+                  <div class="lockdown-assign__drone" :title="row.droneName">
+                    <span>{{ row.droneName }}</span>
+                    <span class="lockdown-assign__status lockdown-assign__status--executing">
+                      封城中
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    class="lockdown-assign__release-btn"
+                    :disabled="releasing"
+                    @click.stop="releaseRow(row)"
+                  >
+                    解除封城
+                  </button>
+                </li>
+              </ul>
+            </template>
+
+            <!-- 可封控：勾选 + 开始封城 -->
+            <template v-if="availableRows.length">
+              <div class="lockdown-assign__section-title">可封控</div>
+              <div class="lockdown-assign__toolbar">
+                <button
+                  type="button"
+                  class="lockdown-assign__tool-btn"
+                  :disabled="submitting || !availableRows.length"
+                  @click="setAllChecked(true)"
+                >
+                  一键全选
+                </button>
+                <button
+                  type="button"
+                  class="lockdown-assign__tool-btn"
+                  :disabled="submitting || !availableRows.length"
+                  @click="setAllChecked(false)"
+                >
+                  一键全不选
+                </button>
               </div>
-            </li>
-            </ul>
+              <ul class="lockdown-assign__list">
+                <li
+                  v-for="row in availableRows"
+                  :key="row.checkpointId"
+                  class="lockdown-assign__row"
+                  :class="{
+                    'is-disabled': submitting || !row.selectable,
+                    'is-locked': !row.selectable,
+                  }"
+                  :title="row.selectable ? '' : `${row.droneName}当前${row.droneStatusLabel || '不可用'}，无法勾选`"
+                  @click="toggleRow(row)"
+                >
+                  <span
+                    class="lockdown-assign__check"
+                    :class="{ 'is-checked': row.checked }"
+                    role="checkbox"
+                    :aria-checked="row.checked"
+                    :aria-disabled="!row.selectable"
+                    :aria-label="row.checkpointName"
+                  >
+                    <i
+                      :class="row.checked ? 'ri-checkbox-fill' : 'ri-checkbox-blank-line'"
+                      aria-hidden="true"
+                    />
+                  </span>
+                  <div class="lockdown-assign__point" :title="row.checkpointName">
+                    {{ row.checkpointName }}
+                  </div>
+                  <div class="lockdown-assign__drone" :title="row.droneName">
+                    <span>{{ row.droneName }}</span>
+                    <span v-if="row.droneStatusLabel" class="lockdown-assign__status">
+                      {{ row.droneStatusLabel }}
+                    </span>
+                  </div>
+                </li>
+              </ul>
+            </template>
           </template>
         </div>
 
@@ -79,7 +123,7 @@
           <button
             type="button"
             class="lockdown-assign__btn lockdown-assign__btn--cancel"
-            :disabled="submitting"
+            :disabled="submitting || releasing"
             @click="onCancel"
           >
             取消
@@ -87,7 +131,7 @@
           <button
             type="button"
             class="lockdown-assign__btn lockdown-assign__btn--confirm"
-            :disabled="loading || submitting || !rows.length"
+            :disabled="loading || submitting || !availableRows.length"
             @click="onConfirm"
           >
             开始封城
@@ -99,25 +143,31 @@
 </template>
 
 <script setup>
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { CommonService } from "@/api/common.js";
 import { unwrapApiList } from "@/utils/request.js";
 import {
   buildLockdownDeployPayload,
+  buildLockdownUndeployPayload,
   findDuplicateLockdownDrones,
+  hasExecutingLockdown,
   isLockdownRowSelectable,
   LOCKDOWN_LIST_QUERY_PARAMS,
   normalizeLockdownCheckpointRows,
 } from "@/utils/lockdown-assign.js";
 
 const visible = defineModel("visible", { type: Boolean, default: false });
-const emit = defineEmits(["confirm", "cancel"]);
+const emit = defineEmits(["confirm", "release", "echo", "cancel"]);
 
 const loading = ref(false);
 const submitting = ref(false);
+const releasing = ref(false);
 const rows = ref([]);
 let loadSeq = 0;
+
+const executingRows = computed(() => rows.value.filter((row) => row.executing));
+const availableRows = computed(() => rows.value.filter((row) => !row.executing));
 
 function toggleRow(row) {
   if (submitting.value || !isLockdownRowSelectable(row)) return;
@@ -126,7 +176,7 @@ function toggleRow(row) {
 
 function setAllChecked(checked) {
   if (submitting.value) return;
-  rows.value.forEach((row) => {
+  availableRows.value.forEach((row) => {
     if (!isLockdownRowSelectable(row)) {
       row.checked = false;
       return;
@@ -140,6 +190,7 @@ function resetState() {
   rows.value = [];
   loading.value = false;
   submitting.value = false;
+  releasing.value = false;
 }
 
 async function loadRows() {
@@ -148,10 +199,14 @@ async function loadRows() {
   try {
     const data = await CommonService.controlPointListQuery(LOCKDOWN_LIST_QUERY_PARAMS);
     if (currentSeq !== loadSeq) return;
-    rows.value = normalizeLockdownCheckpointRows(unwrapApiList(data)).map((row) => ({
+    const nextRows = normalizeLockdownCheckpointRows(unwrapApiList(data)).map((row) => ({
       ...row,
       checked: false,
     }));
+    rows.value = nextRows;
+    if (hasExecutingLockdown(nextRows)) {
+      emit("echo", buildLockdownUndeployPayload(nextRows));
+    }
   } catch {
     if (currentSeq !== loadSeq) return;
     rows.value = [];
@@ -163,7 +218,7 @@ async function loadRows() {
 }
 
 function onCancel() {
-  if (submitting.value) return;
+  if (submitting.value || releasing.value) return;
   visible.value = false;
   emit("cancel");
 }
@@ -181,16 +236,63 @@ function duplicateDroneTip(duplicates) {
   return "一架无人机一次只能飞往一个卡点，请重新选择";
 }
 
-async function onConfirm() {
-  if (loading.value || submitting.value || !rows.value.length) return;
+async function releaseRow(row) {
+  if (releasing.value || submitting.value) return;
+  const droneId = String(row?.droneId ?? "").trim();
+  const controlPointId = String(row?.checkpointId ?? "").trim();
+  if (!droneId || !controlPointId) return;
 
-  const payload = buildLockdownDeployPayload(rows.value);
-  if (rows.value.length && !payload.droneIds.length) {
+  releasing.value = true;
+  try {
+    await CommonService.controlPointUnDeploy({
+      droneIds: [droneId],
+      controlPointIds: [controlPointId],
+    });
+    rows.value = rows.value.filter(
+      (item) => item.checkpointId !== row.checkpointId,
+    );
+    if (hasExecutingLockdown(rows.value)) {
+      emit("echo", buildLockdownUndeployPayload(rows.value));
+    } else {
+      emit("release");
+    }
+  } catch {
+    // 错误提示由请求层处理
+  } finally {
+    releasing.value = false;
+  }
+}
+
+async function releaseAll() {
+  if (releasing.value || submitting.value) return;
+  const payload = buildLockdownUndeployPayload(executingRows.value);
+  if (!payload.droneIds.length) return;
+
+  releasing.value = true;
+  try {
+    await CommonService.controlPointUnDeploy({
+      droneIds: payload.droneIds,
+      controlPointIds: payload.controlPointIds,
+    });
+    rows.value = rows.value.filter((row) => !row.executing);
+    emit("release");
+  } catch {
+    // 错误提示由请求层处理
+  } finally {
+    releasing.value = false;
+  }
+}
+
+async function onConfirm() {
+  if (loading.value || submitting.value || !availableRows.value.length) return;
+
+  const payload = buildLockdownDeployPayload(availableRows.value);
+  if (availableRows.value.length && !payload.droneIds.length) {
     ElMessage.warning("请先勾选要封控的卡点");
     return;
   }
 
-  const duplicates = findDuplicateLockdownDrones(rows.value);
+  const duplicates = findDuplicateLockdownDrones(availableRows.value);
   if (duplicates.length) {
     ElMessage.warning(duplicateDroneTip(duplicates));
     return;
@@ -351,11 +453,6 @@ watch(visible, (next) => {
 
   &:last-child {
     border-bottom: none;
-    padding-bottom: 0;
-  }
-
-  &:first-child {
-    padding-top: 0;
   }
 
   &:hover:not(.is-disabled) .lockdown-assign__check {
@@ -418,6 +515,94 @@ watch(visible, (next) => {
 .lockdown-assign__row.is-locked {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.lockdown-assign__row.is-executing {
+  opacity: 1;
+  cursor: default;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lockdown-assign__row.is-executing .lockdown-assign__drone {
+  text-align: left;
+  justify-content: flex-start;
+  flex: 0 0 auto;
+}
+
+.lockdown-assign__status--executing {
+  color: #ff7875;
+}
+
+.lockdown-assign__section-title {
+  font-family: "Segoe UI";
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+  margin: 20px 0 8px;
+
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+.lockdown-assign__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 20px 0 8px;
+
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+.lockdown-assign__release-all-btn {
+  padding: 3px 12px;
+  border: 1px solid #ff4d4f;
+  border-radius: 999px;
+  background: transparent;
+  color: #ff4d4f;
+  font-family: "Segoe UI";
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+
+  &:hover:not(:disabled) {
+    background: #ff4d4f;
+    color: #fff;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+.lockdown-assign__release-btn {
+  flex-shrink: 0;
+  padding: 4px 14px;
+  border: 1px solid #ff4d4f;
+  border-radius: 999px;
+  background: transparent;
+  color: #ff4d4f;
+  font-family: "Segoe UI";
+  font-size: 13px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+
+  &:hover:not(:disabled) {
+    background: #ff4d4f;
+    color: #fff;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
 }
 
 .lockdown-assign__actions {
