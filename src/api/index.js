@@ -31,6 +31,24 @@ export class AccompanyingFlyService {
   }
 
   /**
+   * 打开无人机实时视频推流
+   * @param {string} deviceUniqueCode 无人机 SN
+   */
+  static async openYxRealStream(deviceUniqueCode) {
+    return requestData(
+      "/yx/video/realstream/open",
+      {
+        device_unique_code: String(deviceUniqueCode || "").trim(),
+        camera_video_id: "99-0-0/normal-0",
+        stream_type: "normal",
+        protocol: 1,
+      },
+      "POST",
+      "application/json",
+    );
+  }
+
+  /**
    * 无人机启停用
    * @param {{ ids: Array<string|number>, switchStatus: 0|1 }} body switchStatus 0启用 1禁用
    */

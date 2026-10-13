@@ -205,7 +205,7 @@ import { MAP_CONFIG } from "@/config/app-config.js";
 import { DEFAULT_ROBOT_ID, DEFAULT_COMMUNITY_ID } from "@/api/robot.js";
 import { ensureDroneOsdMqtt } from "@/composables/useDroneOsdMqtt.js";
 import { useDroneAiRecognition } from "@/composables/useDroneAiRecognition.js";
-import { resolveDroneThirdPartyId } from "@/utils/drone-ai-result.js";
+import { resolveDroneSn, resolveDroneThirdPartyId } from "@/utils/drone-ai-result.js";
 import { useDeviceStore } from "@/stores/device.js";
 import { useFlightPlanStore } from "@/stores/flightPlan.js";
 import { AccompanyingFlyService } from "@/api";
@@ -802,6 +802,14 @@ const openDroneStream = async (device) => {
     }
   } catch (_) {
     streamDrone.value = device;
+  }
+  const deviceSn = resolveDroneSn(streamDrone.value);
+  if (deviceSn) {
+    try {
+      await AccompanyingFlyService.openYxRealStream(deviceSn);
+    } catch (_) {
+      // 推流失败不阻断视频弹窗，错误提示由请求层弹出
+    }
   }
   droneStreamVisible.value = true;
   const liveFromStore = deviceStore.drones.find((d) => String(d?.id) === id);
