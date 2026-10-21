@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
     "@remixicon/vue": "^4.8.0",
     "axios": "1.13.2",
     "axios-retry": "^4.5.0",
