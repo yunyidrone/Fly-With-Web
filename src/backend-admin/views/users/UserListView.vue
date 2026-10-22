@@ -192,7 +192,7 @@
             target="_blank"
             rel="noopener noreferrer"
           >{{ linkTipInfo.link }}</a>
-          即可登录伴飞后台管理系统。
+          即可登录无人化设备调度平台系统。
         </p>
         <p class="user-list__link-tip-row">
           <span>
@@ -579,7 +579,7 @@ function buildAccountLink() {
 
 function buildAccountLinkTipText({ link, userId, userName, password }) {
   return [
-    `您好，点击该链接${link}即可登录伴飞后台管理系统。`,
+    `您好，点击该链接${link}即可登录无人化设备调度平台系统。`,
     `账户ID 为：${userId} ，账户昵称为：${userName}  初始密码为：${password}`,
     "为保护您的账户安全请登录后尽快修改你的账户密码.",
   ].join("\n");

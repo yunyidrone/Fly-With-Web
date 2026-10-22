@@ -24,7 +24,7 @@
 
 <script setup>
 defineProps({
-  title: { type: String, default: "伴飞调度中心" },
+  title: { type: String, default: "无人化设备调度平台" },
   userName: { type: String, default: "admin" },
 });
 

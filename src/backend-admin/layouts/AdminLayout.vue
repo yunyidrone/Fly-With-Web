@@ -2,7 +2,7 @@
   <el-container class="admin-layout backend-admin-root">
     <el-aside :width="asideWidth" class="admin-layout__aside">
       <div class="admin-layout__logo">
-        <img class="admin-layout__logo-icon" :src="logoImage" alt="伴飞后台管理 logo" />
+        <img class="admin-layout__logo-icon" :src="logoImage" alt="无人化设备调度平台 logo" />
         <span v-if="!appStore.sidebarCollapsed" class="admin-layout__logo-text">
           {{ appTitle }}
         </span>

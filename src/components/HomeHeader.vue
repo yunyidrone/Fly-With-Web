@@ -12,7 +12,7 @@
           <img class="brand-logo-img" src="../assets/images/logo.png" alt="" />
         </div>
         <div class="brand-text">
-          <div class="brand-text__zh">伴飞调度中心</div>
+          <div class="brand-text__zh">无人化设备调度平台</div>
           <div class="brand-text__en">ESCORT FLIGHT DISPATCH CENTER</div>
         </div>
       </div>

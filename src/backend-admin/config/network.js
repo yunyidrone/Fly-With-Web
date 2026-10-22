@@ -11,7 +11,7 @@ export const networkConfig = {
 };
 
 export const appConfig = {
-  title: import.meta.env.VITE_BACKEND_APP_TITLE || "伴飞后台管理",
+  title: import.meta.env.VITE_BACKEND_APP_TITLE || "无人化设备调度平台",
   useMock: import.meta.env.VITE_BACKEND_USE_MOCK === "true",
   skipAuth: import.meta.env.VITE_BACKEND_SKIP_AUTH === "true",
 };

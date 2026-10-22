@@ -7,7 +7,7 @@
         <div class="login-v2__top-spacer" />
 
         <header class="login-v2__brand">
-          <h1 class="login-v2__title">伴飞客户端调度中心</h1>
+          <h1 class="login-v2__title">无人化设备调度平台</h1>
           <p class="login-v2__subtitle">Companion Flight Client Dispatch Center</p>
         </header>
 
