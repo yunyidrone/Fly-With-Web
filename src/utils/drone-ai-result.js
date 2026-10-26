@@ -72,7 +72,7 @@ function parseMqttPayload(msg) {
       : raw;
 }
 
-function formatPlateNumbers(value) {
+function formatCsvList(value) {
   if (Array.isArray(value)) {
     return value.map((item) => String(item ?? "").trim()).filter(Boolean).join(",");
   }
@@ -98,8 +98,11 @@ export function parseDroneAiResultYxMessage(msg, options = {}) {
   const payload = parseMqttPayload(msg);
   if (!payload || typeof payload !== "object") return null;
 
-  const plateNumbers = formatPlateNumbers(payload.plate_numbers ?? payload.plateNumbers);
-  if (!plateNumbers) return null;
+  const plateNumbers = formatCsvList(payload.plate_numbers ?? payload.plateNumbers);
+  const croppedImageUrls = formatCsvList(
+    payload.cropped_image_urls ?? payload.croppedImageUrls,
+  );
+  if (!plateNumbers && !croppedImageUrls) return null;
 
   const imageUrl = String(
     payload.initial_image_url ?? payload.initialImageUrl ?? "",
@@ -113,7 +116,7 @@ export function parseDroneAiResultYxMessage(msg, options = {}) {
       payload.recognized_at ?? payload.recognizedAt ?? payload.timestamp,
     ),
     imageUrl,
-    originalImageUrl: imageUrl,
+    originalImageUrl: croppedImageUrls || imageUrl,
     longitude: payload.longitude,
     latitude: payload.latitude,
     droneName: String(options.droneName ?? payload.device_sn ?? payload.deviceSn ?? "").trim(),

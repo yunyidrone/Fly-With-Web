@@ -6,7 +6,6 @@ import { mqttService } from "@/utils/mqtt-service.js";
 import {
   buildDroneAiResultTopic,
   buildDroneAiResultYxTopic,
-  isYxDrone,
   parseDroneAiResultMessage,
   parseDroneAiResultYxMessage,
   resolveDroneSn,
@@ -90,10 +89,12 @@ export function useDroneAiRecognition(options = {}) {
 
   function clearSubscription() {
     if (activeTopic) {
+      console.log("[AI识别] 取消订阅", activeTopic);
       mqttService.unsubscribe(activeTopic);
       activeTopic = null;
     }
     if (activeYxTopic) {
+      console.log("[AI识别] 取消订阅", activeYxTopic);
       mqttService.unsubscribe(activeYxTopic);
       activeYxTopic = null;
     }
@@ -130,16 +131,17 @@ export function useDroneAiRecognition(options = {}) {
 
   async function tryShowAlertDetail(ev) {
     const aiResult = String(ev?.aiResult ?? "").trim();
-    if (!aiResult) return;
+    const originalImageUrl = String(
+      ev?.originalImageUrl ?? ev?.imageUrl ?? ev?.image ?? "",
+    ).trim();
+    if (!aiResult && !originalImageUrl) return;
 
     try {
       const groupIds = await resolvePersonGroupIds();
       const alertData = await TaskService.alertCheck({
         aiResult,
         name: String(ev?.name ?? ev?.warnType ?? ev?.type ?? "").trim(),
-        originalImageUrl: String(
-          ev?.originalImageUrl ?? ev?.imageUrl ?? ev?.image ?? "",
-        ).trim(),
+        originalImageUrl,
         groupIds,
         longitude: ev?.longitude ?? ev?.lng ?? null,
         latitude: ev?.latitude ?? ev?.lat ?? null,
@@ -179,9 +181,17 @@ export function useDroneAiRecognition(options = {}) {
   }
 
   function subscribeAiResult(thirdPartyId, currentSession) {
-    if (!thirdPartyId || currentSession !== sessionId) return;
+    if (!thirdPartyId || currentSession !== sessionId) {
+      console.log("[AI识别] 跳过订阅 aiResult", {
+        thirdPartyId,
+        currentSession,
+        sessionId,
+      });
+      return;
+    }
 
     const topic = buildDroneAiResultTopic(thirdPartyId);
+    console.log("[AI识别] 订阅", topic);
     mqttService.subscribe(topic, (_actualTopic, data) => {
       if (currentSession !== sessionId) return;
       const ev = parseDroneAiResultMessage(data);
@@ -193,18 +203,35 @@ export function useDroneAiRecognition(options = {}) {
   }
 
   function subscribeYxAiResult(drone, currentSession) {
-    if (!isYxDrone(drone) || currentSession !== sessionId) return;
+    if (currentSession !== sessionId) {
+      console.log("[AI识别] 跳过订阅 aiResult-yx", {
+        currentSession,
+        sessionId,
+      });
+      return;
+    }
 
     const sn = resolveDroneSn(drone);
-    if (!sn) return;
+    if (!sn) {
+      console.log("[AI识别] 跳过订阅 aiResult-yx：无 SN", {
+        droneName: drone?.name,
+        droneId: drone?.id,
+      });
+      return;
+    }
 
     const topic = buildDroneAiResultYxTopic(sn);
-    if (activeYxTopic === topic) return;
+    if (activeYxTopic === topic) {
+      console.log("[AI识别] 已订阅，跳过", topic);
+      return;
+    }
 
     if (activeYxTopic) {
+      console.log("[AI识别] 取消订阅", activeYxTopic);
       mqttService.unsubscribe(activeYxTopic);
     }
 
+    console.log("[AI识别] 订阅", topic, { sn, droneName: drone?.name });
     mqttService.subscribe(topic, (_actualTopic, data) => {
       if (currentSession !== sessionId) return;
       const ev = parseDroneAiResultYxMessage(data, { droneName: drone?.name });
@@ -220,7 +247,7 @@ export function useDroneAiRecognition(options = {}) {
   }
 
   async function activateYxStream(drone, currentSession) {
-    if (!isYxDrone(drone) || currentSession !== sessionId) return;
+    if (currentSession !== sessionId) return;
 
     void resolvePersonGroupIds().catch((error) => {
       console.warn("[AI识别] 人脸库 ID 加载失败", error);
@@ -274,19 +301,6 @@ export function useDroneAiRecognition(options = {}) {
     }
   }
 
-  async function activateYxOnlyStream(drone, currentSession) {
-    if (!isYxDrone(drone) || currentSession !== sessionId) return;
-
-    starting = true;
-    try {
-      clearSubscription();
-      waitingThirdPartyId = false;
-      await activateYxStream(drone, currentSession);
-    } finally {
-      starting = false;
-    }
-  }
-
   /**
    * @param {Record<string, any> | null | undefined} drone
    * @param {{ tryRefreshList?: boolean }} [opts]
@@ -318,11 +332,8 @@ export function useDroneAiRecognition(options = {}) {
     });
 
     if (!thirdPartyId) {
-      if (isYxDrone(currentDrone)) {
-        await activateYxOnlyStream(currentDrone, currentSession);
-        return;
-      }
       waitingThirdPartyId = true;
+      await activateYxStream(currentDrone, currentSession);
       return;
     }
 
@@ -345,9 +356,7 @@ export function useDroneAiRecognition(options = {}) {
     }
 
     if (!thirdPartyId) {
-      if (isYxDrone(currentDrone)) {
-        await activateYxOnlyStream(currentDrone, sessionId);
-      }
+      await activateYxStream(currentDrone, sessionId);
       return;
     }
 
@@ -356,7 +365,7 @@ export function useDroneAiRecognition(options = {}) {
       return;
     }
 
-    if (isYxDrone(currentDrone) && !activeYxTopic) {
+    if (!activeYxTopic) {
       await activateYxStream(currentDrone, sessionId);
     }
   }
