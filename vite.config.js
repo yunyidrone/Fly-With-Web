@@ -57,8 +57,6 @@ export default defineConfig(({ mode, command }) => {
       alias: {
         "@": resolve(__dirname, "./src"),
         "@backend": resolve(__dirname, "./src/backend-admin"),
-        "@zip.js/zip.js/lib/zip-no-worker.js": resolve(__dirname, "node_modules/@zip.js/zip.js/dist/zip.js"),
-        "@zip.js/zip.js": resolve(__dirname, "node_modules/@zip.js/zip.js"),
       },
     },
     css: {
@@ -72,9 +70,6 @@ export default defineConfig(({ mode, command }) => {
           },
         },
       },
-    },
-    optimizeDeps: {
-      exclude: ["@zip.js/zip.js"],
     },
     build: {
       rollupOptions: {
