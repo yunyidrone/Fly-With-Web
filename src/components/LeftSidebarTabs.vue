@@ -1,5 +1,5 @@
 <!--
- * 左侧 Tab：无人设备 / 飞行计划，内嵌 ResourcePanel、PlanPanel
+ * 左侧 Tab：无人设备 / 飞行计划 / AI智能体，内嵌 ResourcePanel、PlanPanel
 -->
 <template>
   <aside
@@ -46,6 +46,19 @@
           <span class="left-sidebar-tabs__tab-label">飞行计划</span>
         </button>
       </div>
+      <div class="btn-wrap">
+        <a
+          :href="aiAgentUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="left-sidebar-tabs__tab"
+          aria-label="AI智能体（新页签打开）"
+          @click.stop
+        >
+          <span class="left-sidebar-tabs__icon-slot" aria-hidden="true"><i class="ri-robot-2-line" /></span>
+          <span class="left-sidebar-tabs__tab-label">AI智能体</span>
+        </a>
+      </div>
     </div>
     <div
       v-show="activeTab != null"
@@ -78,6 +91,9 @@
 <script setup>
 import { ref } from "vue";
 
+const aiAgentUrl = import.meta.env.VITE_AI_AGENT_URL?.trim()
+  || "https://om-agent-test.linker.cc/flight-main/#/yx_intelligentDispatch?autoLogin=1&isChild=1&env=test";
+
 defineProps({
   /** 嵌入 home-left-dock 时参与 flex 布局，避免 fixed 与历史面板重叠 */
   docked: { type: Boolean, default: false },
@@ -104,7 +120,7 @@ defineExpose({ clearSelection, selectTab });
 <style lang="scss" scoped>
 $tab-btn-width: 184px;
 $tab-head-gap: 13px;
-// 与上方双 Tab 总宽一致：184 + 22 + 184
+// 保留无人设备和飞行计划面板的原宽度，外部链接仅扩展顶部入口。
 $sidebar-width: calc(#{$tab-btn-width} * 2 + #{$tab-head-gap});
 
 .left-sidebar-tabs {
@@ -161,13 +177,17 @@ $sidebar-width: calc(#{$tab-btn-width} * 2 + #{$tab-head-gap});
     align-items: stretch;
     gap: $tab-head-gap;
     flex-shrink: 0;
-    width: 100%;
+    width: max-content;
+    max-width: calc(100vw - 48px);
+    overflow-x: auto;
     box-sizing: border-box;
     padding-bottom: 10px;
   }
 
   &__tab {
     display: inline-flex;
+    box-sizing: border-box;
+    text-decoration: none;
     width: 100%;
     height: 100%;
     flex-direction: row;
@@ -207,7 +227,19 @@ $sidebar-width: calc(#{$tab-btn-width} * 2 + #{$tab-head-gap});
   &__icon-slot {
     width: 24px;
     height: 24px;
+    align-self: center;
     box-sizing: border-box;
+    flex: 0 0 24px;
+    display: grid;
+    place-items: center;
+    font-size: 24px;
+
+    i {
+      display: block;
+      line-height: 1;
+      color: #4965c9;
+    }
+
     img{
       width: 100%;
       height: 100%;

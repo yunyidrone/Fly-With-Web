@@ -45,6 +45,17 @@
     <!-- 顶部覆盖层 -->
     <HomeHeader v-show="!immersiveFlight" />
 
+    <RobotPet
+      v-if="!immersiveFlight && !taskViewVisible"
+      class="home-robot-pet"
+      :class="{ 'home-robot-pet--chat-open': agentCenterVisible }"
+      @open-chat="agentCenterVisible = true"
+    />
+    <AgentCenterChat
+      :visible="agentCenterVisible && !immersiveFlight && !taskViewVisible"
+      @close="agentCenterVisible = false"
+    />
+
     <PlanUpcomingAlert
       :visible="!immersiveFlight"
       @view-allocation="onPlanViewAllocation"
@@ -187,6 +198,8 @@ import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick, defin
 import { ElMessage } from "element-plus";
 import TiandituMap from "@/components/TiandituMap.vue";
 import HomeHeader from "@/components/HomeHeader.vue";
+import RobotPet from "./components/RobotPet.vue";
+import AgentCenterChat from "./components/AgentCenterChat.vue";
 import MapLegend from "@/components/MapLegend.vue";
 import ManualControlPanel from "@/components/ManualControlPanel.vue";
 import LeftSidebarTabs from "@/components/LeftSidebarTabs.vue";
@@ -281,6 +294,7 @@ const immersiveFlight = ref(false);
 const manualControlVisible = ref(false);
 const manualRecordingActive = ref(false);
 const taskViewVisible = ref(false);
+const agentCenterVisible = ref(false);
 
 /** 右上角视频浮窗打开时，图例需左移避免遮挡 */
 const streamFloatOpen = computed(
@@ -889,6 +903,27 @@ const closeRobotStream = () => {
   overflow: hidden;
   background: #292E38;
 
+}
+
+.home-robot-pet {
+  position: fixed;
+  right: 120px;
+  bottom: 108px;
+  z-index: 180;
+}
+
+.home-robot-pet--chat-open {
+  right: 608px;
+  bottom: 24px;
+}
+
+@media (max-width: 767px) {
+  .home-robot-pet {
+    right: 8px;
+    bottom: 8px;
+    width: 100px;
+    height: 78px;
+  }
 }
 
 .map-container {
